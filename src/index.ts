@@ -5,3 +5,5 @@ export * from "./workspace.js";
 export * from "./indexer.js";
 export * from "./query.js";
 export * from "./contextPacket.js";
+export * from "./governance.js";
+export * from "./inbox.js";
