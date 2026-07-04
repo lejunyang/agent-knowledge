@@ -1,0 +1,10 @@
+task: "审查 lint 迁移方案"
+domains:
+  - frontend/lint
+scenarios:
+  - lint-migration
+expected_memories:
+  - k_20260705_frontend_lint_vue_sfc
+  - k_20260705_lint_validation_flow
+forbidden_memories:
+  - k_20260601_deprecated_lint_flow
