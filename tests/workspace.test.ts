@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { discoverKnowledgeFiles, initKnowledgeWorkspace } from "../src/workspace.js";
+import { resolveWorkspacePath } from "../src/paths.js";
 
 let tempDirs: string[] = [];
 
@@ -34,5 +35,15 @@ describe("discoverKnowledgeFiles", () => {
 
     expect(files.every((file) => file.endsWith(".md"))).toBe(true);
     expect(files.some((file) => file.endsWith("_catalog.md"))).toBe(false);
+  });
+});
+
+describe("resolveWorkspacePath", () => {
+  it("rejects sibling paths that share the same prefix", () => {
+    const root = path.join(tmpdir(), "agent-knowledge-root");
+
+    expect(() => resolveWorkspacePath(root, "..", "agent-knowledge-root-sibling", "file.md")).toThrow(
+      "Refusing to access path outside workspace"
+    );
   });
 });

@@ -13,8 +13,9 @@ export const KNOWLEDGE_DIRS = [
 export function resolveWorkspacePath(rootDir: string, ...segments: string[]): string {
   const resolvedRoot = path.resolve(rootDir);
   const resolvedTarget = path.resolve(resolvedRoot, ...segments);
+  const relative = path.relative(resolvedRoot, resolvedTarget);
 
-  if (!resolvedTarget.startsWith(resolvedRoot)) {
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`Refusing to access path outside workspace: ${resolvedTarget}`);
   }
 
