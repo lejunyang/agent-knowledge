@@ -1950,25 +1950,25 @@ git commit -m "feat: add retrieval evaluation harness"
 - Modify: `docs/superpowers/specs/2026-07-05-agent-knowledge-persistence-design.md`
 - Modify: `docs/superpowers/plans/2026-07-05-agent-knowledge-persistence.md`
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 Run: `pnpm test`
 
 Expected: PASS for all tests.
 
-- [ ] **Step 2: Run typecheck**
+- [x] **Step 2: Run typecheck**
 
 Run: `pnpm typecheck`
 
 Expected: PASS.
 
-- [ ] **Step 3: Run production build**
+- [x] **Step 3: Run production build**
 
 Run: `pnpm build`
 
 Expected: PASS and emits `dist/`.
 
-- [ ] **Step 4: Run CLI smoke test**
+- [x] **Step 4: Run CLI smoke test**
 
 Run:
 
@@ -1979,7 +1979,7 @@ node dist/cli.js query --root tests/fixtures/basic-knowledge --task "审查 Vue 
 
 Expected: the query output contains both `k_20260705_frontend_lint_vue_sfc` and `k_20260705_lint_validation_flow`.
 
-- [ ] **Step 5: Update spec implementation note**
+- [x] **Step 5: Update spec implementation note**
 
 Append this section to `docs/superpowers/specs/2026-07-05-agent-knowledge-persistence-design.md`:
 
@@ -1990,7 +1990,7 @@ Append this section to `docs/superpowers/specs/2026-07-05-agent-knowledge-persis
 The first implementation ships as a local TypeScript CLI/library. It uses Markdown as the only fact source and SQLite FTS5 as the initial lexical retrieval backend. Embedding and graph retrieval remain pluggable interfaces for later versions.
 ```
 
-- [ ] **Step 6: Commit final validation note**
+- [x] **Step 6: Commit final validation note**
 
 ```bash
 git add docs/superpowers/specs/2026-07-05-agent-knowledge-persistence-design.md docs/superpowers/plans/2026-07-05-agent-knowledge-persistence.md

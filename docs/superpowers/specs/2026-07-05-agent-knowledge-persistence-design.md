@@ -547,3 +547,7 @@ BM25 是文本相关性排序算法。Elastic 文档把 BM25 描述为基于 TF/
 - 架构、schema、写入、检索、治理和评估之间保持一致。
 - 范围聚焦在单一端到端知识持久化系统，可进入实施计划阶段。
 - 已明确自动写入、人工确认、冲突处理、权限过滤和索引可重建边界。
+
+## MVP Implementation Note
+
+The first implementation ships as a local TypeScript CLI/library. It uses Markdown as the only fact source and SQLite FTS5 as the initial lexical retrieval backend. Embedding and graph retrieval remain pluggable interfaces for later versions.
