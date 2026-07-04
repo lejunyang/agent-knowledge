@@ -34,6 +34,26 @@ describe("queryMemories", () => {
     expect(ranked.map((item) => item.document.frontmatter.id)).toContain("k_20260705_frontend_lint_vue_sfc");
     expect(ranked.map((item) => item.document.frontmatter.id)).toContain("k_20260705_lint_validation_flow");
   });
+
+  it("does not expand related memories excluded by includeTypes", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-types-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+
+    const ranked = queryMemories(root, {
+      task: "审查 Vue SFC lint 迁移方案，需要关注 ESLint fallback",
+      agentRole: "main",
+      domains: ["frontend/lint"],
+      scenarios: ["lint-migration"],
+      paths: [],
+      maxTokens: 4500,
+      includeTypes: ["semantic"]
+    });
+
+    expect(ranked.map((item) => item.document.frontmatter.id)).toContain("k_20260705_frontend_lint_vue_sfc");
+    expect(ranked.map((item) => item.document.frontmatter.id)).not.toContain("k_20260705_lint_validation_flow");
+  });
 });
 
 describe("buildContextPacket", () => {

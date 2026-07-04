@@ -153,7 +153,10 @@ export function queryMemories(rootDir: string, rawRequest: unknown): RankedMemor
   }
 
   const relatedRows = selectRowsByIds(rootDir, [...relatedIds]).filter(
-    (row) => row.status === "active" && !directIds.has(row.id)
+    (row) =>
+      row.status === "active" &&
+      !directIds.has(row.id) &&
+      request.includeTypes.includes(row.type as MemoryQueryRequest["includeTypes"][number])
   );
 
   return [...directRows.map((row) => ({ row, relationScore: 0 })), ...relatedRows.map((row) => ({ row, relationScore: 1 }))]
