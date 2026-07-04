@@ -54,4 +54,24 @@ describe("writeCandidateMemory", () => {
       })
     ).rejects.toThrow("Candidate contains secret-like content");
   });
+
+  it("rejects candidates that would produce invalid frontmatter", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-inbox-invalid-"));
+    tempDirs.push(root);
+
+    await expect(
+      writeCandidateMemory(root, {
+        title: "Invalid confidence",
+        memory_type: "semantic",
+        domain: "frontend/lint",
+        related_domains: [],
+        scenario: ["debugging"],
+        tags: [],
+        confidence: 1.2,
+        source_authority: "model_inferred",
+        summary: "置信度超过 schema 上限。",
+        evidence: ["conversation:test"]
+      })
+    ).rejects.toThrow();
+  });
 });

@@ -3,6 +3,7 @@ import path from "node:path";
 import { decideCandidateStatus, type CandidateMemoryInput } from "./governance.js";
 import { serializeKnowledgeMarkdown } from "./markdown.js";
 import { resolveWorkspacePath } from "./paths.js";
+import { KnowledgeDocumentSchema } from "./schema.js";
 import type { KnowledgeDocument, MemoryStatus } from "./types.js";
 
 export type WriteCandidateResult = {
@@ -84,7 +85,8 @@ ${input.summary}
 `
   };
 
-  await writeFile(absolutePath, serializeKnowledgeMarkdown(document), "utf8");
+  const validatedDocument = KnowledgeDocumentSchema.parse(document);
+  await writeFile(absolutePath, serializeKnowledgeMarkdown(validatedDocument), "utf8");
 
   return {
     id,
