@@ -1,0 +1,128 @@
+docs/superpowers/specs/2026-07-05-agent-knowledge-persistence-design.md
+  s_131dde898a09fe::t_a3080e706ed81e 550-553 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a494d003d5fa2bedf93cc59","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Range":[550,553]}]}]}
+docs/superpowers/plans/2026-07-05-agent-knowledge-persistence.md
+  s_131dde898a09fe::t_942ed80813b1ec 1953,1959,1965,1971,1982,1993 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a494d073d5fa2bedf93cc5e","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Single":1953},{"Single":1959},{"Single":1965},{"Single":1971},{"Single":1982},{"Single":1993}]}]}
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "4dbe900094333dd8554f71bb94f8f4d99e732e73",
+  "prompts": {},
+  "sessions": {
+    "s_131dde898a09fe": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a492e1a3d5fa2bedf93bc34",
+        "model": "gpt-5.5__dev"
+      },
+      "human_author": "lejunyang <lejunyang@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {
+    "docs/superpowers/plans/2026-07-05-agent-knowledge-persistence.md": [
+      {
+        "hash": "s_131dde898a09fe::t_942ed80813b1ec",
+        "line_ranges": [
+          {
+            "Single": 1953
+          },
+          {
+            "Single": 1959
+          },
+          {
+            "Single": 1965
+          },
+          {
+            "Single": 1971
+          },
+          {
+            "Single": 1982
+          },
+          {
+            "Single": 1993
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a494d073d5fa2bedf93cc5e",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Single": 1953
+              },
+              {
+                "Single": 1959
+              },
+              {
+                "Single": 1965
+              },
+              {
+                "Single": 1971
+              },
+              {
+                "Single": 1982
+              },
+              {
+                "Single": 1993
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "docs/superpowers/specs/2026-07-05-agent-knowledge-persistence-design.md": [
+      {
+        "hash": "s_131dde898a09fe::t_a3080e706ed81e",
+        "line_ranges": [
+          {
+            "Range": [
+              550,
+              553
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a494d003d5fa2bedf93cc59",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Range": [
+                  550,
+                  553
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "remote_transcripts": {
+    "s_131dde898a09fe": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_942ed80813b1ec": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_a3080e706ed81e": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    }
+  }
+}
