@@ -1,0 +1,2368 @@
+knowledge/semantic/company-business-account-system/2026-07-05-抖音商家中心b号管理鉴权与变更限制-douyin-b-account-management-auth-change.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,12-31,33,35-37,45-59 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[12,31]},{"Single":33},{"Range":[35,37]},{"Range":[45,59]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-11,32,34,38-44 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,11]},{"Single":32},{"Single":34},{"Range":[38,44]}]}]}
+templates/trae/agents/memory-writer.md
+  s_131dde898a09fe::t_61f6584306abdb 47-54,92-105 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a63c53d5fa2bedf93e444","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Range":[47,54]},{"Range":[92,105]}]}]}
+  s_131dde898a09fe::t_4acd842a04dd63 106
+knowledge/semantic/company-business-account-system/2026-07-05-抖音商家中心入驻开户路径-douyin-merchant-center-onboarding.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,12-28,30,32-34,39-53 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[12,28]},{"Single":30},{"Range":[32,34]},{"Range":[39,53]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-11,29,31,35-38 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,11]},{"Single":29},{"Single":31},{"Range":[35,38]}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-商业化三户模型与核心实体-commercial-three-entity-model.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,15-34,36,38-58 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[15,34]},{"Single":36},{"Range":[38,58]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-14,35,37 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,14]},{"Single":35},{"Single":37}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-抖音商家中心定位与b端经营背景-douyin-merchant-center-overview.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,11-27,29,31-49 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[11,27]},{"Single":29},{"Range":[31,49]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-10,28,30 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,10]},{"Single":28},{"Single":30}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-商业化账号与第三方账号绑定-commercial-user-oauth-binding.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,15-30,32,34-36,41-55 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[15,30]},{"Single":32},{"Range":[34,36]},{"Range":[41,55]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-14,31,33,37-40 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,14]},{"Single":31},{"Single":33},{"Range":[37,40]}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-商业化附身访问与内外网权限打通-commercial-impersonation-access.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,14-29,31,33-35,40-54 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[14,29]},{"Single":31},{"Range":[33,35]},{"Range":[40,54]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-13,30,32,36-39 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,13]},{"Single":30},{"Single":32},{"Range":[36,39]}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-商业化账户类型与广告主角色-commercial-account-type-adv-role.md
+  s_131dde898a09fe::t_dc4756ff74ee01 5-17,34,36,40-43 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,17]},{"Single":34},{"Single":36},{"Range":[40,43]}]}]}
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,18-33,35,37-39,44-58 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[18,33]},{"Single":35},{"Range":[37,39]},{"Range":[44,58]}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-抖音b号与b-c账号拆分-douyin-bc-account-split.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,12-27,29,31-33,38-52 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[12,27]},{"Single":29},{"Range":[31,33]},{"Range":[38,52]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-11,28,30,34-37 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,11]},{"Single":28},{"Single":30},{"Range":[34,37]}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-商业化账户间关系类型-commercial-account-relation.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,14-28,30,32-36,41-55 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[14,28]},{"Single":30},{"Range":[32,36]},{"Range":[41,55]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-13,29,31,37-40 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,13]},{"Single":29},{"Single":31},{"Range":[37,40]}]}]}
+src/organizer.ts
+  s_131dde898a09fe::t_da86f429699bea 242,251 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a639f3d5fa2bedf93e40d","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Single":242},{"Single":251}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-商业化账户与主体认证-commercial-account-subject-qualification.md
+  s_131dde898a09fe::t_dc4756ff74ee01 5-14,32,34,38-41 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,14]},{"Single":32},{"Single":34},{"Range":[38,41]}]}]}
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,15-31,33,35-37,42-56 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[15,31]},{"Single":33},{"Range":[35,37]},{"Range":[42,56]}]}]}
+AGENTS.md
+  s_131dde898a09fe::t_7d2aea142e3e27 122 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a643e3d5fa2bedf93e4ae","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Single":122}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-商业化账户属性与状态机设计-commercial-account-state-machine.md
+  s_131dde898a09fe::t_dc4756ff74ee01 5-12,29,31,35-38 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,12]},{"Single":29},{"Single":31},{"Range":[35,38]}]}]}
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,13-28,30,32-34,39-53 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[13,28]},{"Single":30},{"Range":[32,34]},{"Range":[39,53]}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-商业化组织账户bp与ebp差异-commercial-organization-account-bp-ebp.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,13-29,31,33-35,43-57 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[13,29]},{"Single":31},{"Range":[33,35]},{"Range":[43,57]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-12,30,32,36-42 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,12]},{"Single":30},{"Single":32},{"Range":[36,42]}]}]}
+src/governance.ts
+  s_131dde898a09fe::t_975e3d1c52c03b 8,22 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a63953d5fa2bedf93e3f5","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Single":8},{"Single":22}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-商业化用户账户关系与权限控制-commercial-user-account-permission.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,14-30,32,34-38,46-60 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[14,30]},{"Single":32},{"Range":[34,38]},{"Range":[46,60]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-13,31,33,39-45 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,13]},{"Single":31},{"Single":33},{"Range":[39,45]}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-抖音新b号账号类型与额度规则-douyin-b-account-type-quota.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,14-29,31,33-35,40-54 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[14,29]},{"Single":31},{"Range":[33,35]},{"Range":[40,54]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-13,30,32,36-39 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,13]},{"Single":30},{"Single":32},{"Range":[36,39]}]}]}
+README.md
+  s_131dde898a09fe::t_8eee8c3528f838 343-350 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a64333d5fa2bedf93e498","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Range":[343,350]}]}]}
+tests/organizer.test.ts
+  s_131dde898a09fe::t_cdce000944469f 139-182 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a63b23d5fa2bedf93e428","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Range":[139,182]}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-商业化账户标签模型-commercial-account-tag-model.md
+  s_131dde898a09fe::t_dc4756ff74ee01 5-11,27,29,35-38 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,11]},{"Single":27},{"Single":29},{"Range":[35,38]}]}]}
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,12-26,28,30-34,39-53 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[12,26]},{"Single":28},{"Range":[30,34]},{"Range":[39,53]}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-抖音b号运营人规则-douyin-b-account-operator.md
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,11-26,28,30-32,37-51 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[11,26]},{"Single":28},{"Range":[30,32]},{"Range":[37,51]}]}]}
+  s_131dde898a09fe::t_dc4756ff74ee01 5-10,27,29,33-36 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,10]},{"Single":27},{"Single":29},{"Range":[33,36]}]}]}
+knowledge/semantic/company-business-account-system/2026-07-05-抖音商家中心账户与人户角色-douyin-merchant-center-account-role.md
+  s_131dde898a09fe::t_dc4756ff74ee01 5-12,30,32,36-39 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a640c3d5fa2bedf93e486","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[5,12]},{"Single":30},{"Single":32},{"Range":[36,39]}]}]}
+  s_131dde898a09fe::t_0b8e7b1e0fcc53 1-4,13-29,31,33-35,40-54 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4a635b3d5fa2bedf93e3e0","tool_type":"agent","tool_id":"RunCommand","line_ranges":[{"Range":[1,4]},{"Range":[13,29]},{"Single":31},{"Range":[33,35]},{"Range":[40,54]}]}]}
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "f237fed24cf05e54b5155abe64eb1b879754242e",
+  "prompts": {},
+  "sessions": {
+    "s_131dde898a09fe": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a492e1a3d5fa2bedf93bc34",
+        "model": "gpt-5.5__dev"
+      },
+      "human_author": "lejunyang <lejunyang@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {
+    "AGENTS.md": [
+      {
+        "hash": "s_131dde898a09fe::t_7d2aea142e3e27",
+        "line_ranges": [
+          {
+            "Single": 122
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a643e3d5fa2bedf93e4ae",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Single": 122
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "README.md": [
+      {
+        "hash": "s_131dde898a09fe::t_8eee8c3528f838",
+        "line_ranges": [
+          {
+            "Range": [
+              343,
+              350
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a64333d5fa2bedf93e498",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Range": [
+                  343,
+                  350
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-商业化三户模型与核心实体-commercial-three-entity-model.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              15,
+              34
+            ]
+          },
+          {
+            "Single": 36
+          },
+          {
+            "Range": [
+              38,
+              58
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  15,
+                  34
+                ]
+              },
+              {
+                "Single": 36
+              },
+              {
+                "Range": [
+                  38,
+                  58
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              14
+            ]
+          },
+          {
+            "Single": 35
+          },
+          {
+            "Single": 37
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  14
+                ]
+              },
+              {
+                "Single": 35
+              },
+              {
+                "Single": 37
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-商业化用户账户关系与权限控制-commercial-user-account-permission.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              14,
+              30
+            ]
+          },
+          {
+            "Single": 32
+          },
+          {
+            "Range": [
+              34,
+              38
+            ]
+          },
+          {
+            "Range": [
+              46,
+              60
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  14,
+                  30
+                ]
+              },
+              {
+                "Single": 32
+              },
+              {
+                "Range": [
+                  34,
+                  38
+                ]
+              },
+              {
+                "Range": [
+                  46,
+                  60
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              13
+            ]
+          },
+          {
+            "Single": 31
+          },
+          {
+            "Single": 33
+          },
+          {
+            "Range": [
+              39,
+              45
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  13
+                ]
+              },
+              {
+                "Single": 31
+              },
+              {
+                "Single": 33
+              },
+              {
+                "Range": [
+                  39,
+                  45
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-商业化组织账户bp与ebp差异-commercial-organization-account-bp-ebp.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              13,
+              29
+            ]
+          },
+          {
+            "Single": 31
+          },
+          {
+            "Range": [
+              33,
+              35
+            ]
+          },
+          {
+            "Range": [
+              43,
+              57
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  13,
+                  29
+                ]
+              },
+              {
+                "Single": 31
+              },
+              {
+                "Range": [
+                  33,
+                  35
+                ]
+              },
+              {
+                "Range": [
+                  43,
+                  57
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              12
+            ]
+          },
+          {
+            "Single": 30
+          },
+          {
+            "Single": 32
+          },
+          {
+            "Range": [
+              36,
+              42
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  12
+                ]
+              },
+              {
+                "Single": 30
+              },
+              {
+                "Single": 32
+              },
+              {
+                "Range": [
+                  36,
+                  42
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-商业化账号与第三方账号绑定-commercial-user-oauth-binding.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              15,
+              30
+            ]
+          },
+          {
+            "Single": 32
+          },
+          {
+            "Range": [
+              34,
+              36
+            ]
+          },
+          {
+            "Range": [
+              41,
+              55
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  15,
+                  30
+                ]
+              },
+              {
+                "Single": 32
+              },
+              {
+                "Range": [
+                  34,
+                  36
+                ]
+              },
+              {
+                "Range": [
+                  41,
+                  55
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              14
+            ]
+          },
+          {
+            "Single": 31
+          },
+          {
+            "Single": 33
+          },
+          {
+            "Range": [
+              37,
+              40
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  14
+                ]
+              },
+              {
+                "Single": 31
+              },
+              {
+                "Single": 33
+              },
+              {
+                "Range": [
+                  37,
+                  40
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-商业化账户与主体认证-commercial-account-subject-qualification.md": [
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              14
+            ]
+          },
+          {
+            "Single": 32
+          },
+          {
+            "Single": 34
+          },
+          {
+            "Range": [
+              38,
+              41
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  14
+                ]
+              },
+              {
+                "Single": 32
+              },
+              {
+                "Single": 34
+              },
+              {
+                "Range": [
+                  38,
+                  41
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              15,
+              31
+            ]
+          },
+          {
+            "Single": 33
+          },
+          {
+            "Range": [
+              35,
+              37
+            ]
+          },
+          {
+            "Range": [
+              42,
+              56
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  15,
+                  31
+                ]
+              },
+              {
+                "Single": 33
+              },
+              {
+                "Range": [
+                  35,
+                  37
+                ]
+              },
+              {
+                "Range": [
+                  42,
+                  56
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-商业化账户属性与状态机设计-commercial-account-state-machine.md": [
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              12
+            ]
+          },
+          {
+            "Single": 29
+          },
+          {
+            "Single": 31
+          },
+          {
+            "Range": [
+              35,
+              38
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  12
+                ]
+              },
+              {
+                "Single": 29
+              },
+              {
+                "Single": 31
+              },
+              {
+                "Range": [
+                  35,
+                  38
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              13,
+              28
+            ]
+          },
+          {
+            "Single": 30
+          },
+          {
+            "Range": [
+              32,
+              34
+            ]
+          },
+          {
+            "Range": [
+              39,
+              53
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  13,
+                  28
+                ]
+              },
+              {
+                "Single": 30
+              },
+              {
+                "Range": [
+                  32,
+                  34
+                ]
+              },
+              {
+                "Range": [
+                  39,
+                  53
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-商业化账户标签模型-commercial-account-tag-model.md": [
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              11
+            ]
+          },
+          {
+            "Single": 27
+          },
+          {
+            "Single": 29
+          },
+          {
+            "Range": [
+              35,
+              38
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  11
+                ]
+              },
+              {
+                "Single": 27
+              },
+              {
+                "Single": 29
+              },
+              {
+                "Range": [
+                  35,
+                  38
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              12,
+              26
+            ]
+          },
+          {
+            "Single": 28
+          },
+          {
+            "Range": [
+              30,
+              34
+            ]
+          },
+          {
+            "Range": [
+              39,
+              53
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  12,
+                  26
+                ]
+              },
+              {
+                "Single": 28
+              },
+              {
+                "Range": [
+                  30,
+                  34
+                ]
+              },
+              {
+                "Range": [
+                  39,
+                  53
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-商业化账户类型与广告主角色-commercial-account-type-adv-role.md": [
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              17
+            ]
+          },
+          {
+            "Single": 34
+          },
+          {
+            "Single": 36
+          },
+          {
+            "Range": [
+              40,
+              43
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  17
+                ]
+              },
+              {
+                "Single": 34
+              },
+              {
+                "Single": 36
+              },
+              {
+                "Range": [
+                  40,
+                  43
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              18,
+              33
+            ]
+          },
+          {
+            "Single": 35
+          },
+          {
+            "Range": [
+              37,
+              39
+            ]
+          },
+          {
+            "Range": [
+              44,
+              58
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  18,
+                  33
+                ]
+              },
+              {
+                "Single": 35
+              },
+              {
+                "Range": [
+                  37,
+                  39
+                ]
+              },
+              {
+                "Range": [
+                  44,
+                  58
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-商业化账户间关系类型-commercial-account-relation.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              14,
+              28
+            ]
+          },
+          {
+            "Single": 30
+          },
+          {
+            "Range": [
+              32,
+              36
+            ]
+          },
+          {
+            "Range": [
+              41,
+              55
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  14,
+                  28
+                ]
+              },
+              {
+                "Single": 30
+              },
+              {
+                "Range": [
+                  32,
+                  36
+                ]
+              },
+              {
+                "Range": [
+                  41,
+                  55
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              13
+            ]
+          },
+          {
+            "Single": 29
+          },
+          {
+            "Single": 31
+          },
+          {
+            "Range": [
+              37,
+              40
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  13
+                ]
+              },
+              {
+                "Single": 29
+              },
+              {
+                "Single": 31
+              },
+              {
+                "Range": [
+                  37,
+                  40
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-商业化附身访问与内外网权限打通-commercial-impersonation-access.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              14,
+              29
+            ]
+          },
+          {
+            "Single": 31
+          },
+          {
+            "Range": [
+              33,
+              35
+            ]
+          },
+          {
+            "Range": [
+              40,
+              54
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  14,
+                  29
+                ]
+              },
+              {
+                "Single": 31
+              },
+              {
+                "Range": [
+                  33,
+                  35
+                ]
+              },
+              {
+                "Range": [
+                  40,
+                  54
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              13
+            ]
+          },
+          {
+            "Single": 30
+          },
+          {
+            "Single": 32
+          },
+          {
+            "Range": [
+              36,
+              39
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  13
+                ]
+              },
+              {
+                "Single": 30
+              },
+              {
+                "Single": 32
+              },
+              {
+                "Range": [
+                  36,
+                  39
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-抖音b号与b-c账号拆分-douyin-bc-account-split.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              12,
+              27
+            ]
+          },
+          {
+            "Single": 29
+          },
+          {
+            "Range": [
+              31,
+              33
+            ]
+          },
+          {
+            "Range": [
+              38,
+              52
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  12,
+                  27
+                ]
+              },
+              {
+                "Single": 29
+              },
+              {
+                "Range": [
+                  31,
+                  33
+                ]
+              },
+              {
+                "Range": [
+                  38,
+                  52
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              11
+            ]
+          },
+          {
+            "Single": 28
+          },
+          {
+            "Single": 30
+          },
+          {
+            "Range": [
+              34,
+              37
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  11
+                ]
+              },
+              {
+                "Single": 28
+              },
+              {
+                "Single": 30
+              },
+              {
+                "Range": [
+                  34,
+                  37
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-抖音b号运营人规则-douyin-b-account-operator.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              11,
+              26
+            ]
+          },
+          {
+            "Single": 28
+          },
+          {
+            "Range": [
+              30,
+              32
+            ]
+          },
+          {
+            "Range": [
+              37,
+              51
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  11,
+                  26
+                ]
+              },
+              {
+                "Single": 28
+              },
+              {
+                "Range": [
+                  30,
+                  32
+                ]
+              },
+              {
+                "Range": [
+                  37,
+                  51
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              10
+            ]
+          },
+          {
+            "Single": 27
+          },
+          {
+            "Single": 29
+          },
+          {
+            "Range": [
+              33,
+              36
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  10
+                ]
+              },
+              {
+                "Single": 27
+              },
+              {
+                "Single": 29
+              },
+              {
+                "Range": [
+                  33,
+                  36
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-抖音商家中心b号管理鉴权与变更限制-douyin-b-account-management-auth-change.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              12,
+              31
+            ]
+          },
+          {
+            "Single": 33
+          },
+          {
+            "Range": [
+              35,
+              37
+            ]
+          },
+          {
+            "Range": [
+              45,
+              59
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  12,
+                  31
+                ]
+              },
+              {
+                "Single": 33
+              },
+              {
+                "Range": [
+                  35,
+                  37
+                ]
+              },
+              {
+                "Range": [
+                  45,
+                  59
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              11
+            ]
+          },
+          {
+            "Single": 32
+          },
+          {
+            "Single": 34
+          },
+          {
+            "Range": [
+              38,
+              44
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  11
+                ]
+              },
+              {
+                "Single": 32
+              },
+              {
+                "Single": 34
+              },
+              {
+                "Range": [
+                  38,
+                  44
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-抖音商家中心入驻开户路径-douyin-merchant-center-onboarding.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              12,
+              28
+            ]
+          },
+          {
+            "Single": 30
+          },
+          {
+            "Range": [
+              32,
+              34
+            ]
+          },
+          {
+            "Range": [
+              39,
+              53
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  12,
+                  28
+                ]
+              },
+              {
+                "Single": 30
+              },
+              {
+                "Range": [
+                  32,
+                  34
+                ]
+              },
+              {
+                "Range": [
+                  39,
+                  53
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              11
+            ]
+          },
+          {
+            "Single": 29
+          },
+          {
+            "Single": 31
+          },
+          {
+            "Range": [
+              35,
+              38
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  11
+                ]
+              },
+              {
+                "Single": 29
+              },
+              {
+                "Single": 31
+              },
+              {
+                "Range": [
+                  35,
+                  38
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-抖音商家中心定位与b端经营背景-douyin-merchant-center-overview.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              11,
+              27
+            ]
+          },
+          {
+            "Single": 29
+          },
+          {
+            "Range": [
+              31,
+              49
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  11,
+                  27
+                ]
+              },
+              {
+                "Single": 29
+              },
+              {
+                "Range": [
+                  31,
+                  49
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              10
+            ]
+          },
+          {
+            "Single": 28
+          },
+          {
+            "Single": 30
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  10
+                ]
+              },
+              {
+                "Single": 28
+              },
+              {
+                "Single": 30
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-抖音商家中心账户与人户角色-douyin-merchant-center-account-role.md": [
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              12
+            ]
+          },
+          {
+            "Single": 30
+          },
+          {
+            "Single": 32
+          },
+          {
+            "Range": [
+              36,
+              39
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  12
+                ]
+              },
+              {
+                "Single": 30
+              },
+              {
+                "Single": 32
+              },
+              {
+                "Range": [
+                  36,
+                  39
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              13,
+              29
+            ]
+          },
+          {
+            "Single": 31
+          },
+          {
+            "Range": [
+              33,
+              35
+            ]
+          },
+          {
+            "Range": [
+              40,
+              54
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  13,
+                  29
+                ]
+              },
+              {
+                "Single": 31
+              },
+              {
+                "Range": [
+                  33,
+                  35
+                ]
+              },
+              {
+                "Range": [
+                  40,
+                  54
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "knowledge/semantic/company-business-account-system/2026-07-05-抖音新b号账号类型与额度规则-douyin-b-account-type-quota.md": [
+      {
+        "hash": "s_131dde898a09fe::t_0b8e7b1e0fcc53",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              4
+            ]
+          },
+          {
+            "Range": [
+              14,
+              29
+            ]
+          },
+          {
+            "Single": 31
+          },
+          {
+            "Range": [
+              33,
+              35
+            ]
+          },
+          {
+            "Range": [
+              40,
+              54
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a635b3d5fa2bedf93e3e0",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  4
+                ]
+              },
+              {
+                "Range": [
+                  14,
+                  29
+                ]
+              },
+              {
+                "Single": 31
+              },
+              {
+                "Range": [
+                  33,
+                  35
+                ]
+              },
+              {
+                "Range": [
+                  40,
+                  54
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_131dde898a09fe::t_dc4756ff74ee01",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              13
+            ]
+          },
+          {
+            "Single": 30
+          },
+          {
+            "Single": 32
+          },
+          {
+            "Range": [
+              36,
+              39
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a640c3d5fa2bedf93e486",
+            "tool_type": "agent",
+            "tool_id": "RunCommand",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  13
+                ]
+              },
+              {
+                "Single": 30
+              },
+              {
+                "Single": 32
+              },
+              {
+                "Range": [
+                  36,
+                  39
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "src/governance.ts": [
+      {
+        "hash": "s_131dde898a09fe::t_975e3d1c52c03b",
+        "line_ranges": [
+          {
+            "Single": 8
+          },
+          {
+            "Single": 22
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a63953d5fa2bedf93e3f5",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Single": 8
+              },
+              {
+                "Single": 22
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "src/organizer.ts": [
+      {
+        "hash": "s_131dde898a09fe::t_da86f429699bea",
+        "line_ranges": [
+          {
+            "Single": 242
+          },
+          {
+            "Single": 251
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a639f3d5fa2bedf93e40d",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Single": 242
+              },
+              {
+                "Single": 251
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "templates/trae/agents/memory-writer.md": [
+      {
+        "hash": "s_131dde898a09fe::t_61f6584306abdb",
+        "line_ranges": [
+          {
+            "Range": [
+              47,
+              54
+            ]
+          },
+          {
+            "Range": [
+              92,
+              105
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a63c53d5fa2bedf93e444",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Range": [
+                  47,
+                  54
+                ]
+              },
+              {
+                "Range": [
+                  92,
+                  105
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "tests/organizer.test.ts": [
+      {
+        "hash": "s_131dde898a09fe::t_cdce000944469f",
+        "line_ranges": [
+          {
+            "Range": [
+              139,
+              182
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4a63b23d5fa2bedf93e428",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Range": [
+                  139,
+                  182
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "remote_transcripts": {
+    "s_131dde898a09fe": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_0b8e7b1e0fcc53": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_41744b1c0030e3": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_61f6584306abdb": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_7d2aea142e3e27": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_8eee8c3528f838": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_975e3d1c52c03b": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_cdce000944469f": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_d026af9ba8e095": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_da86f429699bea": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_131dde898a09fe::t_dc4756ff74ee01": {
+      "tool": "trae",
+      "conversation_id": "6a492e1a3d5fa2bedf93bc34",
+      "session_id": "6a492e1a3d5fa2bedf93bc34",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    }
+  }
+}
