@@ -56,6 +56,7 @@ export type QueryDebugInfo = {
   fallbackReason: "empty_fts_query" | "no_fts_matches" | null;
   fallbackSuppressedReason: "missing_domain_or_scenario" | null;
   retrievalMode: "lexical" | "hybrid";
+  embeddingRecordCount: number;
   embeddingCandidateIds: string[];
   candidateRowCount: number;
   directMatchCount: number;
@@ -324,6 +325,7 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
     fallbackReason: null,
     fallbackSuppressedReason: null,
     retrievalMode: "lexical",
+    embeddingRecordCount: 0,
     embeddingCandidateIds: [],
     candidateRowCount: 0
   } satisfies CandidateSelection["debug"];
@@ -398,16 +400,16 @@ async function selectEmbeddingRows(
   request: MemoryQueryRequest,
   provider: EmbeddingProvider,
   topK: number
-): Promise<{ rows: MemoryRow[]; ids: string[] }> {
+): Promise<{ rows: MemoryRow[]; ids: string[]; recordCount: number }> {
   const records = readEmbeddingRecords(rootDir);
   if (records.length === 0 || topK <= 0) {
-    return { rows: [], ids: [] };
+    return { rows: [], ids: [], recordCount: records.length };
   }
 
   const queryText = [request.task, ...request.domains, ...request.scenarios, ...request.paths].join("\n");
   const [queryVector] = await provider.embed([queryText]);
   if (!queryVector || queryVector.length === 0) {
-    return { rows: [], ids: [] };
+    return { rows: [], ids: [], recordCount: records.length };
   }
 
   const ids = records
@@ -417,7 +419,7 @@ async function selectEmbeddingRows(
     .slice(0, topK)
     .map((item) => item.id);
 
-  return { rows: selectRowsByIds(rootDir, ids), ids };
+  return { rows: selectRowsByIds(rootDir, ids), ids, recordCount: records.length };
 }
 
 /**
@@ -553,6 +555,7 @@ export async function queryMemoriesHybridWithDebug(
     debug: {
       ...lexicalSelection.debug,
       retrievalMode: "hybrid",
+      embeddingRecordCount: embeddingSelection.recordCount,
       embeddingCandidateIds,
       candidateRowCount: rowsById.size
     }

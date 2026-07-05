@@ -36,7 +36,8 @@ describe("embedding index", () => {
       provider: "deterministic-local",
       model: "token-hash-v1",
       indexed: 2,
-      dimensions: 32
+      dimensions: 32,
+      embedded: true
     });
     expect(records).toHaveLength(2);
     expect(records[0]?.vector).toHaveLength(32);
@@ -71,6 +72,27 @@ describe("embedding index", () => {
     expect(target?.suggestions.length).toBeGreaterThan(0);
     expect(target?.suggestions.some((suggestion) => suggestion.alias === "migration-review")).toBe(true);
     expect(target?.existingAliases).toEqual(["vue-lint", "sfc-lint"]);
+  });
+
+  it("reports a clear skipped reason when no active documents exist", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-empty-embed-"));
+    tempDirs.push(root);
+    const provider: EmbeddingProvider = {
+      name: "must-not-run",
+      model: "test",
+      dimensions: 3,
+      async embed() {
+        throw new Error("provider should not be called without active documents");
+      }
+    };
+
+    const result = await embedKnowledgeIndex(root, { provider });
+
+    expect(result).toMatchObject({
+      indexed: 0,
+      embedded: false,
+      skippedReason: "no_active_documents"
+    });
   });
 });
 
@@ -107,6 +129,7 @@ describe("hybrid query", () => {
     );
 
     expect(result.debug.retrievalMode).toBe("hybrid");
+    expect(result.debug.embeddingRecordCount).toBe(2);
     expect(result.debug.fallbackSuppressedReason).toBe("missing_domain_or_scenario");
     expect(result.debug.embeddingCandidateIds).toContain("k_20260705_frontend_lint_vue_sfc");
     expect(result.ranked.map((item) => item.document.frontmatter.id)).toContain("k_20260705_frontend_lint_vue_sfc");

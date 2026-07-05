@@ -52,6 +52,8 @@ export type EmbedIndexResult = {
   model: string;
   indexed: number;
   dimensions: number;
+  embedded: boolean;
+  skippedReason?: "no_active_documents";
 };
 
 export type SuggestAliasesOptions = {
@@ -394,8 +396,19 @@ export function createEmbeddingProvider(options: {
 export async function embedKnowledgeIndex(rootDir: string, options: EmbedIndexOptions = {}): Promise<EmbedIndexResult> {
   const provider = options.provider ?? new TransformersJsEmbeddingProvider();
   const documents = await loadActiveDocuments(rootDir);
+  if (documents.length === 0) {
+    return {
+      embeddingsPath: getEmbeddingsJsonlPath(rootDir),
+      provider: provider.name,
+      model: provider.model,
+      indexed: 0,
+      dimensions: provider.dimensions,
+      embedded: false,
+      skippedReason: "no_active_documents"
+    };
+  }
   const texts = documents.map(documentEmbeddingText);
-  const vectors = texts.length > 0 ? await provider.embed(texts) : [];
+  const vectors = await provider.embed(texts);
   const embeddingsPath = getEmbeddingsJsonlPath(rootDir);
   const embeddingsDir = resolveWorkspacePath(rootDir, ...EMBEDDINGS_DIR);
   mkdirSync(embeddingsDir, { recursive: true });
@@ -410,7 +423,8 @@ export async function embedKnowledgeIndex(rootDir: string, options: EmbedIndexOp
     provider: provider.name,
     model: provider.model,
     indexed: records.length,
-    dimensions: records[0]?.dimensions ?? provider.dimensions
+    dimensions: records[0]?.dimensions ?? provider.dimensions,
+    embedded: true
   };
 }
 

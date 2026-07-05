@@ -127,6 +127,18 @@ agent-knowledge index --root /path/to/workspace
 <workspace root>/.memory/embeddings/index.jsonl
 ```
 
+如果输出中出现：
+
+```json
+{
+  "indexed": 0,
+  "embedded": false,
+  "skippedReason": "no_active_documents"
+}
+```
+
+说明当前 root 下没有 `status: active` 的知识文件，因此不会加载模型。先运行 `agent-knowledge list --root <workspace>` 或确认是否把 `--root` 指到了正确知识库。
+
 默认 provider 是 Transformers.js `feature-extraction`，默认不允许联网下载模型，适合使用本机已缓存模型或传入本地模型路径：
 
 ```bash
@@ -158,6 +170,8 @@ agent-knowledge query \
 ```bash
 agent-knowledge query --task "用户自然语言任务" --retrieval hybrid --provider local --debug
 ```
+
+`query --debug` 中的 `debug.embeddingRecordCount` 表示本次 hybrid 查询读取到多少条 embedding 缓存；如果为 `0`，说明需要先运行 `embed-index` 或 root 指向了没有缓存的知识库。
 
 TypeScript API：
 
