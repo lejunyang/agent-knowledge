@@ -11,6 +11,7 @@
 - `.memory/logs/*.jsonl` 是可重建运行日志，只用于调试和审计摘要。
 - `agent-knowledge query` 输出主 agent 可注入的 `context packet`。
 - `agent-knowledge write-candidate` 只写候选知识到 `knowledge/_inbox/`。
+- 知识 frontmatter 支持可选 `aliases`，用于查询别名扩展和 catalog registry 暴露，不替代规范 `domain` / `scenario`。
 
 不要把索引当成事实源。任何知识更新都应先落到 Markdown，再重建索引。
 
@@ -104,7 +105,7 @@ src/cli.ts            命令行入口
 
 - 优先保持小文件和清晰边界，不要把多个职责合并到一个模块。
 - 新增行为必须优先加测试。
-- 修改 schema 时同步更新 README、AGENTS 和测试夹具。
+- 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - 修改检索排序时同步更新 eval case 或增加新的 eval case。
 - `query` 不应在缺少 domain/scenario 且 FTS 无命中时回退全表；如修改 fallback 策略，必须更新 debug 输出和测试。

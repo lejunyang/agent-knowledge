@@ -13,6 +13,7 @@ import { appendJsonlLog } from "./logging.js";
 export type CatalogItem = {
   id: string;
   title: string;
+  aliases: string[];
   type: MemoryType;
   status: MemoryStatus;
   domain: string;
@@ -34,6 +35,13 @@ export type KnowledgeCatalog = {
   byStatus: Record<string, number>;
   byType: Record<string, number>;
   byDomain: Record<string, number>;
+  byScenario: Record<string, number>;
+  byAlias: Record<string, number>;
+  registry: {
+    domains: string[];
+    scenarios: string[];
+    aliases: string[];
+  };
   items: CatalogItem[];
 };
 
@@ -61,6 +69,20 @@ function countBy<T extends string>(items: CatalogItem[], selector: (item: Catalo
   return counts;
 }
 
+function countMany(items: CatalogItem[], selector: (item: CatalogItem) => string[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    for (const key of selector(item)) {
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function sortedKeys(counts: Record<string, number>): string[] {
+  return Object.keys(counts).sort((left, right) => left.localeCompare(right));
+}
+
 function renderCatalogMarkdown(catalog: KnowledgeCatalog): string {
   const lines = [
     "# Knowledge Catalog",
@@ -81,6 +103,12 @@ function renderCatalogMarkdown(catalog: KnowledgeCatalog): string {
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([type, count]) => `- ${type}: ${count}`),
     "",
+    "## Registry",
+    "",
+    `- domains: ${catalog.registry.domains.join(", ")}`,
+    `- scenarios: ${catalog.registry.scenarios.join(", ")}`,
+    `- aliases: ${catalog.registry.aliases.join(", ")}`,
+    "",
     "## Items",
     ""
   ];
@@ -91,6 +119,7 @@ function renderCatalogMarkdown(catalog: KnowledgeCatalog): string {
       "",
       `- id: ${item.id}`,
       `- type/status: ${item.type}/${item.status}`,
+      `- aliases: ${item.aliases.join(", ")}`,
       `- domain: ${item.domain}`,
       `- scenarios: ${item.scenarios.join(", ")}`,
       `- tags: ${item.tags.join(", ")}`,
@@ -115,6 +144,7 @@ export async function catalogKnowledge(rootDir: string, options: CatalogOptions 
     .map((document) => ({
       id: document.frontmatter.id,
       title: document.frontmatter.title,
+      aliases: document.frontmatter.aliases,
       type: document.frontmatter.type,
       status: document.frontmatter.status,
       domain: document.frontmatter.domain,
@@ -127,6 +157,11 @@ export async function catalogKnowledge(rootDir: string, options: CatalogOptions 
       summary: extractSummary(document.body)
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
+  const byStatus = countBy(items, (item) => item.status);
+  const byType = countBy(items, (item) => item.type);
+  const byDomain = countBy(items, (item) => item.domain);
+  const byScenario = countMany(items, (item) => item.scenarios);
+  const byAlias = countMany(items, (item) => item.aliases);
   const catalogPath = resolveWorkspacePath(rootDir, "knowledge", "_catalog.md");
   const catalog: KnowledgeCatalog = {
     rootDir,
@@ -134,9 +169,16 @@ export async function catalogKnowledge(rootDir: string, options: CatalogOptions 
     catalogPath,
     written: options.write ?? true,
     total: items.length,
-    byStatus: countBy(items, (item) => item.status),
-    byType: countBy(items, (item) => item.type),
-    byDomain: countBy(items, (item) => item.domain),
+    byStatus,
+    byType,
+    byDomain,
+    byScenario,
+    byAlias,
+    registry: {
+      domains: sortedKeys(byDomain),
+      scenarios: sortedKeys(byScenario),
+      aliases: sortedKeys(byAlias)
+    },
     items
   };
 

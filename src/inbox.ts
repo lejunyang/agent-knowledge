@@ -71,6 +71,7 @@ export async function writeCandidateMemory(rootDir: string, input: CandidateMemo
       id,
       type: input.memory_type,
       title: input.title,
+      aliases: input.aliases ?? [],
       domain: input.domain,
       related_domains: input.related_domains,
       scenario: input.scenario,

@@ -42,6 +42,7 @@ export const KnowledgeFrontmatterSchema = z.object({
   id: z.string().regex(/^k_[a-zA-Z0-9_]+$/),
   type: MemoryTypeSchema,
   title: z.string().min(1),
+  aliases: z.array(z.string().min(1)).default([]),
   domain: z.string().min(1),
   related_domains: z.array(z.string().min(1)).default([]),
   scenario: z.array(z.string().min(1)).min(1),

@@ -9,6 +9,7 @@ import type { MemoryStatus, MemoryType, SourceAuthority } from "./types.js";
 
 export type CandidateMemoryInput = {
   title: string;
+  aliases?: string[];
   memory_type: MemoryType;
   domain: string;
   related_domains: string[];

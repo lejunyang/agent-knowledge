@@ -73,13 +73,15 @@ function compactCatalogForHook(catalog: Awaited<ReturnType<typeof catalogKnowled
     total: catalog.total,
     byStatus: catalog.byStatus,
     byType: catalog.byType,
-    domains: Object.keys(catalog.byDomain).sort(),
-    scenarios: [...new Set(catalog.items.flatMap((item) => item.scenarios))].sort(),
+    domains: catalog.registry.domains,
+    scenarios: catalog.registry.scenarios,
+    aliases: catalog.registry.aliases,
     items: catalog.items.slice(0, 20).map((item) => ({
       id: item.id,
       title: item.title,
       type: item.type,
       status: item.status,
+      aliases: item.aliases,
       domain: item.domain,
       scenarios: item.scenarios
     }))

@@ -33,10 +33,18 @@ describe("rebuildIndex", () => {
       const ftsRows = db
         .prepare("SELECT id FROM memory_fts WHERE memory_fts MATCH ? ORDER BY rank")
         .all("eslint") as Array<{ id: string }>;
+      const aliasRows = db
+        .prepare("SELECT id FROM memory_fts WHERE memory_fts MATCH ? ORDER BY rank")
+        .all('"vue-lint"') as Array<{ id: string }>;
+      const metadata = db.prepare("SELECT aliases FROM memories WHERE id = ?").get("k_20260705_frontend_lint_vue_sfc") as {
+        aliases: string;
+      };
 
       expect(count.count).toBe(2);
       expect(ftsRows.map((row) => row.id)).toContain("k_20260705_frontend_lint_vue_sfc");
       expect(ftsRows.map((row) => row.id)).toContain("k_20260705_lint_validation_flow");
+      expect(aliasRows.map((row) => row.id)).toContain("k_20260705_frontend_lint_vue_sfc");
+      expect(JSON.parse(metadata.aliases)).toEqual(["vue-lint", "sfc-lint"]);
     } finally {
       db.close();
     }

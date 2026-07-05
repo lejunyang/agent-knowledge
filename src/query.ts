@@ -24,6 +24,7 @@ type MemoryRow = {
   file_path: string;
   type: string;
   title: string;
+  aliases: string;
   domain: string;
   related_domains: string;
   scenario: string;
@@ -100,8 +101,82 @@ function loadDocument(rootDir: string, filePath: string): KnowledgeDocument {
   return parseKnowledgeMarkdown(filePath, readFileSync(resolveWorkspacePath(rootDir, filePath), "utf8"));
 }
 
-function intersects(left: string[], right: string[]): boolean {
-  return left.some((item) => right.includes(item));
+function normalizeLabel(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/-+/g, "-");
+}
+
+function labelSegments(input: string): string[] {
+  return normalizeLabel(input)
+    .split(/[/-]+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function fuzzyLabelMatches(left: string, right: string): boolean {
+  const normalizedLeft = normalizeLabel(left);
+  const normalizedRight = normalizeLabel(right);
+
+  if (normalizedLeft === normalizedRight) {
+    return true;
+  }
+
+  if (normalizedLeft.startsWith(`${normalizedRight}/`) || normalizedRight.startsWith(`${normalizedLeft}/`)) {
+    return true;
+  }
+
+  const leftSegments = labelSegments(left);
+  const rightSegments = labelSegments(right);
+  if (leftSegments.length === 0 || rightSegments.length === 0) {
+    return false;
+  }
+
+  const [shorter, longer] =
+    leftSegments.length <= rightSegments.length ? [leftSegments, rightSegments] : [rightSegments, leftSegments];
+  return shorter.every((segment) => longer.includes(segment));
+}
+
+function fuzzyIntersects(left: string[], right: string[]): boolean {
+  return left.some((leftItem) => right.some((rightItem) => fuzzyLabelMatches(leftItem, rightItem)));
+}
+
+/**
+ * aliases 是人类常用别名，不替代 domain/scenario；查询时用它把输入别名扩展成规范元数据。
+ */
+function expandRequestWithAliases(request: MemoryQueryRequest, rows: MemoryRow[]): MemoryQueryRequest {
+  const domains = new Set(request.domains);
+  const scenarios = new Set(request.scenarios);
+
+  for (const row of rows) {
+    const rowAliases = parseJsonArray(row.aliases);
+    const rowScenarios = parseJsonArray(row.scenario);
+    const rowTerms = [row.domain, ...parseJsonArray(row.related_domains), ...rowScenarios, ...rowAliases];
+
+    const domainMatched =
+      request.domains.length > 0 && request.domains.some((domain) => rowTerms.some((term) => fuzzyLabelMatches(term, domain)));
+    const scenarioMatched =
+      request.scenarios.length > 0 &&
+      request.scenarios.some((scenario) => rowTerms.some((term) => fuzzyLabelMatches(term, scenario)));
+
+    if (domainMatched) {
+      domains.add(row.domain);
+    }
+
+    if (scenarioMatched) {
+      for (const scenario of rowScenarios) {
+        scenarios.add(scenario);
+      }
+    }
+  }
+
+  return {
+    ...request,
+    domains: [...domains],
+    scenarios: [...scenarios]
+  };
 }
 
 /**
@@ -112,9 +187,11 @@ function intersects(left: string[], right: string[]): boolean {
 function rowMatchesRequest(row: MemoryRow, request: MemoryQueryRequest): boolean {
   const relatedDomains = parseJsonArray(row.related_domains);
   const scenarios = parseJsonArray(row.scenario);
-  const domainPool = [row.domain, ...relatedDomains];
-  const domainOk = request.domains.length === 0 || intersects(domainPool, request.domains);
-  const scenarioOk = request.scenarios.length === 0 || intersects(scenarios, request.scenarios);
+  const aliases = parseJsonArray(row.aliases);
+  const domainPool = [row.domain, ...relatedDomains, ...aliases];
+  const scenarioPool = [...scenarios, ...aliases];
+  const domainOk = request.domains.length === 0 || fuzzyIntersects(domainPool, request.domains);
+  const scenarioOk = request.scenarios.length === 0 || fuzzyIntersects(scenarioPool, request.scenarios);
   const typeOk = request.includeTypes.includes(row.type as MemoryQueryRequest["includeTypes"][number]);
 
   return row.status === "active" && domainOk && scenarioOk && typeOk;
@@ -127,7 +204,7 @@ function rowMatchesRequest(row: MemoryRow, request: MemoryQueryRequest): boolean
  */
 function scoreRow(row: MemoryRow, request: MemoryQueryRequest, relationScore: number): Omit<RankedMemory, "document"> {
   const scenarios = parseJsonArray(row.scenario);
-  const scenarioScore = request.scenarios.length > 0 && intersects(scenarios, request.scenarios) ? 1 : 0.3;
+  const scenarioScore = request.scenarios.length > 0 && fuzzyIntersects(scenarios, request.scenarios) ? 1 : 0.3;
   const lexicalScore = Math.max(0, Math.min(1, 1 - Math.abs(row.rank_score ?? 0) / 20));
   const confidenceScore = row.confidence;
   const sourceAuthorityScore = AUTHORITY_SCORE[row.source_authority] ?? 0.4;
@@ -264,7 +341,8 @@ function selectRowsByIds(rootDir: string, ids: string[]): MemoryRow[] {
 export function queryMemoriesWithDebug(rootDir: string, rawRequest: unknown): QueryMemoriesDebugResult {
   const request = MemoryQueryRequestSchema.parse(rawRequest);
   const selection = selectCandidateRows(rootDir, request);
-  const directRows = selection.rows.filter((row) => rowMatchesRequest(row, request));
+  const expandedRequest = expandRequestWithAliases(request, selection.rows);
+  const directRows = selection.rows.filter((row) => rowMatchesRequest(row, expandedRequest));
   const directIds = new Set(directRows.map((row) => row.id));
   const relatedIds = new Set<string>();
 
@@ -282,13 +360,13 @@ export function queryMemoriesWithDebug(rootDir: string, rawRequest: unknown): Qu
     (row) =>
       row.status === "active" &&
       !directIds.has(row.id) &&
-      request.includeTypes.includes(row.type as MemoryQueryRequest["includeTypes"][number])
+      expandedRequest.includeTypes.includes(row.type as MemoryQueryRequest["includeTypes"][number])
   );
 
   const ranked = [...directRows.map((row) => ({ row, relationScore: 0 })), ...relatedRows.map((row) => ({ row, relationScore: 1 }))]
     .map(({ row, relationScore }) => ({
       document: loadDocument(rootDir, row.file_path),
-      ...scoreRow(row, request, relationScore)
+      ...scoreRow(row, expandedRequest, relationScore)
     }))
     .sort((a, b) => b.finalScore - a.finalScore);
   const debug: QueryDebugInfo = {
@@ -302,8 +380,8 @@ export function queryMemoriesWithDebug(rootDir: string, rawRequest: unknown): Qu
   appendJsonlLog(rootDir, {
     event: "query",
     taskLength: request.task.length,
-    domains: request.domains,
-    scenarios: request.scenarios,
+    domains: expandedRequest.domains,
+    scenarios: expandedRequest.scenarios,
     debug
   });
 

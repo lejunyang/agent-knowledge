@@ -2,6 +2,9 @@
 id: k_20260705_lint_validation_flow
 type: procedural
 title: Lint 迁移验证流程
+aliases:
+  - lint-checklist
+  - validation-flow
 domain: frontend/lint
 related_domains:
   - ci/performance

@@ -21,11 +21,16 @@ describe("catalogKnowledge", () => {
 
     expect(catalog.total).toBeGreaterThanOrEqual(2);
     expect(catalog.items.map((item) => item.id)).toContain("k_20260705_frontend_lint_vue_sfc");
+    expect(catalog.registry.domains).toContain("frontend/lint");
+    expect(catalog.registry.scenarios).toContain("lint-migration");
+    expect(catalog.registry.aliases).toContain("vue-lint");
     expect(catalog.written).toBe(true);
 
     const markdown = await readFile(path.join(root, "knowledge", "_catalog.md"), "utf8");
     expect(markdown).toContain("# Knowledge Catalog");
+    expect(markdown).toContain("## Registry");
     expect(markdown).toContain("k_20260705_frontend_lint_vue_sfc");
+    expect(markdown).toContain("vue-lint");
   });
 
   it("writes JSONL catalog logs", async () => {

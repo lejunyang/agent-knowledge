@@ -2,6 +2,9 @@
 id: k_20260705_frontend_lint_vue_sfc
 type: semantic
 title: Vue SFC lint 迁移约束
+aliases:
+  - vue-lint
+  - sfc-lint
 domain: frontend/lint
 related_domains:
   - ci/performance

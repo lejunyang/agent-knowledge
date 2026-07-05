@@ -42,6 +42,7 @@ export type KnowledgeFrontmatter = {
   id: string;
   type: MemoryType;
   title: string;
+  aliases: string[];
   domain: string;
   related_domains: string[];
   scenario: string[];

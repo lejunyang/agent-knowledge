@@ -7,6 +7,7 @@ describe("KnowledgeFrontmatterSchema", () => {
       id: "k_20260705_frontend_lint_vue_sfc",
       type: "semantic",
       title: "Vue SFC lint 迁移约束",
+      aliases: ["vue-lint", "sfc-lint"],
       domain: "frontend/lint",
       related_domains: ["ci/performance", "monorepo/tooling"],
       scenario: ["code-review", "lint-migration"],
@@ -33,7 +34,26 @@ describe("KnowledgeFrontmatterSchema", () => {
     });
 
     expect(parsed.type).toBe("semantic");
+    expect(parsed.aliases).toEqual(["vue-lint", "sfc-lint"]);
     expect(parsed.related_domains).toEqual(["ci/performance", "monorepo/tooling"]);
+  });
+
+  it("defaults aliases to an empty array", () => {
+    const parsed = KnowledgeFrontmatterSchema.parse({
+      id: "k_20260705_frontend_lint_defaults",
+      type: "semantic",
+      title: "Defaults",
+      domain: "frontend/lint",
+      scenario: ["code-review"],
+      status: "active",
+      confidence: 0.7,
+      source_authority: "documented",
+      created_at: "2026-07-05",
+      updated_at: "2026-07-05",
+      valid_from: "2026-07-05"
+    });
+
+    expect(parsed.aliases).toEqual([]);
   });
 
   it("rejects invalid confidence values", () => {

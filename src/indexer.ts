@@ -86,6 +86,7 @@ function openIndexDatabase(rootDir: string): DatabaseConnection {
       file_path TEXT NOT NULL,
       type TEXT NOT NULL,
       title TEXT NOT NULL,
+      aliases TEXT NOT NULL,
       domain TEXT NOT NULL,
       related_domains TEXT NOT NULL,
       scenario TEXT NOT NULL,
@@ -108,6 +109,7 @@ function openIndexDatabase(rootDir: string): DatabaseConnection {
     CREATE VIRTUAL TABLE memory_fts USING fts5(
       id UNINDEXED,
       title,
+      aliases,
       domain,
       scenario,
       tags,
@@ -130,15 +132,16 @@ function insertDocument(db: DatabaseConnection, document: KnowledgeDocument): vo
 
   db.prepare(`
     INSERT INTO memories (
-      id, file_path, type, title, domain, related_domains, scenario, tags, status,
+      id, file_path, type, title, aliases, domain, related_domains, scenario, tags, status,
       confidence, source_authority, source, related_knowledge, supersedes,
       conflicts_with, visibility, sensitivity, updated_at, valid_until, summary, body
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     frontmatter.id,
     document.filePath,
     frontmatter.type,
     frontmatter.title,
+    JSON.stringify(frontmatter.aliases),
     frontmatter.domain,
     JSON.stringify(frontmatter.related_domains),
     JSON.stringify(frontmatter.scenario),
@@ -159,11 +162,12 @@ function insertDocument(db: DatabaseConnection, document: KnowledgeDocument): vo
   );
 
   db.prepare(`
-    INSERT INTO memory_fts (id, title, domain, scenario, tags, summary, body)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO memory_fts (id, title, aliases, domain, scenario, tags, summary, body)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     frontmatter.id,
     frontmatter.title,
+    frontmatter.aliases.join(" "),
     frontmatter.domain,
     frontmatter.scenario.join(" "),
     frontmatter.tags.join(" "),

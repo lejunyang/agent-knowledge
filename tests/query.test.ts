@@ -56,6 +56,45 @@ describe("queryMemories", () => {
     expect(ranked.map((item) => item.document.frontmatter.id)).not.toContain("k_20260705_lint_validation_flow");
   });
 
+  it("expands domain and scenario aliases during filtering", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-alias-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+
+    const ranked = queryMemories(root, {
+      task: "review vue lint migration",
+      agentRole: "main",
+      domains: ["vue-lint"],
+      scenarios: ["validation-flow"],
+      paths: [],
+      maxTokens: 4500,
+      includeTypes: ["semantic", "procedural", "profile", "episodic"]
+    });
+
+    expect(ranked.map((item) => item.document.frontmatter.id)).toContain("k_20260705_frontend_lint_vue_sfc");
+    expect(ranked.map((item) => item.document.frontmatter.id)).toContain("k_20260705_lint_validation_flow");
+  });
+
+  it("matches hierarchical domains and fuzzy scenario labels", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-fuzzy-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+
+    const ranked = queryMemories(root, {
+      task: "ESLint fallback",
+      agentRole: "main",
+      domains: ["frontend"],
+      scenarios: ["code review"],
+      paths: [],
+      maxTokens: 4500,
+      includeTypes: ["semantic", "procedural", "profile", "episodic"]
+    });
+
+    expect(ranked.map((item) => item.document.frontmatter.id)).toContain("k_20260705_frontend_lint_vue_sfc");
+  });
+
   it("suppresses full-table fallback when domain and scenario are missing", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-no-fallback-"));
     tempDirs.push(root);

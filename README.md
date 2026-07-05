@@ -134,6 +134,8 @@ import { catalogKnowledge } from "agent-knowledge";
 const catalog = await catalogKnowledge("/path/to/workspace", { write: true });
 ```
 
+结构化 catalog 会同时返回 `registry.domains`、`registry.scenarios` 和 `registry.aliases`，方便调用方发现可用的规范领域、场景与人类常用别名。`knowledge/_catalog.md` 也会包含同一份 registry 摘要。
+
 ## 查询上下文
 
 其他 agent 在开始任务前，应先查询相关知识：
@@ -146,7 +148,11 @@ agent-knowledge query \
   --scenario lint-migration
 ```
 
-`query` 只有在提供 `--domain` 或 `--scenario` 时，才会在 FTS 无命中时回退到 metadata 过滤；没有 domain/scenario 的无命中查询会返回空结果，避免整库全表 fallback。
+`query` 只有在提供 `--domain` 或 `--scenario` 时，才会在 FTS 无命中时回退到 metadata 过滤；没有 domain/scenario 的无命中查询会返回空结果，避免整库全表 fallback。domain/scenario 过滤支持：
+
+- `aliases` 别名扩展，例如用 `vue-lint` 命中 `frontend/lint`。
+- 层级匹配，例如 `frontend` 可匹配 `frontend/lint`。
+- 轻量模糊匹配，例如 `code review` 可匹配 `code-review`。
 
 调试检索链路：
 
@@ -204,6 +210,7 @@ agent-knowledge query \
 ```json
 {
   "title": "Lint 迁移验证流程",
+  "aliases": ["lint-checklist"],
   "memory_type": "procedural",
   "domain": "frontend/lint",
   "related_domains": ["ci/performance"],
