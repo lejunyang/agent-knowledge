@@ -14,6 +14,7 @@ import path from "node:path";
 import { Command } from "commander";
 import {
   MemoryQueryRequestSchema,
+  appendJsonlLog,
   buildContextPacket,
   catalogKnowledge,
   captureMaterial,
@@ -65,6 +66,24 @@ function hookContext(hookEventName: "SessionStart" | "UserPromptSubmit", additio
       2
     )
   );
+}
+
+function compactCatalogForHook(catalog: Awaited<ReturnType<typeof catalogKnowledge>>): Record<string, unknown> {
+  return {
+    total: catalog.total,
+    byStatus: catalog.byStatus,
+    byType: catalog.byType,
+    domains: Object.keys(catalog.byDomain).sort(),
+    scenarios: [...new Set(catalog.items.flatMap((item) => item.scenarios))].sort(),
+    items: catalog.items.slice(0, 20).map((item) => ({
+      id: item.id,
+      title: item.title,
+      type: item.type,
+      status: item.status,
+      domain: item.domain,
+      scenarios: item.scenarios
+    }))
+  };
 }
 
 program
@@ -200,6 +219,10 @@ hook
     if (process.env.TRAE_ENV_FILE) {
       await appendFile(process.env.TRAE_ENV_FILE, `AGENT_KNOWLEDGE_ROOT="${root}"\n`, "utf8");
     }
+    appendJsonlLog(root, {
+      event: "hook.session_start",
+      root
+    });
     hookContext(
       "SessionStart",
       `Agent Knowledge 已启用。默认知识库 workspace root：${root}。知识文件位于 ${root}/knowledge，索引位于 ${root}/.memory/index.sqlite。`
@@ -222,11 +245,13 @@ hook
     try {
       await initKnowledgeWorkspace(root);
       rebuildIndex(root);
+      const catalog = await catalogKnowledge(root, { write: false });
       const request = MemoryQueryRequestSchema.parse({
         task: prompt,
         agentRole: "main"
       });
-      const packet = buildContextPacket({ request, ranked: queryMemories(root, request) });
+      const { ranked, debug } = queryMemoriesWithDebug(root, request);
+      const packet = buildContextPacket({ request, ranked });
       const hasContext =
         packet.always_apply.length +
           packet.relevant_facts.length +
@@ -235,14 +260,28 @@ hook
           packet.warnings.length >
         0;
 
+      appendJsonlLog(root, {
+        event: "hook.user_prompt_submit",
+        promptLength: prompt.length,
+        catalogTotal: catalog.total,
+        resultIds: debug.resultIds,
+        fallbackUsed: debug.fallbackUsed,
+        fallbackSuppressedReason: debug.fallbackSuppressedReason
+      });
+
       hookContext(
         "UserPromptSubmit",
         hasContext
-          ? `Agent Knowledge context packet:\n\n${JSON.stringify(packet, null, 2)}`
-          : `Agent Knowledge 已查询 ${root}，没有命中可注入的 active 知识。`
+          ? `Agent Knowledge catalog:\n\n${JSON.stringify(compactCatalogForHook(catalog), null, 2)}\n\nAgent Knowledge context packet:\n\n${JSON.stringify(packet, null, 2)}`
+          : `Agent Knowledge catalog:\n\n${JSON.stringify(compactCatalogForHook(catalog), null, 2)}\n\nAgent Knowledge 已查询 ${root}，没有命中可注入的 active 知识。可根据 catalog 中的 domains/scenarios 重新选择更精确的查询条件。`
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      appendJsonlLog(root, {
+        event: "hook.user_prompt_submit.error",
+        promptLength: prompt.length,
+        message
+      });
       hookContext("UserPromptSubmit", `Agent Knowledge 检索失败，主流程可继续。错误：${message}`);
     }
   });
