@@ -1,6 +1,6 @@
 # TRAE 模板
 
-本目录存放对外安装模板，不直接命名为 `.trae`。真正使用时，把文件复制到目标项目或用户级配置目录。
+本目录存放对外安装模板，不直接命名为 `.trae`。真正使用时，把文件链接或复制到目标项目或用户级配置目录。
 
 ## 安装位置
 
@@ -11,12 +11,20 @@ templates/trae/agents/memory-writer.md -> <project>/.trae/agents/memory-writer.m
 templates/trae/hooks.json -> <project>/.trae/hooks.json
 ```
 
-用户级安装：
+用户级安装推荐使用命令创建符号链接：
+
+```bash
+agent-knowledge link-trae-templates
+```
+
+等价目标位置：
 
 ```text
 templates/trae/agents/memory-writer.md -> ~/.trae-cn/agents/memory-writer.md
 templates/trae/hooks.json -> ~/.trae-cn/hooks.json
 ```
+
+如果目标已存在，命令会拒绝覆盖；确认替换时使用 `agent-knowledge link-trae-templates --force`。
 
 ## hooks.json 能力
 

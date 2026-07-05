@@ -20,3 +20,4 @@ export * from "./logging.js";
 export * from "./scoring.js";
 export * from "./feedback.js";
 export * from "./embeddings.js";
+export * from "./templates.js";

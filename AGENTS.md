@@ -63,6 +63,7 @@ node dist/cli.js --help
 node dist/cli.js catalog --root tests/fixtures/basic-knowledge --no-write
 node dist/cli.js embed-index --root tests/fixtures/basic-knowledge --provider local
 node dist/cli.js suggest-aliases --root tests/fixtures/basic-knowledge --provider local
+node dist/cli.js link-trae-templates --target-dir /tmp/agent-knowledge-link-smoke
 ```
 
 CLI smoke test：
@@ -211,6 +212,7 @@ agent-knowledge write-candidate \
 
 将 `templates/trae/agents/memory-writer.md` 复制到目标项目的 `.trae/agents/memory-writer.md`。
 将 `templates/trae/hooks.json` 复制到目标项目的 `.trae/hooks.json`。
+用户级安装可运行 `agent-knowledge link-trae-templates`，它会把模板以符号链接写入 `~/.trae-cn/agents/memory-writer.md` 和 `~/.trae-cn/hooks.json`。如果用户写成 `~/.tran-cn`，优先按笔误处理为官方目录 `~/.trae-cn`；确实要写其他目录时使用 `--target-dir`。
 `knowledge-organizer` Skill 已放在 `.trae/skills/knowledge-organizer/SKILL.md`，用于用户主动要求整理知识库或整理输入材料时触发。
 
 这些模板是官方格式，仓库内不直接放 `.trae/`，避免把模板误认为当前项目已安装配置。

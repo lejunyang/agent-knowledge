@@ -1,0 +1,85 @@
+/**
+ * templates 模块负责把仓库里的对外 TRAE 模板安装到真实 TRAE 配置目录。
+ *
+ * 模板源文件保留在 `templates/trae/`，真实使用时通过符号链接放到 `~/.trae-cn`。
+ * 这样模板更新后无需复制多份文件，也避免仓库根目录直接出现 `.trae/` 造成误解。
+ */
+import { lstat, mkdir, readlink, rm, symlink } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import path from "node:path";
+
+export type LinkTraeTemplatesOptions = {
+  packageRoot: string;
+  targetDir?: string;
+  force?: boolean;
+};
+
+export type LinkedTemplate = {
+  source: string;
+  target: string;
+  status: "linked" | "already-linked";
+};
+
+export type LinkTraeTemplatesResult = {
+  targetDir: string;
+  linked: LinkedTemplate[];
+};
+
+export function getDefaultTraeConfigDir(): string {
+  return path.join(homedir(), ".trae-cn");
+}
+
+async function linkFile(source: string, target: string, force: boolean): Promise<LinkedTemplate> {
+  await mkdir(path.dirname(target), { recursive: true });
+
+  if (existsSync(target)) {
+    const stat = await lstat(target);
+    if (stat.isSymbolicLink()) {
+      const existing = await readlink(target);
+      const resolvedExisting = path.resolve(path.dirname(target), existing);
+      if (resolvedExisting === source) {
+        return { source, target, status: "already-linked" };
+      }
+    }
+
+    if (!force) {
+      throw new Error(`Refusing to overwrite existing TRAE config: ${target}. Re-run with --force to replace it.`);
+    }
+    await rm(target, { recursive: true, force: true });
+  }
+
+  await symlink(source, target);
+  return { source, target, status: "linked" };
+}
+
+export async function linkTraeTemplates(options: LinkTraeTemplatesOptions): Promise<LinkTraeTemplatesResult> {
+  const targetDir = path.resolve(options.targetDir ?? getDefaultTraeConfigDir());
+  const packageRoot = path.resolve(options.packageRoot);
+  const templatesRoot = path.join(packageRoot, "templates", "trae");
+  const force = options.force ?? false;
+
+  const files = [
+    {
+      source: path.join(templatesRoot, "agents", "memory-writer.md"),
+      target: path.join(targetDir, "agents", "memory-writer.md")
+    },
+    {
+      source: path.join(templatesRoot, "hooks.json"),
+      target: path.join(targetDir, "hooks.json")
+    }
+  ];
+
+  for (const file of files) {
+    if (!existsSync(file.source)) {
+      throw new Error(`TRAE template source does not exist: ${file.source}`);
+    }
+  }
+
+  const linked: LinkedTemplate[] = [];
+  for (const file of files) {
+    linked.push(await linkFile(file.source, file.target, force));
+  }
+
+  return { targetDir, linked };
+}

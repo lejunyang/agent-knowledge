@@ -350,18 +350,36 @@ agent-knowledge write-candidate --root /path/to/workspace --input candidate.json
 - `templates/trae/agents/memory-writer.md`：项目级 Subagent 模板，使用官方 YAML frontmatter。
 - `templates/trae/hooks.json`：项目级 Hook 模板，使用官方 `version: 1` / `hooks` 配置格式。
 
-安装到真实 TRAE 项目时，复制为：
+用户级安装推荐使用符号链接：
 
-```text
-<project>/.trae/agents/memory-writer.md
-<project>/.trae/hooks.json
+```bash
+agent-knowledge link-trae-templates
 ```
 
-用户级安装时，复制为：
+该命令会链接到官方 TRAE 用户配置目录：
 
 ```text
 ~/.trae-cn/agents/memory-writer.md
 ~/.trae-cn/hooks.json
+```
+
+如果目标文件已存在，默认拒绝覆盖；确认替换时使用：
+
+```bash
+agent-knowledge link-trae-templates --force
+```
+
+如果需要安装到其他目录：
+
+```bash
+agent-knowledge link-trae-templates --target-dir /path/to/.trae-cn
+```
+
+项目级安装时，手动链接或复制为：
+
+```text
+<project>/.trae/agents/memory-writer.md
+<project>/.trae/hooks.json
 ```
 
 通用接入顺序：

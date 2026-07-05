@@ -9,7 +9,10 @@
  *   这样不同项目的 hooks 可以共享同一套默认知识库。
  */
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { appendFile, readFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { Command } from "commander";
 import {
@@ -29,6 +32,7 @@ import {
   queryMemoriesWithDebug,
   rebuildIndex,
   suggestAliases,
+  linkTraeTemplates,
   writeCandidateMemory,
   type CandidateMemoryInput
 } from "./index.js";
@@ -40,6 +44,20 @@ program.name("agent-knowledge").description("Local human-readable memory toolkit
 
 function resolveCliRoot(root?: string): string {
   return root ?? process.env.AGENT_KNOWLEDGE_ROOT ?? getDefaultKnowledgeRoot();
+}
+
+function findPackageRoot(startDir = dirname(fileURLToPath(import.meta.url))): string {
+  let current = startDir;
+  while (true) {
+    if (existsSync(path.join(current, "package.json")) && existsSync(path.join(current, "templates", "trae"))) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      throw new Error("Unable to locate package root containing templates/trae");
+    }
+    current = parent;
+  }
 }
 
 async function readStdin(): Promise<string> {
@@ -320,6 +338,21 @@ program
     }
     execFileSync("npm", ["install", "-g", packageDir], { stdio: "inherit" });
     console.log(`Installed global command from ${packageDir}`);
+  });
+
+program
+  .command("link-trae-templates")
+  .description("Symlink templates/trae agents and hooks.json into ~/.trae-cn for TRAE")
+  .option("--target-dir <dir>", "TRAE config directory", "~/.trae-cn")
+  .option("--force", "replace existing target files or links", false)
+  .action(async (options: { targetDir: string; force: boolean }) => {
+    const targetDir = options.targetDir === "~/.trae-cn" ? undefined : options.targetDir;
+    const result = await linkTraeTemplates({
+      packageRoot: findPackageRoot(),
+      targetDir,
+      force: options.force
+    });
+    console.log(JSON.stringify(result, null, 2));
   });
 
 const hook = program.command("hook").description("Commands intended to be called from TRAE hooks.json templates");
