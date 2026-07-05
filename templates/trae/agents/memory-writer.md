@@ -37,6 +37,7 @@ tools: ""
   "title": "Lint 迁移验证流程",
   "memory_type": "procedural",
   "domain": "frontend/lint",
+  "aliases": ["lint-checklist", "lint validation flow", "前端 lint 验证"],
   "related_domains": ["ci/performance"],
   "scenario": ["lint-migration", "code-review"],
   "tags": ["oxlint", "eslint", "oxfmt"],
@@ -65,6 +66,19 @@ tools: ""
 - `episodic`：一次历史任务、事故复盘、失败教训。
 - `procedural`：SOP、检查步骤、排障流程、验证流程。
 - `source`：原始材料摘要或证据索引。
+
+## aliases 规则
+
+`aliases` 用来提升检索召回，不替代规范 `domain` 和 `scenario`。
+
+适合写入 `aliases` 的内容：
+
+- 用户自然说法，例如“单文件组件模板检查”。
+- 英文简称和中文译名，例如 `SFC`、`单文件组件`。
+- 旧称、别称、团队内部俗称。
+- 常见错写或近义说法。
+
+不要把事实判断写进 `aliases`。如果没有明确别名，输出空数组。
 
 ## 来源权威性
 
@@ -95,4 +109,13 @@ agent-knowledge write-candidate --input candidate.json
 
 ```bash
 agent-knowledge write-candidate --root /path/to/workspace --input candidate.json
+```
+
+如果主 Agent 使用 `agent-knowledge query --debug`，可以把 `debug.queryRunId` 和被使用的知识 ID 记录反馈：
+
+```bash
+agent-knowledge feedback \
+  --memory-id "$MEMORY_ID" \
+  --usefulness useful \
+  --query-run-id "$QUERY_RUN_ID"
 ```

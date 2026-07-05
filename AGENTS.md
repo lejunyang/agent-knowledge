@@ -111,6 +111,10 @@ src/cli.ts            命令行入口
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - 修改检索排序时同步更新 eval case 或增加新的 eval case。
 - `query` 不应在缺少 domain/scenario 且 FTS 无命中时回退全表；如修改 fallback 策略，必须更新 debug 输出和测试。
+- 任何会影响对外 agent 使用流程的改动，都必须 review `templates/trae/`：
+  - Hook 行为、事件、命令或注入上下文变化时，检查 `templates/trae/hooks.json` 和 `templates/trae/README.md`。
+  - Subagent 输入、输出、frontmatter、工具权限或候选 JSON 字段变化时，检查 `templates/trae/agents/memory-writer.md`。
+  - 模板必须遵循 TRAE 官方 Subagent Markdown + YAML frontmatter 格式和 Hook `version: 1` JSON 配置格式。
 - 不要提交 `dist/`、`.memory/`、`node_modules/` 或 `.superpowers/`。
 
 ## 知识写入规则
