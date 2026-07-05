@@ -9,7 +9,7 @@
 - `knowledge/**/*.md` 是人类可读事实源。
 - `.memory/index.sqlite` 是可重建索引。
 - `.memory/logs/*.jsonl` 是可重建运行日志，只用于调试和审计摘要。
-- `agent-knowledge query` 输出主 agent 可注入的 `context packet`。
+- `agent-knowledge query` 输出主 agent 可注入的 `context packet`，`--debug` 附带 scorer/reranker 和分项分数。
 - `agent-knowledge write-candidate` 只写候选知识到 `knowledge/_inbox/`。
 - 知识 frontmatter 支持可选 `aliases`，用于查询别名扩展和 catalog registry 暴露，不替代规范 `domain` / `scenario`。
 
@@ -91,11 +91,13 @@ src/markdown.ts       Markdown/frontmatter 解析和序列化
 src/workspace.ts      初始化 knowledge 目录和发现知识文件
 src/indexer.ts        从 Markdown 重建 SQLite/FTS5 索引
 src/query.ts          查询、过滤、排序和一跳关联扩展
+src/scoring.ts        可插拔 embedding scorer 和默认 reranker
 src/contextPacket.ts  将检索结果组装成 context packet
 src/catalog.ts        生成 catalog API 和 knowledge/_catalog.md
 src/logging.ts        写入 .memory/logs JSONL 运行摘要
 src/governance.ts     候选知识治理策略和 secret-like 扫描
 src/inbox.ts          写入 knowledge/_inbox
+src/feedback.ts       记录 memory usefulness 反馈到 JSONL 日志
 src/organizer.ts      主动整理 inbox 和用户直接提供的材料
 src/eval.ts           检索评估 harness
 src/cli.ts            命令行入口
@@ -147,6 +149,16 @@ agent-knowledge query \
   --task "$CURRENT_TASK" \
   --domain "$CURRENT_DOMAIN" \
   --scenario "$CURRENT_SCENARIO"
+```
+
+如果使用 `query --debug`，可把 `debug.queryRunId` 与结果 ID 一起记录有用性反馈：
+
+```bash
+agent-knowledge feedback \
+  --root "$AGENT_KNOWLEDGE_ROOT" \
+  --memory-id "$MEMORY_ID" \
+  --usefulness useful \
+  --query-run-id "$QUERY_RUN_ID"
 ```
 
 任务结束后：

@@ -6,6 +6,7 @@
  * - FTS/BM25 擅长路径、术语、错误码、API 名称。
  * - 一跳关系扩展补充 depends_on / often_used_with 等强相关知识。
  */
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { parseKnowledgeMarkdown } from "./markdown.js";
@@ -14,6 +15,14 @@ import { MemoryQueryRequestSchema } from "./schema.js";
 import type { KnowledgeDocument, MemoryQueryRequest, RankedMemory, SourceAuthority } from "./types.js";
 import { getIndexDbPath } from "./indexer.js";
 import { appendJsonlLog } from "./logging.js";
+import {
+  AUTHORITY_SCORE,
+  defaultEmbeddingScorer,
+  defaultMemoryReranker,
+  type EmbeddingScorer,
+  type MemoryReranker,
+  type ScoreFeatures
+} from "./scoring.js";
 
 const require = createRequire(import.meta.url);
 // 与 indexer 保持一致，使用 Node 内置 sqlite 读取 FTS5 索引。
@@ -31,10 +40,14 @@ type MemoryRow = {
   status: string;
   confidence: number;
   source_authority: SourceAuthority;
+  tags: string;
+  summary: string;
+  body: string;
   rank_score?: number;
 };
 
 export type QueryDebugInfo = {
+  queryRunId: string;
   tokens: string[];
   ftsQuery: string;
   ftsCandidateCount: number;
@@ -46,6 +59,20 @@ export type QueryDebugInfo = {
   relatedCandidateIds: string[];
   relatedMatchCount: number;
   resultIds: string[];
+  scoring: {
+    embeddingScorer: string;
+    reranker: string;
+  };
+  resultScores: Array<{
+    id: string;
+    lexicalScore: number;
+    embeddingScore: number;
+    scenarioScore: number;
+    confidenceScore: number;
+    sourceAuthorityScore: number;
+    relationScore: number;
+    finalScore: number;
+  }>;
 };
 
 export type QueryMemoriesDebugResult = {
@@ -53,11 +80,9 @@ export type QueryMemoriesDebugResult = {
   debug: QueryDebugInfo;
 };
 
-const AUTHORITY_SCORE: Record<SourceAuthority, number> = {
-  user_confirmed: 1,
-  verified_task: 0.85,
-  documented: 0.75,
-  model_inferred: 0.45
+export type QueryScoringOptions = {
+  embeddingScorer?: EmbeddingScorer;
+  reranker?: MemoryReranker;
 };
 
 // 只有这些关系允许自动扩展。冲突和替代关系只应进入 warnings，不能当作普通上下文注入。
@@ -198,25 +223,38 @@ function rowMatchesRequest(row: MemoryRow, request: MemoryQueryRequest): boolean
 }
 
 /**
- * MVP 的确定性重排序公式。
+ * 生成默认重排器所需的分项特征。
  *
- * embedding 和 graph 暂未实现，因此当前分数偏重 lexical、scenario、confidence 和 source authority。
+ * embeddingScore 由可插拔 scorer 给出；默认 scorer 是本地 deterministic 词项向量，
+ * 不依赖任何外部 API。
  */
-function scoreRow(row: MemoryRow, request: MemoryQueryRequest, relationScore: number): Omit<RankedMemory, "document"> {
+function scoreRow(
+  row: MemoryRow,
+  document: KnowledgeDocument,
+  request: MemoryQueryRequest,
+  relationScore: number,
+  embeddingScorer: EmbeddingScorer,
+  reranker: MemoryReranker
+): Omit<RankedMemory, "document"> {
   const scenarios = parseJsonArray(row.scenario);
   const scenarioScore = request.scenarios.length > 0 && fuzzyIntersects(scenarios, request.scenarios) ? 1 : 0.3;
   const lexicalScore = Math.max(0, Math.min(1, 1 - Math.abs(row.rank_score ?? 0) / 20));
   const confidenceScore = row.confidence;
   const sourceAuthorityScore = AUTHORITY_SCORE[row.source_authority] ?? 0.4;
-  const finalScore =
-    0.3 * lexicalScore +
-    0.15 * scenarioScore +
-    0.1 * confidenceScore +
-    0.1 * sourceAuthorityScore +
-    0.05 * relationScore;
+  const embeddingScore = Math.max(0, Math.min(1, embeddingScorer.score({ request, document })));
+  const features: ScoreFeatures = {
+    lexicalScore,
+    embeddingScore,
+    scenarioScore,
+    confidenceScore,
+    sourceAuthorityScore,
+    relationScore
+  };
+  const finalScore = Math.max(0, Math.min(1, reranker.rerank({ request, document, features })));
 
   return {
     lexicalScore,
+    embeddingScore,
     scenarioScore,
     confidenceScore,
     sourceAuthorityScore,
@@ -227,7 +265,16 @@ function scoreRow(row: MemoryRow, request: MemoryQueryRequest, relationScore: nu
 
 type CandidateSelection = {
   rows: MemoryRow[];
-  debug: Omit<QueryDebugInfo, "directMatchCount" | "relatedCandidateIds" | "relatedMatchCount" | "resultIds">;
+  debug: Omit<
+    QueryDebugInfo,
+    | "queryRunId"
+    | "directMatchCount"
+    | "relatedCandidateIds"
+    | "relatedMatchCount"
+    | "resultIds"
+    | "scoring"
+    | "resultScores"
+  >;
 };
 
 /**
@@ -338,8 +385,15 @@ function selectRowsByIds(rootDir: string, ids: string[]): MemoryRow[] {
  *
  * 调用方通常不直接使用这些结果，而是交给 `buildContextPacket` 分区组装。
  */
-export function queryMemoriesWithDebug(rootDir: string, rawRequest: unknown): QueryMemoriesDebugResult {
+export function queryMemoriesWithDebug(
+  rootDir: string,
+  rawRequest: unknown,
+  scoringOptions: QueryScoringOptions = {}
+): QueryMemoriesDebugResult {
   const request = MemoryQueryRequestSchema.parse(rawRequest);
+  const queryRunId = randomUUID();
+  const embeddingScorer = scoringOptions.embeddingScorer ?? defaultEmbeddingScorer;
+  const reranker = scoringOptions.reranker ?? defaultMemoryReranker;
   const selection = selectCandidateRows(rootDir, request);
   const expandedRequest = expandRequestWithAliases(request, selection.rows);
   const directRows = selection.rows.filter((row) => rowMatchesRequest(row, expandedRequest));
@@ -364,21 +418,40 @@ export function queryMemoriesWithDebug(rootDir: string, rawRequest: unknown): Qu
   );
 
   const ranked = [...directRows.map((row) => ({ row, relationScore: 0 })), ...relatedRows.map((row) => ({ row, relationScore: 1 }))]
-    .map(({ row, relationScore }) => ({
-      document: loadDocument(rootDir, row.file_path),
-      ...scoreRow(row, expandedRequest, relationScore)
-    }))
+    .map(({ row, relationScore }) => {
+      const document = loadDocument(rootDir, row.file_path);
+      return {
+        document,
+        ...scoreRow(row, document, expandedRequest, relationScore, embeddingScorer, reranker)
+      };
+    })
     .sort((a, b) => b.finalScore - a.finalScore);
   const debug: QueryDebugInfo = {
     ...selection.debug,
+    queryRunId,
     directMatchCount: directRows.length,
     relatedCandidateIds,
     relatedMatchCount: relatedRows.length,
-    resultIds: ranked.map((item) => item.document.frontmatter.id)
+    resultIds: ranked.map((item) => item.document.frontmatter.id),
+    scoring: {
+      embeddingScorer: embeddingScorer.name,
+      reranker: reranker.name
+    },
+    resultScores: ranked.map((item) => ({
+      id: item.document.frontmatter.id,
+      lexicalScore: item.lexicalScore,
+      embeddingScore: item.embeddingScore,
+      scenarioScore: item.scenarioScore,
+      confidenceScore: item.confidenceScore,
+      sourceAuthorityScore: item.sourceAuthorityScore,
+      relationScore: item.relationScore,
+      finalScore: item.finalScore
+    }))
   };
 
   appendJsonlLog(rootDir, {
     event: "query",
+    queryRunId,
     taskLength: request.task.length,
     domains: expandedRequest.domains,
     scenarios: expandedRequest.scenarios,
@@ -388,6 +461,6 @@ export function queryMemoriesWithDebug(rootDir: string, rawRequest: unknown): Qu
   return { ranked, debug };
 }
 
-export function queryMemories(rootDir: string, rawRequest: unknown): RankedMemory[] {
-  return queryMemoriesWithDebug(rootDir, rawRequest).ranked;
+export function queryMemories(rootDir: string, rawRequest: unknown, scoringOptions: QueryScoringOptions = {}): RankedMemory[] {
+  return queryMemoriesWithDebug(rootDir, rawRequest, scoringOptions).ranked;
 }

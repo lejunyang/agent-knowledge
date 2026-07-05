@@ -17,3 +17,5 @@ export * from "./eval.js";
 export * from "./organizer.js";
 export * from "./catalog.js";
 export * from "./logging.js";
+export * from "./scoring.js";
+export * from "./feedback.js";

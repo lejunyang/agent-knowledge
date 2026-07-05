@@ -7,6 +7,7 @@ import { rebuildIndex } from "../src/indexer.js";
 import { queryMemories, queryMemoriesWithDebug } from "../src/query.js";
 import { getLogFilePath } from "../src/logging.js";
 import type { MemoryQueryRequest } from "../src/types.js";
+import type { EmbeddingScorer, MemoryReranker } from "../src/scoring.js";
 
 let tempDirs: string[] = [];
 
@@ -135,6 +136,68 @@ describe("queryMemories", () => {
 
     expect(log.event).toBe("query");
     expect(log.debug?.resultIds).toContain("k_20260705_frontend_lint_vue_sfc");
+  });
+
+  it("includes embedding scorer and reranker details in debug scores", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-score-debug-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+
+    const { ranked, debug } = queryMemoriesWithDebug(root, {
+      task: "审查 Vue SFC lint 迁移方案",
+      agentRole: "main",
+      domains: ["frontend/lint"],
+      scenarios: ["lint-migration"],
+      paths: [],
+      maxTokens: 4500,
+      includeTypes: ["semantic", "procedural", "profile", "episodic"]
+    });
+
+    expect(debug.queryRunId).toMatch(/[0-9a-f-]{36}/);
+    expect(debug.scoring).toEqual({
+      embeddingScorer: "default-local-token-cosine",
+      reranker: "default-weighted-linear"
+    });
+    expect(debug.resultScores).toHaveLength(ranked.length);
+    expect(debug.resultScores[0]?.embeddingScore).toBeGreaterThanOrEqual(0);
+    expect(debug.resultScores[0]?.finalScore).toBe(ranked[0]?.finalScore);
+  });
+
+  it("accepts pluggable embedding scorers and rerankers", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-plugins-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+    const embeddingScorer: EmbeddingScorer = {
+      name: "test-procedural-boost",
+      score: ({ document }) => (document.frontmatter.type === "procedural" ? 1 : 0)
+    };
+    const reranker: MemoryReranker = {
+      name: "test-embedding-only",
+      rerank: ({ features }) => features.embeddingScore
+    };
+
+    const { ranked, debug } = queryMemoriesWithDebug(
+      root,
+      {
+        task: "审查 Vue SFC lint 迁移方案",
+        agentRole: "main",
+        domains: ["frontend/lint"],
+        scenarios: ["lint-migration"],
+        paths: [],
+        maxTokens: 4500,
+        includeTypes: ["semantic", "procedural", "profile", "episodic"]
+      },
+      { embeddingScorer, reranker }
+    );
+
+    expect(debug.scoring).toEqual({
+      embeddingScorer: "test-procedural-boost",
+      reranker: "test-embedding-only"
+    });
+    expect(ranked[0]?.document.frontmatter.id).toBe("k_20260705_lint_validation_flow");
+    expect(ranked[0]?.embeddingScore).toBe(1);
   });
 });
 

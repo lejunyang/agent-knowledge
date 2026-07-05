@@ -127,6 +127,7 @@ export type ContextPacket = {
 export type RankedMemory = {
   document: KnowledgeDocument;
   lexicalScore: number;
+  embeddingScore: number;
   scenarioScore: number;
   confidenceScore: number;
   sourceAuthorityScore: number;

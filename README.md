@@ -165,7 +165,27 @@ agent-knowledge query \
   --debug
 ```
 
-`--debug` 输出 `{ "packet": ..., "debug": ... }`，其中 `debug` 包含 FTS tokens、fallback 状态、候选行数、关系扩展 ID 和最终结果 ID。
+`--debug` 输出 `{ "packet": ..., "debug": ... }`，其中 `debug` 包含 FTS tokens、fallback 状态、候选行数、关系扩展 ID、最终结果 ID、`queryRunId`、本次使用的 embedding scorer / reranker 名称，以及每条结果的分项分数。
+
+查询排序支持 TypeScript API 插件：
+
+```ts
+import { queryMemoriesWithDebug, type EmbeddingScorer, type MemoryReranker } from "agent-knowledge";
+
+const embeddingScorer: EmbeddingScorer = {
+  name: "my-local-scorer",
+  score: ({ request, document }) => (document.frontmatter.tags.some((tag) => request.task.includes(tag)) ? 1 : 0)
+};
+
+const reranker: MemoryReranker = {
+  name: "embedding-only",
+  rerank: ({ features }) => features.embeddingScore
+};
+
+const result = queryMemoriesWithDebug(root, request, { embeddingScorer, reranker });
+```
+
+默认 embedding scorer 是本地 deterministic 词项向量 cosine，不调用任何外部 API。默认 reranker 是加权线性公式，综合 lexical、embedding、scenario、confidence、source authority 和 relation 分数。
 
 输出是 `context packet`：
 
@@ -202,6 +222,26 @@ agent-knowledge query \
 ```
 
 日志是机器调试产物，不是事实源；不要把它当作知识更新来源。
+
+## 记录记忆有用性反馈
+
+查询结果是否有用可以单独记录到 JSONL 日志，不会修改 Markdown 事实源：
+
+```bash
+agent-knowledge feedback \
+  --root /path/to/workspace \
+  --memory-id k_20260705_frontend_lint_vue_sfc \
+  --usefulness useful \
+  --query-run-id <debug.queryRunId> \
+  --task "审查 Vue SFC lint 迁移方案" \
+  --note "命中了正确的 fallback 约束"
+```
+
+`--usefulness` 只接受 `useful`、`not_useful` 或 `neutral`。反馈事件写入：
+
+```text
+<workspace root>/.memory/logs/YYYY-MM-DD.jsonl
+```
 
 ## 写入候选知识
 

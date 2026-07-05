@@ -20,6 +20,7 @@ import {
   captureMaterial,
   initKnowledgeWorkspace,
   listKnowledge,
+  logMemoryFeedback,
   organizeInbox,
   queryMemories,
   queryMemoriesWithDebug,
@@ -131,6 +132,35 @@ program
     const packet = buildContextPacket({ request, ranked });
     console.log(JSON.stringify(packet, null, 2));
   });
+
+program
+  .command("feedback")
+  .description("Log whether a retrieved memory was useful without modifying Markdown facts")
+  .requiredOption("--memory-id <id>", "knowledge id shown in query output")
+  .requiredOption("--usefulness <value>", "one of: useful, not_useful, neutral")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--query-run-id <id>", "debug.queryRunId from a prior query")
+  .option("--task <task>", "short task text associated with the feedback")
+  .option("--note <note>", "optional feedback note, max 500 characters")
+  .action(
+    (options: {
+      memoryId: string;
+      usefulness: string;
+      root?: string;
+      queryRunId?: string;
+      task?: string;
+      note?: string;
+    }) => {
+      const result = logMemoryFeedback(resolveCliRoot(options.root), {
+        memoryId: options.memoryId,
+        usefulness: options.usefulness,
+        queryRunId: options.queryRunId,
+        task: options.task,
+        note: options.note
+      });
+      console.log(JSON.stringify(result, null, 2));
+    }
+  );
 
 program
   .command("catalog")
