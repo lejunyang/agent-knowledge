@@ -22,6 +22,7 @@ agent-knowledge link-trae-templates
 ```text
 templates/trae/agents/memory-writer.md -> ~/.trae-cn/agents/memory-writer.md
 templates/trae/hooks.json -> ~/.trae-cn/hooks.json
+.trae/skills/knowledge-organizer -> ~/.trae-cn/skills/knowledge-organizer
 ```
 
 如果目标已存在，命令会拒绝覆盖；确认替换时使用 `agent-knowledge link-trae-templates --force`。

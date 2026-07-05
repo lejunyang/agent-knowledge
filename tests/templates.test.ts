@@ -12,7 +12,7 @@ afterEach(async () => {
 });
 
 describe("linkTraeTemplates", () => {
-  it("links TRAE agent and hooks templates into a target config directory", async () => {
+  it("links TRAE agent, hooks, and project skills into a target config directory", async () => {
     const targetDir = await mkdtemp(path.join(tmpdir(), "agent-knowledge-trae-target-"));
     tempDirs.push(targetDir);
 
@@ -23,13 +23,18 @@ describe("linkTraeTemplates", () => {
 
     const agentTarget = path.join(targetDir, "agents", "memory-writer.md");
     const hooksTarget = path.join(targetDir, "hooks.json");
+    const skillTarget = path.join(targetDir, "skills", "knowledge-organizer");
 
     expect((await lstat(agentTarget)).isSymbolicLink()).toBe(true);
     expect((await lstat(hooksTarget)).isSymbolicLink()).toBe(true);
+    expect((await lstat(skillTarget)).isSymbolicLink()).toBe(true);
     expect(path.resolve(path.dirname(agentTarget), await readlink(agentTarget))).toBe(
       path.join(process.cwd(), "templates", "trae", "agents", "memory-writer.md")
     );
-    expect(result.linked.map((item) => item.status)).toEqual(["linked", "linked"]);
+    expect(path.resolve(path.dirname(skillTarget), await readlink(skillTarget))).toBe(
+      path.join(process.cwd(), ".trae", "skills", "knowledge-organizer")
+    );
+    expect(result.linked.map((item) => item.status)).toEqual(["linked", "linked", "linked"]);
   });
 
   it("is idempotent when targets already link to the same templates", async () => {
@@ -39,7 +44,7 @@ describe("linkTraeTemplates", () => {
     await linkTraeTemplates({ packageRoot: process.cwd(), targetDir });
     const result = await linkTraeTemplates({ packageRoot: process.cwd(), targetDir });
 
-    expect(result.linked.map((item) => item.status)).toEqual(["already-linked", "already-linked"]);
+    expect(result.linked.map((item) => item.status)).toEqual(["already-linked", "already-linked", "already-linked"]);
   });
 
   it("refuses to overwrite existing files unless force is set", async () => {

@@ -349,6 +349,7 @@ agent-knowledge write-candidate --root /path/to/workspace --input candidate.json
 
 - `templates/trae/agents/memory-writer.md`：项目级 Subagent 模板，使用官方 YAML frontmatter。
 - `templates/trae/hooks.json`：项目级 Hook 模板，使用官方 `version: 1` / `hooks` 配置格式。
+- `.trae/skills/*`：本项目内置 Skills，例如 `knowledge-organizer`。
 
 用户级安装推荐使用符号链接：
 
@@ -361,6 +362,7 @@ agent-knowledge link-trae-templates
 ```text
 ~/.trae-cn/agents/memory-writer.md
 ~/.trae-cn/hooks.json
+~/.trae-cn/skills/knowledge-organizer
 ```
 
 如果目标文件已存在，默认拒绝覆盖；确认替换时使用：

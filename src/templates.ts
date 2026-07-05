@@ -4,7 +4,7 @@
  * 模板源文件保留在 `templates/trae/`，真实使用时通过符号链接放到 `~/.trae-cn`。
  * 这样模板更新后无需复制多份文件，也避免仓库根目录直接出现 `.trae/` 造成误解。
  */
-import { lstat, mkdir, readlink, rm, symlink } from "node:fs/promises";
+import { lstat, mkdir, readlink, readdir, rm, symlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -57,9 +57,10 @@ export async function linkTraeTemplates(options: LinkTraeTemplatesOptions): Prom
   const targetDir = path.resolve(options.targetDir ?? getDefaultTraeConfigDir());
   const packageRoot = path.resolve(options.packageRoot);
   const templatesRoot = path.join(packageRoot, "templates", "trae");
+  const projectSkillsRoot = path.join(packageRoot, ".trae", "skills");
   const force = options.force ?? false;
 
-  const files = [
+  const files: Array<{ source: string; target: string }> = [
     {
       source: path.join(templatesRoot, "agents", "memory-writer.md"),
       target: path.join(targetDir, "agents", "memory-writer.md")
@@ -69,6 +70,18 @@ export async function linkTraeTemplates(options: LinkTraeTemplatesOptions): Prom
       target: path.join(targetDir, "hooks.json")
     }
   ];
+
+  if (existsSync(projectSkillsRoot)) {
+    const skillEntries = await readdir(projectSkillsRoot, { withFileTypes: true });
+    for (const entry of skillEntries) {
+      if (entry.isDirectory()) {
+        files.push({
+          source: path.join(projectSkillsRoot, entry.name),
+          target: path.join(targetDir, "skills", entry.name)
+        });
+      }
+    }
+  }
 
   for (const file of files) {
     if (!existsSync(file.source)) {
