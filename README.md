@@ -112,6 +112,28 @@ agent-knowledge index --root /path/to/workspace
 
 索引只读取 `status: active` 的 Markdown 知识文件。`_inbox` 中的候选知识默认不会参与注入。
 
+## 生成知识目录
+
+刷新 `knowledge/_catalog.md` 并输出结构化 catalog：
+
+```bash
+agent-knowledge catalog --root /path/to/workspace
+```
+
+如果只想查看 JSON，不刷新 catalog 文件：
+
+```bash
+agent-knowledge catalog --root /path/to/workspace --no-write
+```
+
+TypeScript API：
+
+```ts
+import { catalogKnowledge } from "agent-knowledge";
+
+const catalog = await catalogKnowledge("/path/to/workspace", { write: true });
+```
+
 ## 查询上下文
 
 其他 agent 在开始任务前，应先查询相关知识：
@@ -123,6 +145,21 @@ agent-knowledge query \
   --domain frontend/lint \
   --scenario lint-migration
 ```
+
+`query` 只有在提供 `--domain` 或 `--scenario` 时，才会在 FTS 无命中时回退到 metadata 过滤；没有 domain/scenario 的无命中查询会返回空结果，避免整库全表 fallback。
+
+调试检索链路：
+
+```bash
+agent-knowledge query \
+  --root /path/to/workspace \
+  --task "审查 Vue SFC lint 迁移方案" \
+  --domain frontend/lint \
+  --scenario lint-migration \
+  --debug
+```
+
+`--debug` 输出 `{ "packet": ..., "debug": ... }`，其中 `debug` 包含 FTS tokens、fallback 状态、候选行数、关系扩展 ID 和最终结果 ID。
 
 输出是 `context packet`：
 
@@ -151,6 +188,14 @@ agent-knowledge query \
 - `examples`：最多选 1-2 条，作为相似案例。
 - `warnings`：作为风险提示，不要忽略冲突或过期提醒。
 - `sources`：保留给审计和追溯，不必全部塞进 prompt。
+
+查询和 catalog 会把运行摘要追加到：
+
+```text
+<workspace root>/.memory/logs/YYYY-MM-DD.jsonl
+```
+
+日志是机器调试产物，不是事实源；不要把它当作知识更新来源。
 
 ## 写入候选知识
 

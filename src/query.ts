@@ -13,6 +13,7 @@ import { resolveWorkspacePath } from "./paths.js";
 import { MemoryQueryRequestSchema } from "./schema.js";
 import type { KnowledgeDocument, MemoryQueryRequest, RankedMemory, SourceAuthority } from "./types.js";
 import { getIndexDbPath } from "./indexer.js";
+import { appendJsonlLog } from "./logging.js";
 
 const require = createRequire(import.meta.url);
 // 与 indexer 保持一致，使用 Node 内置 sqlite 读取 FTS5 索引。
@@ -30,6 +31,25 @@ type MemoryRow = {
   confidence: number;
   source_authority: SourceAuthority;
   rank_score?: number;
+};
+
+export type QueryDebugInfo = {
+  tokens: string[];
+  ftsQuery: string;
+  ftsCandidateCount: number;
+  fallbackUsed: boolean;
+  fallbackReason: "empty_fts_query" | "no_fts_matches" | null;
+  fallbackSuppressedReason: "missing_domain_or_scenario" | null;
+  candidateRowCount: number;
+  directMatchCount: number;
+  relatedCandidateIds: string[];
+  relatedMatchCount: number;
+  resultIds: string[];
+};
+
+export type QueryMemoriesDebugResult = {
+  ranked: RankedMemory[];
+  debug: QueryDebugInfo;
 };
 
 const AUTHORITY_SCORE: Record<SourceAuthority, number> = {
@@ -128,18 +148,49 @@ function scoreRow(row: MemoryRow, request: MemoryQueryRequest, relationScore: nu
   };
 }
 
+type CandidateSelection = {
+  rows: MemoryRow[];
+  debug: Omit<QueryDebugInfo, "directMatchCount" | "relatedCandidateIds" | "relatedMatchCount" | "resultIds">;
+};
+
 /**
- * 先跑 FTS；如果没有命中则回退到全表 metadata 过滤。
+ * 先跑 FTS；只有带 domain/scenario 约束时才允许回退到全表 metadata 过滤。
  *
- * 回退是为了支持用户只传 domain/scenario、不传有效关键词的情况。
+ * 这保留了“只传 domain/scenario 也能召回”的能力，同时避免无约束查询扫出整库。
  */
-function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): MemoryRow[] {
+function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): CandidateSelection {
   const db = new DatabaseSync(getIndexDbPath(rootDir), { readOnly: true });
-  const query = toFtsQuery(tokenize([request.task, ...request.domains, ...request.scenarios, ...request.paths].join(" ")));
+  const tokens = tokenize([request.task, ...request.domains, ...request.scenarios, ...request.paths].join(" "));
+  const query = toFtsQuery(tokens);
+  const canFallbackToMetadata = request.domains.length > 0 || request.scenarios.length > 0;
+  const baseDebug = {
+    tokens,
+    ftsQuery: query,
+    ftsCandidateCount: 0,
+    fallbackUsed: false,
+    fallbackReason: null,
+    fallbackSuppressedReason: null,
+    candidateRowCount: 0
+  } satisfies CandidateSelection["debug"];
 
   try {
     if (query.length === 0) {
-      return db.prepare("SELECT memories.*, 0 AS rank_score FROM memories").all() as MemoryRow[];
+      if (!canFallbackToMetadata) {
+        return {
+          rows: [],
+          debug: {
+            ...baseDebug,
+            fallbackReason: "empty_fts_query",
+            fallbackSuppressedReason: "missing_domain_or_scenario"
+          }
+        };
+      }
+
+      const rows = db.prepare("SELECT memories.*, 0 AS rank_score FROM memories").all() as MemoryRow[];
+      return {
+        rows,
+        debug: { ...baseDebug, fallbackUsed: true, fallbackReason: "empty_fts_query", candidateRowCount: rows.length }
+      };
     }
 
     const ftsRows = db
@@ -151,10 +202,37 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Memo
       .all(query) as MemoryRow[];
 
     if (ftsRows.length > 0) {
-      return ftsRows;
+      return {
+        rows: ftsRows,
+        debug: {
+          ...baseDebug,
+          ftsCandidateCount: ftsRows.length,
+          candidateRowCount: ftsRows.length
+        }
+      };
     }
 
-    return db.prepare("SELECT memories.*, 0 AS rank_score FROM memories").all() as MemoryRow[];
+    if (!canFallbackToMetadata) {
+      return {
+        rows: [],
+        debug: {
+          ...baseDebug,
+          fallbackReason: "no_fts_matches",
+          fallbackSuppressedReason: "missing_domain_or_scenario"
+        }
+      };
+    }
+
+    const rows = db.prepare("SELECT memories.*, 0 AS rank_score FROM memories").all() as MemoryRow[];
+    return {
+      rows,
+      debug: {
+        ...baseDebug,
+        fallbackUsed: true,
+        fallbackReason: "no_fts_matches",
+        candidateRowCount: rows.length
+      }
+    };
   } finally {
     db.close();
   }
@@ -183,9 +261,10 @@ function selectRowsByIds(rootDir: string, ids: string[]): MemoryRow[] {
  *
  * 调用方通常不直接使用这些结果，而是交给 `buildContextPacket` 分区组装。
  */
-export function queryMemories(rootDir: string, rawRequest: unknown): RankedMemory[] {
+export function queryMemoriesWithDebug(rootDir: string, rawRequest: unknown): QueryMemoriesDebugResult {
   const request = MemoryQueryRequestSchema.parse(rawRequest);
-  const directRows = selectCandidateRows(rootDir, request).filter((row) => rowMatchesRequest(row, request));
+  const selection = selectCandidateRows(rootDir, request);
+  const directRows = selection.rows.filter((row) => rowMatchesRequest(row, request));
   const directIds = new Set(directRows.map((row) => row.id));
   const relatedIds = new Set<string>();
 
@@ -198,17 +277,39 @@ export function queryMemories(rootDir: string, rawRequest: unknown): RankedMemor
     }
   }
 
-  const relatedRows = selectRowsByIds(rootDir, [...relatedIds]).filter(
+  const relatedCandidateIds = [...relatedIds].sort();
+  const relatedRows = selectRowsByIds(rootDir, relatedCandidateIds).filter(
     (row) =>
       row.status === "active" &&
       !directIds.has(row.id) &&
       request.includeTypes.includes(row.type as MemoryQueryRequest["includeTypes"][number])
   );
 
-  return [...directRows.map((row) => ({ row, relationScore: 0 })), ...relatedRows.map((row) => ({ row, relationScore: 1 }))]
+  const ranked = [...directRows.map((row) => ({ row, relationScore: 0 })), ...relatedRows.map((row) => ({ row, relationScore: 1 }))]
     .map(({ row, relationScore }) => ({
       document: loadDocument(rootDir, row.file_path),
       ...scoreRow(row, request, relationScore)
     }))
     .sort((a, b) => b.finalScore - a.finalScore);
+  const debug: QueryDebugInfo = {
+    ...selection.debug,
+    directMatchCount: directRows.length,
+    relatedCandidateIds,
+    relatedMatchCount: relatedRows.length,
+    resultIds: ranked.map((item) => item.document.frontmatter.id)
+  };
+
+  appendJsonlLog(rootDir, {
+    event: "query",
+    taskLength: request.task.length,
+    domains: request.domains,
+    scenarios: request.scenarios,
+    debug
+  });
+
+  return { ranked, debug };
+}
+
+export function queryMemories(rootDir: string, rawRequest: unknown): RankedMemory[] {
+  return queryMemoriesWithDebug(rootDir, rawRequest).ranked;
 }

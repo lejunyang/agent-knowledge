@@ -8,6 +8,7 @@
 
 - `knowledge/**/*.md` 是人类可读事实源。
 - `.memory/index.sqlite` 是可重建索引。
+- `.memory/logs/*.jsonl` 是可重建运行日志，只用于调试和审计摘要。
 - `agent-knowledge query` 输出主 agent 可注入的 `context packet`。
 - `agent-knowledge write-candidate` 只写候选知识到 `knowledge/_inbox/`。
 
@@ -33,6 +34,12 @@ CLI 的 workspace root 解析优先级：
 <workspace root>/.memory/index.sqlite
 ```
 
+运行日志固定在：
+
+```text
+<workspace root>/.memory/logs/YYYY-MM-DD.jsonl
+```
+
 如果需要项目级隔离知识库，必须设置 `--root` 或 `AGENT_KNOWLEDGE_ROOT`。否则多个项目会共享 `~/.agent_knowledge`。
 
 ## 常用命令
@@ -44,6 +51,7 @@ pnpm build
 npm install -g .
 npm uninstall -g agent-knowledge
 node dist/cli.js --help
+node dist/cli.js catalog --root tests/fixtures/basic-knowledge --no-write
 ```
 
 CLI smoke test：
@@ -55,6 +63,17 @@ node dist/cli.js query \
   --task "审查 Vue SFC lint 迁移方案" \
   --domain frontend/lint \
   --scenario lint-migration
+```
+
+CLI debug：
+
+```bash
+node dist/cli.js query \
+  --root tests/fixtures/basic-knowledge \
+  --task "审查 Vue SFC lint 迁移方案" \
+  --domain frontend/lint \
+  --scenario lint-migration \
+  --debug
 ```
 
 期望输出包含：
@@ -72,6 +91,8 @@ src/workspace.ts      初始化 knowledge 目录和发现知识文件
 src/indexer.ts        从 Markdown 重建 SQLite/FTS5 索引
 src/query.ts          查询、过滤、排序和一跳关联扩展
 src/contextPacket.ts  将检索结果组装成 context packet
+src/catalog.ts        生成 catalog API 和 knowledge/_catalog.md
+src/logging.ts        写入 .memory/logs JSONL 运行摘要
 src/governance.ts     候选知识治理策略和 secret-like 扫描
 src/inbox.ts          写入 knowledge/_inbox
 src/organizer.ts      主动整理 inbox 和用户直接提供的材料
@@ -86,6 +107,7 @@ src/cli.ts            命令行入口
 - 修改 schema 时同步更新 README、AGENTS 和测试夹具。
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - 修改检索排序时同步更新 eval case 或增加新的 eval case。
+- `query` 不应在缺少 domain/scenario 且 FTS 无命中时回退全表；如修改 fallback 策略，必须更新 debug 输出和测试。
 - 不要提交 `dist/`、`.memory/`、`node_modules/` 或 `.superpowers/`。
 
 ## 知识写入规则

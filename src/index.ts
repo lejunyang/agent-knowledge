@@ -15,3 +15,5 @@ export * from "./governance.js";
 export * from "./inbox.js";
 export * from "./eval.js";
 export * from "./organizer.js";
+export * from "./catalog.js";
+export * from "./logging.js";

@@ -1,10 +1,11 @@
-import { mkdtemp, cp, rm } from "node:fs/promises";
+import { mkdtemp, cp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildContextPacket } from "../src/contextPacket.js";
 import { rebuildIndex } from "../src/indexer.js";
-import { queryMemories } from "../src/query.js";
+import { queryMemories, queryMemoriesWithDebug } from "../src/query.js";
+import { getLogFilePath } from "../src/logging.js";
 import type { MemoryQueryRequest } from "../src/types.js";
 
 let tempDirs: string[] = [];
@@ -53,6 +54,48 @@ describe("queryMemories", () => {
 
     expect(ranked.map((item) => item.document.frontmatter.id)).toContain("k_20260705_frontend_lint_vue_sfc");
     expect(ranked.map((item) => item.document.frontmatter.id)).not.toContain("k_20260705_lint_validation_flow");
+  });
+
+  it("suppresses full-table fallback when domain and scenario are missing", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-no-fallback-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+
+    const { ranked, debug } = queryMemoriesWithDebug(root, {
+      task: "完全不匹配的检索词",
+      agentRole: "main",
+      paths: [],
+      maxTokens: 4500,
+      includeTypes: ["semantic", "procedural", "profile", "episodic"]
+    });
+
+    expect(ranked).toEqual([]);
+    expect(debug.fallbackUsed).toBe(false);
+    expect(debug.fallbackSuppressedReason).toBe("missing_domain_or_scenario");
+  });
+
+  it("writes JSONL query logs with debug summary", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-logs-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+
+    queryMemoriesWithDebug(root, {
+      task: "审查 Vue SFC lint 迁移方案",
+      agentRole: "main",
+      domains: ["frontend/lint"],
+      scenarios: ["lint-migration"],
+      paths: [],
+      maxTokens: 4500,
+      includeTypes: ["semantic", "procedural", "profile", "episodic"]
+    });
+
+    const logLines = (await readFile(getLogFilePath(root), "utf8")).trim().split("\n");
+    const log = JSON.parse(logLines.at(-1) ?? "{}") as { event?: string; debug?: { resultIds?: string[] } };
+
+    expect(log.event).toBe("query");
+    expect(log.debug?.resultIds).toContain("k_20260705_frontend_lint_vue_sfc");
   });
 });
 

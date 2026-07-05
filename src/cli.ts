@@ -15,11 +15,13 @@ import { Command } from "commander";
 import {
   MemoryQueryRequestSchema,
   buildContextPacket,
+  catalogKnowledge,
   captureMaterial,
   initKnowledgeWorkspace,
   listKnowledge,
   organizeInbox,
   queryMemories,
+  queryMemoriesWithDebug,
   rebuildIndex,
   writeCandidateMemory,
   type CandidateMemoryInput
@@ -89,16 +91,34 @@ program
   .option("--domain <domain...>", "domains")
   .option("--scenario <scenario...>", "scenarios")
   .option("--agent-role <role>", "agent role", "main")
-  .action((options: { task: string; root?: string; domain?: string[]; scenario?: string[]; agentRole: string }) => {
+  .option("--debug", "include retrieval debug details in JSON output", false)
+  .action((options: { task: string; root?: string; domain?: string[]; scenario?: string[]; agentRole: string; debug: boolean }) => {
     const request = MemoryQueryRequestSchema.parse({
       task: options.task,
       agentRole: options.agentRole,
       domains: options.domain ?? [],
       scenarios: options.scenario ?? []
     });
+    if (options.debug) {
+      const { ranked, debug } = queryMemoriesWithDebug(resolveCliRoot(options.root), request);
+      const packet = buildContextPacket({ request, ranked });
+      console.log(JSON.stringify({ packet, debug }, null, 2));
+      return;
+    }
+
     const ranked = queryMemories(resolveCliRoot(options.root), request);
     const packet = buildContextPacket({ request, ranked });
     console.log(JSON.stringify(packet, null, 2));
+  });
+
+program
+  .command("catalog")
+  .description("Build a knowledge catalog and optionally refresh knowledge/_catalog.md")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--no-write", "print catalog JSON without rewriting knowledge/_catalog.md")
+  .action(async (options: { root?: string; write: boolean }) => {
+    const result = await catalogKnowledge(resolveCliRoot(options.root), { write: options.write });
+    console.log(JSON.stringify(result, null, 2));
   });
 
 program

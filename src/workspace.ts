@@ -21,6 +21,17 @@ This directory is the human-readable fact source for agent memory.
 - \`_archive/\`: deprecated or rejected memories.
 `;
 
+async function writeFileIfMissing(filePath: string, content: string): Promise<void> {
+  try {
+    await writeFile(filePath, content, { encoding: "utf8", flag: "wx" });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") {
+      return;
+    }
+    throw error;
+  }
+}
+
 /**
  * 初始化知识库目录和人类可读的索引占位文件。
  *
@@ -31,10 +42,10 @@ export async function initKnowledgeWorkspace(rootDir: string): Promise<void> {
     await mkdir(resolveWorkspacePath(rootDir, dir), { recursive: true });
   }
 
-  await writeFile(resolveWorkspacePath(rootDir, "knowledge", "README.md"), README, "utf8");
-  await writeFile(resolveWorkspacePath(rootDir, "knowledge", "_catalog.md"), "# Knowledge Catalog\n", "utf8");
-  await writeFile(resolveWorkspacePath(rootDir, "knowledge", "_conflicts.md"), "# Knowledge Conflicts\n", "utf8");
-  await writeFile(resolveWorkspacePath(rootDir, "knowledge", "_review_queue.md"), "# Review Queue\n", "utf8");
+  await writeFileIfMissing(resolveWorkspacePath(rootDir, "knowledge", "README.md"), README);
+  await writeFileIfMissing(resolveWorkspacePath(rootDir, "knowledge", "_catalog.md"), "# Knowledge Catalog\n");
+  await writeFileIfMissing(resolveWorkspacePath(rootDir, "knowledge", "_conflicts.md"), "# Knowledge Conflicts\n");
+  await writeFileIfMissing(resolveWorkspacePath(rootDir, "knowledge", "_review_queue.md"), "# Review Queue\n");
 }
 
 /**
