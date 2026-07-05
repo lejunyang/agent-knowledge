@@ -19,7 +19,7 @@ CLI 的 workspace root 解析优先级：
 
 1. 命令参数 `--root <dir>`。
 2. 环境变量 `AGENT_KNOWLEDGE_ROOT`。
-3. 当前工作目录 `process.cwd()`。
+3. 默认路径 `~/.agent_knowledge`。
 
 知识库固定在：
 
@@ -33,7 +33,7 @@ CLI 的 workspace root 解析优先级：
 <workspace root>/.memory/index.sqlite
 ```
 
-如果其他 agent 不在本仓库目录执行命令，必须设置 `--root` 或 `AGENT_KNOWLEDGE_ROOT`。
+如果需要项目级隔离知识库，必须设置 `--root` 或 `AGENT_KNOWLEDGE_ROOT`。否则多个项目会共享 `~/.agent_knowledge`。
 
 ## 常用命令
 
@@ -42,6 +42,7 @@ pnpm test
 pnpm typecheck
 pnpm build
 node dist/cli.js --help
+node dist/cli.js install-global
 ```
 
 CLI smoke test：
@@ -81,7 +82,7 @@ src/cli.ts            命令行入口
 - 优先保持小文件和清晰边界，不要把多个职责合并到一个模块。
 - 新增行为必须优先加测试。
 - 修改 schema 时同步更新 README、AGENTS 和测试夹具。
-- 修改 CLI root 行为时同步更新 README 的“默认位置”章节。
+- 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - 修改检索排序时同步更新 eval case 或增加新的 eval case。
 - 不要提交 `dist/`、`.memory/`、`node_modules/` 或 `.superpowers/`。
 
@@ -124,7 +125,10 @@ agent-knowledge write-candidate \
   --input candidate.json
 ```
 
-将 `agents/memory-writer.subagent.md` 安装为 writer subagent，将 `hooks/*.md` 改写成目标 agent 平台支持的 hook 配置。
+将 `templates/trae/agents/memory-writer.md` 复制到目标项目的 `.trae/agents/memory-writer.md`。
+将 `templates/trae/hooks.json` 复制到目标项目的 `.trae/hooks.json`。
+
+这些模板是官方格式，仓库内不直接放 `.trae/`，避免把模板误认为当前项目已安装配置。
 
 ## 注释约定
 

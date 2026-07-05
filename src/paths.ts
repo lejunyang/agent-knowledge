@@ -4,6 +4,7 @@
  * 其他模块不应自己拼接未校验的绝对路径。这样可以避免 hook 或外部 agent
  * 传入 `../` 造成越界读写。
  */
+import { homedir } from "node:os";
 import path from "node:path";
 
 export const KNOWLEDGE_DIRS = [
@@ -15,6 +16,16 @@ export const KNOWLEDGE_DIRS = [
   "knowledge/procedural",
   "knowledge/sources"
 ] as const;
+
+/**
+ * CLI 默认知识库 workspace。
+ *
+ * 默认放在用户 Home 下，而不是当前项目目录。这样多个项目、多个 agent 可以共享同一套
+ * 个人长期知识；需要项目隔离时再通过 `--root` 或 `AGENT_KNOWLEDGE_ROOT` 覆盖。
+ */
+export function getDefaultKnowledgeRoot(): string {
+  return path.join(homedir(), ".agent_knowledge");
+}
 
 /**
  * 安全地解析 workspace 内路径。

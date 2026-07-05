@@ -11,7 +11,7 @@ Agent Knowledge 是一个本地知识持久化工具包，用来让多个 agent 
 
 ## 默认位置
 
-默认情况下，CLI 把当前工作目录当作 workspace root：
+默认情况下，CLI 把用户 Home 下的 `~/.agent_knowledge` 当作 workspace root：
 
 ```bash
 agent-knowledge query --task "审查 lint 迁移方案"
@@ -20,13 +20,13 @@ agent-knowledge query --task "审查 lint 迁移方案"
 这时默认知识库位置是：
 
 ```text
-<当前工作目录>/knowledge/
+~/.agent_knowledge/knowledge/
 ```
 
 默认索引位置是：
 
 ```text
-<当前工作目录>/.memory/index.sqlite
+~/.agent_knowledge/.memory/index.sqlite
 ```
 
 可以用两种方式指定位置：
@@ -40,7 +40,7 @@ export AGENT_KNOWLEDGE_ROOT=/path/to/workspace
 agent-knowledge query --task "审查 lint 迁移方案"
 ```
 
-`--root` 优先级高于 `AGENT_KNOWLEDGE_ROOT`。如果两者都没有提供，则使用命令执行时的当前目录。
+`--root` 优先级高于 `AGENT_KNOWLEDGE_ROOT`。如果两者都没有提供，则使用 `~/.agent_knowledge`。
 
 ## 安装与构建
 
@@ -59,6 +59,18 @@ pnpm dev -- --help
 
 ```bash
 node dist/cli.js --help
+```
+
+如果要把当前目录的本地包安装成全局命令，运行：
+
+```bash
+node dist/cli.js install-global
+```
+
+该命令会在当前 package 目录执行 `npm run build`，然后执行 `npm install -g <当前目录>`。安装后可以直接使用：
+
+```bash
+agent-knowledge --help
 ```
 
 ## 初始化知识库
@@ -168,21 +180,30 @@ agent-knowledge write-candidate --root /path/to/workspace --input candidate.json
 
 ## 给其他 agents 使用
 
-推荐安装以下文件到对应 agent：
+推荐安装 `templates/trae/` 下的 TRAE 官方格式模板：
 
-- `agents/memory-writer.subagent.md`：用于把事件摘要转成候选知识 JSON。
-- `hooks/pre-task-query.md`：任务开始前查询知识并生成注入上下文。
-- `hooks/session-end-memory.md`：会话结束后提取候选知识。
-- `hooks/task-success-memory.md`：任务成功后沉淀流程和项目约定。
-- `hooks/task-failure-recovered-memory.md`：失败后修复成功时沉淀排障经验。
-- `hooks/explicit-remember.md`：用户明确说“记住”时沉淀高权威候选。
+- `templates/trae/agents/memory-writer.md`：项目级 Subagent 模板，使用官方 YAML frontmatter。
+- `templates/trae/hooks.json`：项目级 Hook 模板，使用官方 `version: 1` / `hooks` 配置格式。
+
+安装到真实 TRAE 项目时，复制为：
+
+```text
+<project>/.trae/agents/memory-writer.md
+<project>/.trae/hooks.json
+```
+
+用户级安装时，复制为：
+
+```text
+~/.trae-cn/agents/memory-writer.md
+~/.trae-cn/hooks.json
+```
 
 通用接入顺序：
 
 1. 任务开始：运行 `agent-knowledge index`。
 2. 任务开始：运行 `agent-knowledge query`，把 `context packet` 注入主 agent。
-3. 任务结束：由 hooks 生成事件摘要。
-4. 需要沉淀：调用 memory-writer subagent 生成 candidate JSON。
+3. 需要沉淀：调用 `memory-writer` Subagent 生成 candidate JSON。
 5. 写入候选：运行 `agent-knowledge write-candidate`。
 6. 人类审阅：把 `_inbox` 中的候选移动到正式目录并改为 `status: active`。
 7. 审阅后：再次运行 `agent-knowledge index`。

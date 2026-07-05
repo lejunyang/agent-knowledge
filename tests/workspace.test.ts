@@ -1,9 +1,9 @@
 import { mkdtemp, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { discoverKnowledgeFiles, initKnowledgeWorkspace } from "../src/workspace.js";
-import { resolveWorkspacePath } from "../src/paths.js";
+import { getDefaultKnowledgeRoot, resolveWorkspacePath } from "../src/paths.js";
 
 let tempDirs: string[] = [];
 
@@ -45,5 +45,11 @@ describe("resolveWorkspacePath", () => {
     expect(() => resolveWorkspacePath(root, "..", "agent-knowledge-root-sibling", "file.md")).toThrow(
       "Refusing to access path outside workspace"
     );
+  });
+});
+
+describe("getDefaultKnowledgeRoot", () => {
+  it("uses ~/.agent_knowledge as the default workspace root", () => {
+    expect(getDefaultKnowledgeRoot()).toBe(path.join(homedir(), ".agent_knowledge"));
   });
 });
