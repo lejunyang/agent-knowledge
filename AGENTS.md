@@ -119,7 +119,7 @@ src/cli.ts            命令行入口
 
 - 优先保持小文件和清晰边界，不要把多个职责合并到一个模块。
 - 新增行为必须优先加测试。
-- 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。
+- 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。`related_knowledge` 可用于候选输入和直接材料捕获，只有能指向明确已有或同批可生成的知识 ID 时才填写。
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - 修改检索排序时同步更新 eval case 或增加新的 eval case。
 - 测试不得依赖网络或远程模型；embedding 相关测试必须使用 `DeterministicLocalEmbeddingProvider` 或 CLI `--provider local`。

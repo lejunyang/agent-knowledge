@@ -5,7 +5,7 @@
  * - 拒绝 secret-like 内容。
  * - 根据来源权威性和知识类型决定默认状态。
  */
-import type { MemoryStatus, MemoryType, SourceAuthority } from "./types.js";
+import type { MemoryStatus, MemoryType, RelatedKnowledge, SourceAuthority } from "./types.js";
 
 export type CandidateMemoryInput = {
   title: string;
@@ -19,6 +19,7 @@ export type CandidateMemoryInput = {
   source_authority: SourceAuthority;
   summary: string;
   evidence: string[];
+  related_knowledge?: RelatedKnowledge[];
 };
 
 export type GovernanceDecision = {

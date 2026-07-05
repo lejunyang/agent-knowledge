@@ -136,4 +136,48 @@ describe("captureMaterial", () => {
 
     expect(ranked.map((item) => item.document.frontmatter.title)).toContain("直接材料整理规则");
   });
+
+  it("preserves aliases and related knowledge when capturing active material", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-capture-relations-"));
+    tempDirs.push(root);
+
+    const result = await captureMaterial(
+      root,
+      [
+        {
+          title: "业务账户关系",
+          aliases: ["account relation", "账户关联"],
+          memory_type: "semantic",
+          domain: "company/business/account-system",
+          related_domains: ["commercialization/account"],
+          scenario: ["business-knowledge"],
+          tags: ["company-business"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "账户之间可能存在授权、绑定、层级等关系。",
+          evidence: ["user:direct-material"],
+          related_knowledge: [
+            {
+              id: "k_20260705_company_business_account_system_account_model",
+              relation: "often_used_with",
+              reason: "账户关系需要结合账户模型理解。"
+            }
+          ]
+        }
+      ],
+      { target: "active", rebuild: false }
+    );
+
+    const content = await readFile(result.written[0]!.filePath, "utf8");
+    const document = parseKnowledgeMarkdown("captured.md", content);
+
+    expect(document.frontmatter.aliases).toContain("account relation");
+    expect(document.frontmatter.related_knowledge).toEqual([
+      {
+        id: "k_20260705_company_business_account_system_account_model",
+        relation: "often_used_with",
+        reason: "账户关系需要结合账户模型理解。"
+      }
+    ]);
+  });
 });

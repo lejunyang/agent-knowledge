@@ -44,7 +44,14 @@ tools: ""
   "confidence": 0.72,
   "source_authority": "model_inferred",
   "summary": "迁移 lint 配置后应按 Oxlint -> ESLint fallback -> Oxfmt 顺序验证。",
-  "evidence": ["conversation:current-session"]
+  "evidence": ["conversation:current-session"],
+  "related_knowledge": [
+    {
+      "id": "k_20260705_frontend_lint_vue_sfc",
+      "relation": "often_used_with",
+      "reason": "Vue SFC lint 迁移经常需要结合 fallback 验证流程。"
+    }
+  ]
 }
 ```
 
@@ -81,6 +88,21 @@ tools: ""
 不要把事实判断写进 `aliases`。如果没有明确别名，输出空数组。
 
 后续主 Agent 或人工可以运行 `agent-knowledge embed-index` 与 `agent-knowledge suggest-aliases` 获取 dry-run 别名建议；这些建议仍需人类审阅后再写回 Markdown。
+
+## related_knowledge 规则
+
+`related_knowledge` 用于表达精确知识关系，只有在能指出已有知识 ID 且关系可解释时才填写。
+
+可用关系：
+
+- `depends_on`：当前知识依赖另一条知识。
+- `refines`：当前知识细化另一条知识。
+- `supports`：当前知识支持另一条知识。
+- `often_used_with`：两条知识常一起使用。
+- `supersedes`：当前知识替代另一条知识。
+- `conflicts_with`：当前知识与另一条知识冲突。
+
+如果不知道已有知识 ID，输出空数组，不要编造。
 
 ## 来源权威性
 

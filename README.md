@@ -340,7 +340,14 @@ agent-knowledge feedback \
   "confidence": 0.72,
   "source_authority": "model_inferred",
   "summary": "迁移 lint 配置后应按 Oxlint -> ESLint fallback -> Oxfmt 顺序验证。",
-  "evidence": ["conversation:current-session"]
+  "evidence": ["conversation:current-session"],
+  "related_knowledge": [
+    {
+      "id": "k_20260705_frontend_lint_vue_sfc",
+      "relation": "often_used_with",
+      "reason": "Vue SFC lint 迁移经常需要结合 fallback 验证流程。"
+    }
+  ]
 }
 ```
 
