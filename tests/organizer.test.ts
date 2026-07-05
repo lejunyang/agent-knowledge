@@ -61,7 +61,7 @@ describe("organizeInbox", () => {
 
     expect(dryRun.applied).toBe(false);
     expect(dryRun.moved[0]?.from).toContain("knowledge/_inbox/");
-    expect(dryRun.moved[0]?.to).toContain("knowledge/semantic/business-glossary/");
+    expect(dryRun.moved[0]?.to).toContain("knowledge/semantic/business/glossary/");
     await expect(readFile(result.written[0]!.filePath, "utf8")).resolves.toContain("用户主动提供的业务术语");
   });
 
@@ -125,6 +125,7 @@ describe("captureMaterial", () => {
 
     expect(result.target).toBe("active");
     expect(result.written[0]?.status).toBe("active");
+    expect(result.written[0]?.filePath).toContain("knowledge/semantic/knowledge/organization/");
     expect(result.indexed).toBe(1);
 
     const ranked = queryMemories(root, {

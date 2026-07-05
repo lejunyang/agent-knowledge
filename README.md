@@ -364,6 +364,12 @@ agent-knowledge write-candidate --root /path/to/workspace --input candidate.json
 - 生成合法 Markdown。
 - 写入 `knowledge/_inbox/`。
 
+直接材料写入 active 或 `_inbox` 晋升 active 时，`domain` 会映射为分层目录。例如 `bytedance/business/account` 会写入：
+
+```text
+knowledge/semantic/bytedance/business/account/
+```
+
 ## 给其他 agents 使用
 
 推荐安装 `templates/trae/` 下的 TRAE 官方格式模板：

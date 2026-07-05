@@ -93,7 +93,10 @@ function idFromInput(input: CandidateMemoryInput): string {
 }
 
 function domainDirectory(domain: string): string {
-  return slugify(domain.replaceAll("/", "-"));
+  return domain
+    .split("/")
+    .map((segment) => slugify(segment))
+    .join("/");
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
