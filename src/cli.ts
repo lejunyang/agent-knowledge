@@ -37,6 +37,7 @@ import {
   type CandidateMemoryInput
 } from "./index.js";
 import { getDefaultKnowledgeRoot } from "./paths.js";
+import { getGitRuntimeContext, type GitRuntimeContext } from "./gitContext.js";
 
 const program = new Command();
 
@@ -89,6 +90,10 @@ function hookContext(hookEventName: "SessionStart" | "UserPromptSubmit", additio
       2
     )
   );
+}
+
+function formatRuntimeContext(context: GitRuntimeContext): string {
+  return JSON.stringify(context, null, 2);
 }
 
 function compactCatalogForHook(catalog: Awaited<ReturnType<typeof catalogKnowledge>>): Record<string, unknown> {
@@ -363,17 +368,36 @@ hook
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
   .action(async (options: { root?: string }) => {
     const root = resolveCliRoot(options.root);
+    const runtimeContext = getGitRuntimeContext();
     await initKnowledgeWorkspace(root);
     if (process.env.TRAE_ENV_FILE) {
       await appendFile(process.env.TRAE_ENV_FILE, `AGENT_KNOWLEDGE_ROOT="${root}"\n`, "utf8");
     }
     appendJsonlLog(root, {
       event: "hook.session_start",
-      root
+      root,
+      runtimeContext
     });
     hookContext(
       "SessionStart",
-      `Agent Knowledge 已启用。默认知识库 workspace root：${root}。知识文件位于 ${root}/knowledge，索引位于 ${root}/.memory/index.sqlite。`
+      `Agent Knowledge 已启用。默认知识库 workspace root：${root}。知识文件位于 ${root}/knowledge，索引位于 ${root}/.memory/index.sqlite。\n\nHook runtime context:\n\n${formatRuntimeContext(runtimeContext)}`
+    );
+  });
+
+hook
+  .command("doctor")
+  .description("Print hook runtime diagnostics such as cwd, git root, and git origin")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .action((options: { root?: string }) => {
+    console.log(
+      JSON.stringify(
+        {
+          knowledgeRoot: resolveCliRoot(options.root),
+          runtimeContext: getGitRuntimeContext()
+        },
+        null,
+        2
+      )
     );
   });
 
@@ -383,6 +407,7 @@ hook
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
   .action(async (options: { root?: string }) => {
     const root = resolveCliRoot(options.root);
+    const runtimeContext = getGitRuntimeContext();
     const input = await readHookInput();
     const prompt = typeof input.prompt === "string" ? input.prompt : "";
     if (prompt.trim().length === 0) {
@@ -414,14 +439,15 @@ hook
         catalogTotal: catalog.total,
         resultIds: debug.resultIds,
         fallbackUsed: debug.fallbackUsed,
-        fallbackSuppressedReason: debug.fallbackSuppressedReason
+        fallbackSuppressedReason: debug.fallbackSuppressedReason,
+        runtimeContext
       });
 
       hookContext(
         "UserPromptSubmit",
         hasContext
-          ? `Agent Knowledge catalog:\n\n${JSON.stringify(compactCatalogForHook(catalog), null, 2)}\n\nAgent Knowledge context packet:\n\n${JSON.stringify(packet, null, 2)}`
-          : `Agent Knowledge catalog:\n\n${JSON.stringify(compactCatalogForHook(catalog), null, 2)}\n\nAgent Knowledge 已查询 ${root}，没有命中可注入的 active 知识。可根据 catalog 中的 domains/scenarios 重新选择更精确的查询条件。`
+          ? `Hook runtime context:\n\n${formatRuntimeContext(runtimeContext)}\n\nAgent Knowledge catalog:\n\n${JSON.stringify(compactCatalogForHook(catalog), null, 2)}\n\nAgent Knowledge context packet:\n\n${JSON.stringify(packet, null, 2)}`
+          : `Hook runtime context:\n\n${formatRuntimeContext(runtimeContext)}\n\nAgent Knowledge catalog:\n\n${JSON.stringify(compactCatalogForHook(catalog), null, 2)}\n\nAgent Knowledge 已查询 ${root}，没有命中可注入的 active 知识。可根据 catalog 中的 domains/scenarios 重新选择更精确的查询条件。`
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

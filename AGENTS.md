@@ -185,6 +185,8 @@ agent-knowledge query \
 
 Hook 模板不默认运行本地模型，避免会话启动或提交 prompt 时加载模型导致延迟和权限问题。
 
+Hook 命令会探测 runtime context：`process.cwd()`、是否处于 Git 工作树、Git root 和 `remote.origin.url`。可用 `agent-knowledge hook doctor` 在当前环境中确认 TRAE 实际执行 hook 的目录。
+
 别名建议只看 dry-run JSON，不会修改 Markdown：
 
 ```bash

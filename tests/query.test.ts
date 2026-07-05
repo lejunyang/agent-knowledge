@@ -145,6 +145,61 @@ describe("queryMemories", () => {
     expect(ranked.map((item) => item.document.frontmatter.title)).not.toContain("商业化账户状态");
   });
 
+  it("keeps direct glossary hits ahead of one-hop related memories", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-glossary-ranking-"));
+    tempDirs.push(root);
+    await captureMaterial(
+      root,
+      [
+        {
+          title: "字节业务术语：ocean",
+          memory_type: "semantic",
+          domain: "bytedance/business/glossary",
+          related_domains: ["bytedance/business/ocean-account"],
+          scenario: ["business-knowledge", "glossary", "terminology"],
+          tags: ["glossary", "ocean"],
+          aliases: ["ocean", "巨量"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "ocean 在商业化语境中对应巨量。",
+          evidence: ["test"],
+          related_knowledge: [
+            {
+              id: "k_20260705_bytedance_business_ocean_account_account_model",
+              relation: "supports",
+              reason: "ocean 释义支撑商业化账户体系。"
+            }
+          ]
+        },
+        {
+          title: "account model",
+          memory_type: "semantic",
+          domain: "bytedance/business/ocean-account",
+          related_domains: [],
+          scenario: ["business-knowledge"],
+          tags: ["ocean", "account"],
+          confidence: 0.95,
+          source_authority: "user_confirmed",
+          summary: "商业化账户体系包含客户、用户、账户。",
+          evidence: ["test"]
+        }
+      ],
+      { target: "active", rebuild: true }
+    );
+
+    const ranked = queryMemories(root, {
+      task: "ocean 巨量 是什么意思",
+      agentRole: "main",
+      domains: ["bytedance/business/glossary"],
+      scenarios: ["terminology"],
+      paths: [],
+      maxTokens: 4500,
+      includeTypes: ["semantic", "procedural", "profile", "episodic"]
+    });
+
+    expect(ranked[0]?.document.frontmatter.title).toBe("字节业务术语：ocean");
+  });
+
   it("suppresses full-table fallback when domain and scenario are missing", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-no-fallback-"));
     tempDirs.push(root);

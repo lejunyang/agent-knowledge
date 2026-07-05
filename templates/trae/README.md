@@ -36,6 +36,19 @@ templates/trae/hooks.json -> ~/.trae-cn/hooks.json
 - `SessionStart`：执行 `agent-knowledge hook session-start`，初始化 `AGENT_KNOWLEDGE_ROOT`，并向当前会话补充知识库路径说明。
 - `UserPromptSubmit`：执行 `agent-knowledge hook user-prompt-submit`，在主 Agent 处理用户请求前注入 catalog 简表和 context packet。
 
+Hook 输出会包含 runtime context：
+
+- `cwd`：TRAE 触发 hook 时命令实际运行目录。
+- `isGit`：该目录是否位于 Git 工作树。
+- `gitRoot`：可探测到时输出 Git 根目录。
+- `gitOrigin`：可探测到时输出 `remote.origin.url`。
+
+如果需要确认 TRAE 当前环境到底把 hook 放在哪个目录执行，可以运行：
+
+```bash
+agent-knowledge hook doctor
+```
+
 `UserPromptSubmit` 注入的 catalog 简表包含：
 
 - 当前知识总数。

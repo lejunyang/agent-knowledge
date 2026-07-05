@@ -367,7 +367,7 @@ agent-knowledge write-candidate --root /path/to/workspace --input candidate.json
 直接材料写入 active 或 `_inbox` 晋升 active 时，`domain` 会映射为分层目录。例如 `bytedance/business/account` 会写入：
 
 ```text
-knowledge/semantic/bytedance/business/account/
+knowledge/semantic/bytedance/business/ocean-account/
 ```
 
 ## 给其他 agents 使用
@@ -413,6 +413,14 @@ agent-knowledge link-trae-templates --target-dir /path/to/.trae-cn
 <project>/.trae/agents/memory-writer.md
 <project>/.trae/hooks.json
 ```
+
+Hook 输出会包含 runtime context，便于确认 TRAE 实际执行目录和项目 Git 信息：
+
+```bash
+agent-knowledge hook doctor
+```
+
+该命令会输出 `cwd`、`isGit`、`gitRoot`、`gitOrigin` 和当前知识库 root。`SessionStart` 与 `UserPromptSubmit` 也会把同一份 runtime context 注入 hook 输出，方便主 Agent 判断当前项目环境。
 
 通用接入顺序：
 

@@ -276,6 +276,11 @@ function rowMatchesRequest(row: MemoryRow, request: MemoryQueryRequest): boolean
   return row.status === "active" && domainOk && scenarioOk && typeOk;
 }
 
+function hasExactAliasInTask(aliases: string[], task: string): boolean {
+  const normalizedTask = task.toLowerCase();
+  return aliases.some((alias) => alias.trim().length > 0 && normalizedTask.includes(alias.toLowerCase()));
+}
+
 /**
  * 生成默认重排器所需的分项特征。
  *
@@ -291,8 +296,12 @@ function scoreRow(
   reranker: MemoryReranker
 ): Omit<RankedMemory, "document"> {
   const scenarios = parseJsonArray(row.scenario);
+  const aliases = parseJsonArray(row.aliases);
   const scenarioScore = request.scenarios.length > 0 && fuzzyIntersects(scenarios, request.scenarios) ? 1 : 0.3;
-  const lexicalScore = Math.max(0, Math.min(1, 1 - Math.abs(row.rank_score ?? 0) / 20));
+  const lexicalScore = Math.max(
+    hasExactAliasInTask(aliases, request.task) ? 1 : 0,
+    Math.max(0, Math.min(1, 1 - Math.abs(row.rank_score ?? 0) / 20))
+  );
   const confidenceScore = row.confidence;
   const sourceAuthorityScore = AUTHORITY_SCORE[row.source_authority] ?? 0.4;
   const embeddingScore = Math.max(0, Math.min(1, embeddingScorer.score({ request, document })));
@@ -503,7 +512,10 @@ function rankSelectedRows(
         ...scoreRow(row, document, expandedRequest, relationScore, embeddingScorer, reranker)
       };
     })
-    .sort((a, b) => b.finalScore - a.finalScore);
+    .sort((a, b) => {
+      const directDelta = Number(a.relationScore > 0) - Number(b.relationScore > 0);
+      return directDelta || b.finalScore - a.finalScore;
+    });
   const debug: QueryDebugInfo = {
     ...selection.debug,
     queryRunId,
