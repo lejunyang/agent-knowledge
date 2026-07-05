@@ -1,0 +1,139 @@
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { parseKnowledgeMarkdown } from "../src/markdown.js";
+import { captureMaterial, listKnowledge, organizeInbox } from "../src/organizer.js";
+import { queryMemories } from "../src/query.js";
+
+let tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+  tempDirs = [];
+});
+
+describe("listKnowledge", () => {
+  it("summarizes active knowledge and inbox items", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-list-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+
+    const summary = await listKnowledge(root);
+
+    expect(summary.total).toBe(2);
+    expect(summary.byStatus.active).toBe(2);
+    expect(summary.byType.semantic).toBe(1);
+    expect(summary.byType.procedural).toBe(1);
+  });
+});
+
+describe("organizeInbox", () => {
+  it("dry-runs inbox promotion without moving files", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-organize-dry-"));
+    tempDirs.push(root);
+    await writeFile(
+      path.join(root, "placeholder"),
+      "placeholder",
+      "utf8"
+    );
+
+    const result = await captureMaterial(
+      root,
+      [
+        {
+          title: "用户主动提供的业务术语",
+          memory_type: "semantic",
+          domain: "business/glossary",
+          related_domains: [],
+          scenario: ["knowledge-organization"],
+          tags: ["glossary"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "用户主动提供的材料默认置信度较高，但仍需要结构化归档。",
+          evidence: ["user:direct-material"]
+        }
+      ],
+      { target: "inbox", rebuild: false }
+    );
+
+    const dryRun = await organizeInbox(root, { apply: false, rebuild: false });
+
+    expect(dryRun.applied).toBe(false);
+    expect(dryRun.moved[0]?.from).toContain("knowledge/_inbox/");
+    expect(dryRun.moved[0]?.to).toContain("knowledge/semantic/business-glossary/");
+    await expect(readFile(result.written[0]!.filePath, "utf8")).resolves.toContain("用户主动提供的业务术语");
+  });
+
+  it("applies inbox promotion and activates the target document", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-organize-apply-"));
+    tempDirs.push(root);
+
+    await captureMaterial(
+      root,
+      [
+        {
+          title: "主动整理材料归档规则",
+          memory_type: "procedural",
+          domain: "knowledge/organization",
+          related_domains: [],
+          scenario: ["knowledge-organization"],
+          tags: ["organize"],
+          confidence: 0.92,
+          source_authority: "user_confirmed",
+          summary: "用户直接提供的材料可以由 Skill 拆分后直接归档为 active 知识。",
+          evidence: ["user:direct-material"]
+        }
+      ],
+      { target: "inbox", rebuild: false }
+    );
+
+    const result = await organizeInbox(root, { apply: true, rebuild: true });
+    const promoted = result.moved[0]!;
+    const content = await readFile(path.join(root, promoted.to), "utf8");
+    const document = parseKnowledgeMarkdown(promoted.to, content);
+
+    expect(result.applied).toBe(true);
+    expect(document.frontmatter.status).toBe("active");
+    expect(result.indexed).toBe(1);
+  });
+});
+
+describe("captureMaterial", () => {
+  it("writes user-provided structured material directly to active knowledge and indexes it", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-capture-"));
+    tempDirs.push(root);
+
+    const result = await captureMaterial(
+      root,
+      [
+        {
+          title: "直接材料整理规则",
+          memory_type: "semantic",
+          domain: "knowledge/organization",
+          related_domains: ["agent/memory"],
+          scenario: ["knowledge-organization"],
+          tags: ["direct-material"],
+          confidence: 0.93,
+          source_authority: "user_confirmed",
+          summary: "用户直接提供的材料置信度较高，Skill 负责理解拆分，CLI 负责校验、落盘和索引。",
+          evidence: ["user:direct-material"]
+        }
+      ],
+      { target: "active", rebuild: true }
+    );
+
+    expect(result.target).toBe("active");
+    expect(result.written[0]?.status).toBe("active");
+    expect(result.indexed).toBe(1);
+
+    const ranked = queryMemories(root, {
+      task: "如何整理用户直接提供的知识材料",
+      agentRole: "main",
+      domains: ["knowledge/organization"],
+      scenarios: ["knowledge-organization"]
+    });
+
+    expect(ranked.map((item) => item.document.frontmatter.title)).toContain("直接材料整理规则");
+  });
+});

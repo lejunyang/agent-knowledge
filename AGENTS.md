@@ -74,6 +74,7 @@ src/query.ts          查询、过滤、排序和一跳关联扩展
 src/contextPacket.ts  将检索结果组装成 context packet
 src/governance.ts     候选知识治理策略和 secret-like 扫描
 src/inbox.ts          写入 knowledge/_inbox
+src/organizer.ts      主动整理 inbox 和用户直接提供的材料
 src/eval.ts           检索评估 harness
 src/cli.ts            命令行入口
 ```
@@ -96,6 +97,13 @@ src/cli.ts            命令行入口
 3. 写入 `knowledge/_inbox/`。
 4. 人类审阅后再移动到正式目录并改成 `status: active`。
 5. 运行 `agent-knowledge index`。
+
+主动整理流程：
+
+1. `agent-knowledge list` 查看知识库状态。
+2. `agent-knowledge organize-inbox` 预览 `_inbox` 归档。
+3. `agent-knowledge organize-inbox --apply` 应用移动、激活并重建索引。
+4. 用户直接提供材料时，由 `.trae/skills/knowledge-organizer/SKILL.md` 拆分成 JSON，再运行 `agent-knowledge capture-material --input material.json --target active`。
 
 禁止保存：
 
@@ -128,6 +136,7 @@ agent-knowledge write-candidate \
 
 将 `templates/trae/agents/memory-writer.md` 复制到目标项目的 `.trae/agents/memory-writer.md`。
 将 `templates/trae/hooks.json` 复制到目标项目的 `.trae/hooks.json`。
+`knowledge-organizer` Skill 已放在 `.trae/skills/knowledge-organizer/SKILL.md`，用于用户主动要求整理知识库或整理输入材料时触发。
 
 这些模板是官方格式，仓库内不直接放 `.trae/`，避免把模板误认为当前项目已安装配置。
 

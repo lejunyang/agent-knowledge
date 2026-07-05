@@ -3,7 +3,7 @@
  * CLI 入口是其他 agent 最常接触的集成面。
  *
  * 设计意图：
- * - 对人类保持简单命令：init / index / query / write-candidate / install-global。
+ * - 对人类保持简单命令：init / index / query / write-candidate / list / organize-inbox / capture-material。
  * - 对 agent 保持稳定 JSON 输出，便于脚本解析和上下文注入。
  * - root 解析支持 `--root`、`AGENT_KNOWLEDGE_ROOT`、`~/.agent_knowledge` 三层 fallback，
  *   这样不同项目的 hooks 可以共享同一套默认知识库。
@@ -15,7 +15,10 @@ import { Command } from "commander";
 import {
   MemoryQueryRequestSchema,
   buildContextPacket,
+  captureMaterial,
   initKnowledgeWorkspace,
+  listKnowledge,
+  organizeInbox,
   queryMemories,
   rebuildIndex,
   writeCandidateMemory,
@@ -105,6 +108,49 @@ program
   .action(async (options: { input: string; root?: string }) => {
     const input = JSON.parse(await readFile(options.input, "utf8")) as CandidateMemoryInput;
     const result = await writeCandidateMemory(resolveCliRoot(options.root), input);
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+program
+  .command("list")
+  .description("Summarize knowledge files, statuses, domains, and inbox items")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .action(async (options: { root?: string }) => {
+    const result = await listKnowledge(resolveCliRoot(options.root));
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+program
+  .command("organize-inbox")
+  .description("Plan or apply promotion of knowledge/_inbox Markdown files into typed active directories")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--apply", "move files and activate them; defaults to dry-run", false)
+  .option("--no-rebuild", "skip index rebuild after applying changes")
+  .action(async (options: { root?: string; apply: boolean; rebuild: boolean }) => {
+    const result = await organizeInbox(resolveCliRoot(options.root), {
+      apply: options.apply,
+      rebuild: options.rebuild
+    });
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+program
+  .command("capture-material")
+  .description("Write user-provided, skill-structured material into active knowledge or inbox")
+  .requiredOption("--input <file>", "JSON file containing one candidate object or an array of candidates")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--target <target>", "active or inbox", "active")
+  .option("--no-rebuild", "skip index rebuild after writing material")
+  .action(async (options: { input: string; root?: string; target: string; rebuild: boolean }) => {
+    if (options.target !== "active" && options.target !== "inbox") {
+      throw new Error("--target must be either active or inbox");
+    }
+    const rawInput = JSON.parse(await readFile(options.input, "utf8")) as CandidateMemoryInput | CandidateMemoryInput[];
+    const inputs = Array.isArray(rawInput) ? rawInput : [rawInput];
+    const result = await captureMaterial(resolveCliRoot(options.root), inputs, {
+      target: options.target,
+      rebuild: options.rebuild
+    });
     console.log(JSON.stringify(result, null, 2));
   });
 

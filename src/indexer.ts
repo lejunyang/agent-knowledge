@@ -57,7 +57,7 @@ function discoverKnowledgeFilesSync(rootDir: string): string[] {
       }
 
       const relativePath = toPosixPath(path.relative(rootDir, absolutePath));
-      if (!GENERATED_KNOWLEDGE_FILES.has(relativePath)) {
+      if (!GENERATED_KNOWLEDGE_FILES.has(relativePath) && !relativePath.startsWith("knowledge/_archive/")) {
         files.push(relativePath);
       }
     }

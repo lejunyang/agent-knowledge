@@ -210,9 +210,51 @@ agent-knowledge write-candidate --root /path/to/workspace --input candidate.json
 1. 任务开始：运行 `agent-knowledge index`。
 2. 任务开始：运行 `agent-knowledge query`，把 `context packet` 注入主 agent。
 3. 需要沉淀：调用 `memory-writer` Subagent 生成 candidate JSON。
-5. 写入候选：运行 `agent-knowledge write-candidate`。
-6. 人类审阅：把 `_inbox` 中的候选移动到正式目录并改为 `status: active`。
-7. 审阅后：再次运行 `agent-knowledge index`。
+4. 写入候选：运行 `agent-knowledge write-candidate`。
+5. 人类审阅：把 `_inbox` 中的候选移动到正式目录并改为 `status: active`。
+6. 审阅后：再次运行 `agent-knowledge index`。
+
+## 主动整理知识
+
+除了通过会话 hook 被动触发，Agent Knowledge 也支持主动整理。
+
+查看当前知识库状态：
+
+```bash
+agent-knowledge list
+```
+
+整理 `_inbox` 候选知识，先查看 dry-run：
+
+```bash
+agent-knowledge organize-inbox
+```
+
+确认后应用移动、激活并重建索引：
+
+```bash
+agent-knowledge organize-inbox --apply
+```
+
+整理用户直接提供的材料时，先由 `knowledge-organizer` Skill 把材料拆成一个或多个 JSON 对象，再写入知识库：
+
+```bash
+agent-knowledge capture-material --input material.json --target active
+```
+
+如果希望先进入审阅队列：
+
+```bash
+agent-knowledge capture-material --input material.json --target inbox
+```
+
+用户直接提供的材料默认可以使用 `source_authority: "user_confirmed"` 和较高 `confidence`。CLI 仍会做 schema 校验和 secret-like 扫描。
+
+Skill 文件位于：
+
+```text
+.trae/skills/knowledge-organizer/SKILL.md
+```
 
 ## 常用命令
 

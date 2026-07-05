@@ -14,3 +14,4 @@ export * from "./contextPacket.js";
 export * from "./governance.js";
 export * from "./inbox.js";
 export * from "./eval.js";
+export * from "./organizer.js";
