@@ -21,20 +21,25 @@ describe("linkTraeTemplates", () => {
       targetDir
     });
 
-    const agentTarget = path.join(targetDir, "agents", "memory-writer.md");
+    const readerTarget = path.join(targetDir, "agents", "memory-reader.md");
+    const writerTarget = path.join(targetDir, "agents", "memory-writer.md");
     const hooksTarget = path.join(targetDir, "hooks.json");
     const skillTarget = path.join(targetDir, "skills", "knowledge-organizer");
 
-    expect((await lstat(agentTarget)).isSymbolicLink()).toBe(true);
+    expect((await lstat(readerTarget)).isSymbolicLink()).toBe(true);
+    expect((await lstat(writerTarget)).isSymbolicLink()).toBe(true);
     expect((await lstat(hooksTarget)).isSymbolicLink()).toBe(true);
     expect((await lstat(skillTarget)).isSymbolicLink()).toBe(true);
-    expect(path.resolve(path.dirname(agentTarget), await readlink(agentTarget))).toBe(
+    expect(path.resolve(path.dirname(readerTarget), await readlink(readerTarget))).toBe(
+      path.join(process.cwd(), "templates", "trae", "agents", "memory-reader.md")
+    );
+    expect(path.resolve(path.dirname(writerTarget), await readlink(writerTarget))).toBe(
       path.join(process.cwd(), "templates", "trae", "agents", "memory-writer.md")
     );
     expect(path.resolve(path.dirname(skillTarget), await readlink(skillTarget))).toBe(
       path.join(process.cwd(), ".trae", "skills", "knowledge-organizer")
     );
-    expect(result.linked.map((item) => item.status)).toEqual(["linked", "linked", "linked"]);
+    expect(result.linked.map((item) => item.status)).toEqual(["linked", "linked", "linked", "linked"]);
   });
 
   it("is idempotent when targets already link to the same templates", async () => {
@@ -44,7 +49,12 @@ describe("linkTraeTemplates", () => {
     await linkTraeTemplates({ packageRoot: process.cwd(), targetDir });
     const result = await linkTraeTemplates({ packageRoot: process.cwd(), targetDir });
 
-    expect(result.linked.map((item) => item.status)).toEqual(["already-linked", "already-linked", "already-linked"]);
+    expect(result.linked.map((item) => item.status)).toEqual([
+      "already-linked",
+      "already-linked",
+      "already-linked",
+      "already-linked"
+    ]);
   });
 
   it("refuses to overwrite existing files unless force is set", async () => {

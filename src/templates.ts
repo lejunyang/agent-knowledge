@@ -57,19 +57,28 @@ export async function linkTraeTemplates(options: LinkTraeTemplatesOptions): Prom
   const targetDir = path.resolve(options.targetDir ?? getDefaultTraeConfigDir());
   const packageRoot = path.resolve(options.packageRoot);
   const templatesRoot = path.join(packageRoot, "templates", "trae");
+  const templateAgentsRoot = path.join(templatesRoot, "agents");
   const projectSkillsRoot = path.join(packageRoot, ".trae", "skills");
   const force = options.force ?? false;
 
   const files: Array<{ source: string; target: string }> = [
     {
-      source: path.join(templatesRoot, "agents", "memory-writer.md"),
-      target: path.join(targetDir, "agents", "memory-writer.md")
-    },
-    {
       source: path.join(templatesRoot, "hooks.json"),
       target: path.join(targetDir, "hooks.json")
     }
   ];
+
+  if (existsSync(templateAgentsRoot)) {
+    const agentEntries = await readdir(templateAgentsRoot, { withFileTypes: true });
+    for (const entry of agentEntries) {
+      if (entry.isFile() && entry.name.endsWith(".md")) {
+        files.push({
+          source: path.join(templateAgentsRoot, entry.name),
+          target: path.join(targetDir, "agents", entry.name)
+        });
+      }
+    }
+  }
 
   if (existsSync(projectSkillsRoot)) {
     const skillEntries = await readdir(projectSkillsRoot, { withFileTypes: true });

@@ -347,6 +347,7 @@ agent-knowledge write-candidate --root /path/to/workspace --input candidate.json
 
 推荐安装 `templates/trae/` 下的 TRAE 官方格式模板：
 
+- `templates/trae/agents/memory-reader.md`：按需检索、调试召回和记录反馈的 Subagent 模板。
 - `templates/trae/agents/memory-writer.md`：项目级 Subagent 模板，使用官方 YAML frontmatter。
 - `templates/trae/hooks.json`：项目级 Hook 模板，使用官方 `version: 1` / `hooks` 配置格式。
 - `.trae/skills/*`：本项目内置 Skills，例如 `knowledge-organizer`。
@@ -360,6 +361,7 @@ agent-knowledge link-trae-templates
 该命令会链接到官方 TRAE 用户配置目录：
 
 ```text
+~/.trae-cn/agents/memory-reader.md
 ~/.trae-cn/agents/memory-writer.md
 ~/.trae-cn/hooks.json
 ~/.trae-cn/skills/knowledge-organizer
@@ -380,6 +382,7 @@ agent-knowledge link-trae-templates --target-dir /path/to/.trae-cn
 项目级安装时，手动链接或复制为：
 
 ```text
+<project>/.trae/agents/memory-reader.md
 <project>/.trae/agents/memory-writer.md
 <project>/.trae/hooks.json
 ```
@@ -388,10 +391,11 @@ agent-knowledge link-trae-templates --target-dir /path/to/.trae-cn
 
 1. 任务开始：运行 `agent-knowledge index`。
 2. 任务开始：运行 `agent-knowledge query`，把 `context packet` 注入主 agent。
-3. 需要沉淀：调用 `memory-writer` Subagent 生成 candidate JSON。
-4. 写入候选：运行 `agent-knowledge write-candidate`。
-5. 人类审阅：把 `_inbox` 中的候选移动到正式目录并改为 `status: active`。
-6. 审阅后：再次运行 `agent-knowledge index`。
+3. 任务中途需要历史约定、SOP、debug 或 hybrid 检索时，调用 `memory-reader` Subagent。
+4. 需要沉淀：调用 `memory-writer` Subagent 生成 candidate JSON。
+5. 写入候选：运行 `agent-knowledge write-candidate`。
+6. 人类审阅：把 `_inbox` 中的候选移动到正式目录并改为 `status: active`。
+7. 审阅后：再次运行 `agent-knowledge index`。
 
 ## 主动整理知识
 

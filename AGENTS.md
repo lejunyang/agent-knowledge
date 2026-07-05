@@ -210,9 +210,10 @@ agent-knowledge write-candidate \
 
 候选知识被人类审阅并激活后，重新运行 `agent-knowledge index`；如果使用 embedding 缓存，也重新运行 `agent-knowledge embed-index`。
 
-将 `templates/trae/agents/memory-writer.md` 复制到目标项目的 `.trae/agents/memory-writer.md`。
+将 `templates/trae/agents/memory-reader.md` 复制到目标项目的 `.trae/agents/memory-reader.md`，用于任务中途按需检索、调试召回、hybrid 查询和反馈记录建议。
+将 `templates/trae/agents/memory-writer.md` 复制到目标项目的 `.trae/agents/memory-writer.md`，用于任务结束或显式记忆时生成候选知识 JSON。
 将 `templates/trae/hooks.json` 复制到目标项目的 `.trae/hooks.json`。
-用户级安装可运行 `agent-knowledge link-trae-templates`，它会把模板以符号链接写入 `~/.trae-cn/agents/memory-writer.md`、`~/.trae-cn/hooks.json`，并把本项目 `.trae/skills/*` 链接到 `~/.trae-cn/skills/*`。如果用户写成 `~/.tran-cn`，优先按笔误处理为官方目录 `~/.trae-cn`；确实要写其他目录时使用 `--target-dir`。
+用户级安装可运行 `agent-knowledge link-trae-templates`，它会把 `templates/trae/agents/*.md` 以符号链接写入 `~/.trae-cn/agents/`，把 `templates/trae/hooks.json` 写入 `~/.trae-cn/hooks.json`，并把本项目 `.trae/skills/*` 链接到 `~/.trae-cn/skills/*`。如果用户写成 `~/.tran-cn`，优先按笔误处理为官方目录 `~/.trae-cn`；确实要写其他目录时使用 `--target-dir`。
 `knowledge-organizer` Skill 已放在 `.trae/skills/knowledge-organizer/SKILL.md`，用于用户主动要求整理知识库或整理输入材料时触发。
 
 这些模板是官方格式，仓库内不直接放 `.trae/`，避免把模板误认为当前项目已安装配置。

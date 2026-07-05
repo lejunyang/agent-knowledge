@@ -7,6 +7,7 @@
 项目级安装：
 
 ```text
+templates/trae/agents/memory-reader.md -> <project>/.trae/agents/memory-reader.md
 templates/trae/agents/memory-writer.md -> <project>/.trae/agents/memory-writer.md
 templates/trae/hooks.json -> <project>/.trae/hooks.json
 ```
@@ -20,6 +21,7 @@ agent-knowledge link-trae-templates
 等价目标位置：
 
 ```text
+templates/trae/agents/memory-reader.md -> ~/.trae-cn/agents/memory-reader.md
 templates/trae/agents/memory-writer.md -> ~/.trae-cn/agents/memory-writer.md
 templates/trae/hooks.json -> ~/.trae-cn/hooks.json
 .trae/skills/knowledge-organizer -> ~/.trae-cn/skills/knowledge-organizer
@@ -42,6 +44,15 @@ templates/trae/hooks.json -> ~/.trae-cn/hooks.json
 - 可用 scenarios。
 - 可用 aliases。
 - 前 20 条知识的 ID、标题、类型、状态、别名、domain 和 scenarios。
+
+## memory-reader 能力
+
+`memory-reader.md` 遵循 TRAE Subagent Markdown + YAML frontmatter 格式，包含：
+
+- `name: memory-reader`
+- `description`
+
+该 Subagent 用于按需检索 Agent Knowledge。主 Agent 在 hook 注入不足、任务中途需要历史约定、需要 `query --debug`、需要 hybrid 查询或需要记录反馈时调用它。
 
 ## memory-writer 能力
 
