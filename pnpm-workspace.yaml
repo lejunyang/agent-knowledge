@@ -1,2 +1,6 @@
 packages:
-  - "."
+  - .
+onlyBuiltDependencies:
+  - onnxruntime-node
+  - protobufjs
+  - sharp
