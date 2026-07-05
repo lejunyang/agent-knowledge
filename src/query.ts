@@ -173,8 +173,23 @@ function fuzzyLabelMatches(left: string, right: string): boolean {
   return shorter.every((segment) => longer.includes(segment));
 }
 
+function domainLabelMatches(left: string, right: string): boolean {
+  const normalizedLeft = normalizeLabel(left);
+  const normalizedRight = normalizeLabel(right);
+
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.startsWith(`${normalizedRight}/`) ||
+    normalizedRight.startsWith(`${normalizedLeft}/`)
+  );
+}
+
 function fuzzyIntersects(left: string[], right: string[]): boolean {
   return left.some((leftItem) => right.some((rightItem) => fuzzyLabelMatches(leftItem, rightItem)));
+}
+
+function domainIntersects(left: string[], right: string[]): boolean {
+  return left.some((leftItem) => right.some((rightItem) => domainLabelMatches(leftItem, rightItem)));
 }
 
 function cosineSimilarity(left: number[], right: number[]): number {
@@ -207,11 +222,17 @@ function expandRequestWithAliases(request: MemoryQueryRequest, rows: MemoryRow[]
 
   for (const row of rows) {
     const rowAliases = parseJsonArray(row.aliases);
+    const rowDomains = [row.domain, ...parseJsonArray(row.related_domains)];
     const rowScenarios = parseJsonArray(row.scenario);
-    const rowTerms = [row.domain, ...parseJsonArray(row.related_domains), ...rowScenarios, ...rowAliases];
+    const rowTerms = [...rowDomains, ...rowScenarios, ...rowAliases];
 
     const domainMatched =
-      request.domains.length > 0 && request.domains.some((domain) => rowTerms.some((term) => fuzzyLabelMatches(term, domain)));
+      request.domains.length > 0 &&
+      request.domains.some(
+        (domain) =>
+          rowDomains.some((term) => domainLabelMatches(term, domain)) ||
+          rowAliases.some((alias) => fuzzyLabelMatches(alias, domain))
+      );
     const scenarioMatched =
       request.scenarios.length > 0 &&
       request.scenarios.some((scenario) => rowTerms.some((term) => fuzzyLabelMatches(term, scenario)));
@@ -243,9 +264,12 @@ function rowMatchesRequest(row: MemoryRow, request: MemoryQueryRequest): boolean
   const relatedDomains = parseJsonArray(row.related_domains);
   const scenarios = parseJsonArray(row.scenario);
   const aliases = parseJsonArray(row.aliases);
-  const domainPool = [row.domain, ...relatedDomains, ...aliases];
+  const domainPool = [row.domain, ...relatedDomains];
   const scenarioPool = [...scenarios, ...aliases];
-  const domainOk = request.domains.length === 0 || fuzzyIntersects(domainPool, request.domains);
+  const domainOk =
+    request.domains.length === 0 ||
+    domainIntersects(domainPool, request.domains) ||
+    fuzzyIntersects(aliases, request.domains);
   const scenarioOk = request.scenarios.length === 0 || fuzzyIntersects(scenarioPool, request.scenarios);
   const typeOk = request.includeTypes.includes(row.type as MemoryQueryRequest["includeTypes"][number]);
 

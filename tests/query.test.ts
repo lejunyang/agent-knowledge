@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildContextPacket } from "../src/contextPacket.js";
 import { rebuildIndex } from "../src/indexer.js";
+import { captureMaterial } from "../src/organizer.js";
 import { queryMemories, queryMemoriesWithDebug } from "../src/query.js";
 import { getLogFilePath } from "../src/logging.js";
 import type { MemoryQueryRequest } from "../src/types.js";
@@ -94,6 +95,54 @@ describe("queryMemories", () => {
     });
 
     expect(ranked.map((item) => item.document.frontmatter.id)).toContain("k_20260705_frontend_lint_vue_sfc");
+  });
+
+  it("does not match sibling domains just because they share a segment", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-domain-boundary-"));
+    tempDirs.push(root);
+    await captureMaterial(
+      root,
+      [
+        {
+          title: "商业化账户状态",
+          memory_type: "semantic",
+          domain: "bytedance/business/account",
+          related_domains: [],
+          scenario: ["business-knowledge"],
+          tags: ["account"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "商业化账户状态属于通用账户体系。",
+          evidence: ["test"]
+        },
+        {
+          title: "抖音企业机构账号流程",
+          memory_type: "semantic",
+          domain: "bytedance/business/aweme-enterprise-account",
+          related_domains: [],
+          scenario: ["business-knowledge"],
+          tags: ["b-account"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "抖音企业机构账号流程属于B号业务。",
+          evidence: ["test"]
+        }
+      ],
+      { target: "active", rebuild: true }
+    );
+
+    const ranked = queryMemories(root, {
+      task: "account 状态和流程",
+      agentRole: "main",
+      domains: ["bytedance/business/aweme-enterprise-account"],
+      scenarios: ["business-knowledge"],
+      paths: [],
+      maxTokens: 4500,
+      includeTypes: ["semantic", "procedural", "profile", "episodic"]
+    });
+
+    expect(ranked.map((item) => item.document.frontmatter.title)).toContain("抖音企业机构账号流程");
+    expect(ranked.map((item) => item.document.frontmatter.title)).not.toContain("商业化账户状态");
   });
 
   it("suppresses full-table fallback when domain and scenario are missing", async () => {
