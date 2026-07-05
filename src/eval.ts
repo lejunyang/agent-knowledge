@@ -1,3 +1,9 @@
+/**
+ * eval 模块提供检索质量回归测试。
+ *
+ * 每个 eval case 定义“应该召回”和“不应该召回”的知识 ID。
+ * 当 query 策略、排序权重或 schema 变化时，用它判断是否造成召回退化。
+ */
 import { readFile } from "node:fs/promises";
 import yaml from "js-yaml";
 import { queryMemories } from "./query.js";
@@ -17,10 +23,18 @@ export type EvalResult = {
   presentForbidden: string[];
 };
 
+/**
+ * 从 YAML 读取评估用例。YAML 方便人类维护，比 JSON 更适合手写测试集。
+ */
 export async function loadEvalCase(filePath: string): Promise<EvalCase> {
   return yaml.load(await readFile(filePath, "utf8")) as EvalCase;
 }
 
+/**
+ * 执行单个评估用例。
+ *
+ * 这里复用真实 query pipeline，而不是 mock 检索结果，确保评估覆盖实际索引和过滤逻辑。
+ */
 export async function runEvalCase(rootDir: string, evalCase: EvalCase): Promise<EvalResult> {
   const ranked = queryMemories(rootDir, {
     task: evalCase.task,

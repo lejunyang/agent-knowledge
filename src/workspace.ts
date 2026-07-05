@@ -1,3 +1,9 @@
+/**
+ * workspace 模块负责创建和发现人类可读知识库目录。
+ *
+ * 它只管理 `knowledge/` 事实源，不处理 `.memory/` 索引。这个边界确保初始化知识库
+ * 不会意外创建或污染机器索引。
+ */
 import { mkdir, writeFile } from "node:fs/promises";
 import fg from "fast-glob";
 import { KNOWLEDGE_DIRS, resolveWorkspacePath, toPosixRelativePath } from "./paths.js";
@@ -15,6 +21,11 @@ This directory is the human-readable fact source for agent memory.
 - \`_archive/\`: deprecated or rejected memories.
 `;
 
+/**
+ * 初始化知识库目录和人类可读的索引占位文件。
+ *
+ * 这些文件是给人类审阅用的，不参与 FTS 索引。
+ */
 export async function initKnowledgeWorkspace(rootDir: string): Promise<void> {
   for (const dir of KNOWLEDGE_DIRS) {
     await mkdir(resolveWorkspacePath(rootDir, dir), { recursive: true });
@@ -26,6 +37,11 @@ export async function initKnowledgeWorkspace(rootDir: string): Promise<void> {
   await writeFile(resolveWorkspacePath(rootDir, "knowledge", "_review_queue.md"), "# Review Queue\n", "utf8");
 }
 
+/**
+ * 发现可作为事实源的 Markdown 文件。
+ *
+ * 生成型 catalog/review 文件会被排除，避免它们反过来污染知识检索。
+ */
 export async function discoverKnowledgeFiles(rootDir: string): Promise<string[]> {
   const entries = await fg("knowledge/**/*.md", {
     cwd: rootDir,

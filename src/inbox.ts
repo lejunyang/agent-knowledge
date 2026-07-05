@@ -1,3 +1,9 @@
+/**
+ * inbox 模块是自动沉淀链路的写入边界。
+ *
+ * 其他 agent 只能通过这里写候选知识到 `knowledge/_inbox`，不能直接写正式目录。
+ * 这样可以保留人工审阅和治理空间，避免自动总结污染长期知识库。
+ */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { decideCandidateStatus, type CandidateMemoryInput } from "./governance.js";
@@ -16,6 +22,9 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * 文件名 slug 保留 Unicode，方便人类从文件名识别候选知识主题。
+ */
 function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -24,6 +33,9 @@ function slugify(input: string): string {
     .slice(0, 60);
 }
 
+/**
+ * frontmatter id 只能使用 ASCII，保证满足 schema，也便于其他系统引用。
+ */
 function idSlugify(input: string): string {
   const slug = input
     .toLowerCase()
@@ -39,6 +51,11 @@ function idFromCandidate(input: CandidateMemoryInput): string {
   return `k_${date}_${idSlugify(input.domain)}_${idSlugify(input.title)}`;
 }
 
+/**
+ * 将候选知识写入 `_inbox`。
+ *
+ * 写入前会先经过治理决策和 schema 校验；写入结果仍是 Markdown，便于人类审阅。
+ */
 export async function writeCandidateMemory(rootDir: string, input: CandidateMemoryInput): Promise<WriteCandidateResult> {
   const decision = decideCandidateStatus(input);
   const id = idFromCandidate(input);

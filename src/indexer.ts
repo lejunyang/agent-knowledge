@@ -1,3 +1,11 @@
+/**
+ * indexer 模块负责把 Markdown 事实源重建为 SQLite/FTS5 索引。
+ *
+ * 重要边界：
+ * - Markdown 是事实源，`.memory/index.sqlite` 只是缓存。
+ * - 索引可以随时删除并重建。
+ * - 只有 `status: active` 的知识进入索引，避免 `_inbox` 候选污染主 agent 注入。
+ */
 import { mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -6,6 +14,7 @@ import { resolveWorkspacePath } from "./paths.js";
 import type { KnowledgeDocument } from "./types.js";
 
 const require = createRequire(import.meta.url);
+// 当前运行环境可用 Node 内置 `node:sqlite`，避免 native binding 依赖带来的安装失败。
 const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
 type DatabaseConnection = InstanceType<typeof DatabaseSync>;
 
@@ -25,6 +34,11 @@ function toPosixPath(filePath: string): string {
   return filePath.split(path.sep).join("/");
 }
 
+/**
+ * 同步发现知识文件，供同步 SQLite rebuild 流程使用。
+ *
+ * 这里没有复用 async `discoverKnowledgeFiles`，是为了让 rebuildIndex 保持简单的同步事务模型。
+ */
 function discoverKnowledgeFilesSync(rootDir: string): string[] {
   const knowledgeDir = resolveWorkspacePath(rootDir, "knowledge");
   const files: string[] = [];
@@ -53,6 +67,11 @@ function discoverKnowledgeFilesSync(rootDir: string): string[] {
   return files.sort();
 }
 
+/**
+ * 打开并重置索引数据库。
+ *
+ * 每次 rebuild 都 drop/recreate，牺牲增量性能换取 MVP 的确定性和可调试性。
+ */
 function openIndexDatabase(rootDir: string): DatabaseConnection {
   const memoryDir = resolveWorkspacePath(rootDir, ".memory");
   mkdirSync(memoryDir, { recursive: true });
@@ -100,6 +119,11 @@ function openIndexDatabase(rootDir: string): DatabaseConnection {
   return db;
 }
 
+/**
+ * 将一条知识写入 metadata 表和 FTS 表。
+ *
+ * 数组和关系字段以 JSON 字符串保存，方便查询阶段重新解析，同时保持 SQLite schema 简单。
+ */
 function insertDocument(db: DatabaseConnection, document: KnowledgeDocument): void {
   const frontmatter = document.frontmatter;
   const summary = extractSummary(document.body);
@@ -148,10 +172,18 @@ function insertDocument(db: DatabaseConnection, document: KnowledgeDocument): vo
   );
 }
 
+/**
+ * 返回索引数据库位置。其他模块通过这个函数共享路径约定。
+ */
 export function getIndexDbPath(rootDir: string): string {
   return resolveWorkspacePath(rootDir, ".memory", "index.sqlite");
 }
 
+/**
+ * 从 Markdown 事实源重建索引。
+ *
+ * 调用方应在 query 前执行该命令，或者在知识库文件发生变化后执行。
+ */
 export function rebuildIndex(rootDir: string): RebuildIndexResult {
   const db = openIndexDatabase(rootDir);
   let indexed = 0;

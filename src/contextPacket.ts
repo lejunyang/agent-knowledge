@@ -1,3 +1,9 @@
+/**
+ * contextPacket 模块把检索结果转换成主 agent 可注入的稳定协议。
+ *
+ * 这样做的原因是：主 agent 不应该直接消费原始 Markdown 或排序结果。
+ * 它需要的是按用途分区的上下文：稳定规则、相关事实、流程、案例、风险和来源。
+ */
 import { extractSummary } from "./markdown.js";
 import type { ContextPacket, ContextPacketItem, MemoryQueryRequest, RankedMemory } from "./types.js";
 
@@ -18,6 +24,12 @@ function toItem(memory: RankedMemory): ContextPacketItem {
   };
 }
 
+/**
+ * 构建 context packet。
+ *
+ * MVP 用知识类型决定注入区域，并做简单数量截断。后续可以在这里加入 token 估算、
+ * 更细粒度预算和来源展开策略，而不影响 query 模块。
+ */
 export function buildContextPacket(input: BuildContextPacketInput): ContextPacket {
   const packet: ContextPacket = {
     context_version: "1.0",
