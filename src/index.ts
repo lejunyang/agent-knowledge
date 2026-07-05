@@ -19,3 +19,4 @@ export * from "./catalog.js";
 export * from "./logging.js";
 export * from "./scoring.js";
 export * from "./feedback.js";
+export * from "./embeddings.js";

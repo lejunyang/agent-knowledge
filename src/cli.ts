@@ -18,13 +18,17 @@ import {
   buildContextPacket,
   catalogKnowledge,
   captureMaterial,
+  createEmbeddingProvider,
+  embedKnowledgeIndex,
   initKnowledgeWorkspace,
   listKnowledge,
   logMemoryFeedback,
   organizeInbox,
   queryMemories,
+  queryMemoriesHybridWithDebug,
   queryMemoriesWithDebug,
   rebuildIndex,
+  suggestAliases,
   writeCandidateMemory,
   type CandidateMemoryInput
 } from "./index.js";
@@ -107,6 +111,61 @@ program
   });
 
 program
+  .command("embed-index")
+  .description("Build .memory/embeddings/index.jsonl from active Markdown knowledge")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--provider <provider>", "transformers or local", "transformers")
+  .option("--model <model>", "Transformers.js model id or local model path")
+  .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
+  .action(async (options: { root?: string; provider: string; model?: string; allowRemoteModels: boolean }) => {
+    if (options.provider !== "transformers" && options.provider !== "local") {
+      throw new Error("--provider must be transformers or local");
+    }
+    const provider = createEmbeddingProvider({
+      provider: options.provider,
+      model: options.model,
+      allowRemoteModels: options.allowRemoteModels
+    });
+    const result = await embedKnowledgeIndex(resolveCliRoot(options.root), { provider });
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+program
+  .command("suggest-aliases")
+  .description("Dry-run alias suggestions using embeddings, logs, and Markdown docs")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--provider <provider>", "transformers or local", "local")
+  .option("--model <model>", "Transformers.js model id or local model path")
+  .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
+  .option("--max <count>", "max suggestions per memory", "5")
+  .option("--min-score <score>", "minimum cosine score", "0.35")
+  .action(
+    async (options: {
+      root?: string;
+      provider: string;
+      model?: string;
+      allowRemoteModels: boolean;
+      max: string;
+      minScore: string;
+    }) => {
+      if (options.provider !== "transformers" && options.provider !== "local") {
+        throw new Error("--provider must be transformers or local");
+      }
+      const provider = createEmbeddingProvider({
+        provider: options.provider,
+        model: options.model,
+        allowRemoteModels: options.allowRemoteModels
+      });
+      const result = await suggestAliases(resolveCliRoot(options.root), {
+        provider,
+        maxSuggestionsPerMemory: Number.parseInt(options.max, 10),
+        minScore: Number.parseFloat(options.minScore)
+      });
+      console.log(JSON.stringify(result, null, 2));
+    }
+  );
+
+program
   .command("query")
   .requiredOption("--task <task>", "task text")
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
@@ -114,23 +173,47 @@ program
   .option("--scenario <scenario...>", "scenarios")
   .option("--agent-role <role>", "agent role", "main")
   .option("--debug", "include retrieval debug details in JSON output", false)
-  .action((options: { task: string; root?: string; domain?: string[]; scenario?: string[]; agentRole: string; debug: boolean }) => {
+  .option("--retrieval <mode>", "lexical or hybrid", "lexical")
+  .option("--provider <provider>", "embedding provider for hybrid retrieval: transformers or local", "transformers")
+  .option("--model <model>", "Transformers.js model id or local model path for hybrid retrieval")
+  .option("--embedding-top-k <count>", "embedding topK for hybrid retrieval", "20")
+  .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
+  .action(async (options: {
+    task: string;
+    root?: string;
+    domain?: string[];
+    scenario?: string[];
+    agentRole: string;
+    debug: boolean;
+    retrieval: string;
+    provider: string;
+    model?: string;
+    embeddingTopK: string;
+    allowRemoteModels: boolean;
+  }) => {
+    if (options.retrieval !== "lexical" && options.retrieval !== "hybrid") {
+      throw new Error("--retrieval must be lexical or hybrid");
+    }
     const request = MemoryQueryRequestSchema.parse({
       task: options.task,
       agentRole: options.agentRole,
       domains: options.domain ?? [],
       scenarios: options.scenario ?? []
     });
-    if (options.debug) {
-      const { ranked, debug } = queryMemoriesWithDebug(resolveCliRoot(options.root), request);
-      const packet = buildContextPacket({ request, ranked });
-      console.log(JSON.stringify({ packet, debug }, null, 2));
-      return;
-    }
-
-    const ranked = queryMemories(resolveCliRoot(options.root), request);
+    const root = resolveCliRoot(options.root);
+    const { ranked, debug } =
+      options.retrieval === "hybrid"
+        ? await queryMemoriesHybridWithDebug(root, request, {
+            embeddingProvider: createEmbeddingProvider({
+              provider: options.provider === "local" ? "local" : "transformers",
+              model: options.model,
+              allowRemoteModels: options.allowRemoteModels
+            }),
+            embeddingTopK: Number.parseInt(options.embeddingTopK, 10)
+          })
+        : queryMemoriesWithDebug(root, request);
     const packet = buildContextPacket({ request, ranked });
-    console.log(JSON.stringify(packet, null, 2));
+    console.log(JSON.stringify(options.debug ? { packet, debug } : packet, null, 2));
   });
 
 program

@@ -80,6 +80,8 @@ tools: ""
 
 不要把事实判断写进 `aliases`。如果没有明确别名，输出空数组。
 
+后续主 Agent 或人工可以运行 `agent-knowledge embed-index` 与 `agent-knowledge suggest-aliases` 获取 dry-run 别名建议；这些建议仍需人类审阅后再写回 Markdown。
+
 ## 来源权威性
 
 - `user_confirmed`：用户明确说“记住”“以后都按这个”。

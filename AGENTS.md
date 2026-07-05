@@ -8,8 +8,10 @@
 
 - `knowledge/**/*.md` 是人类可读事实源。
 - `.memory/index.sqlite` 是可重建索引。
+- `.memory/embeddings/index.jsonl` 是可重建本地 embedding 缓存，不是事实源。
 - `.memory/logs/*.jsonl` 是可重建运行日志，只用于调试和审计摘要。
 - `agent-knowledge query` 输出主 agent 可注入的 `context packet`，`--debug` 附带 scorer/reranker 和分项分数。
+- `agent-knowledge embed-index` 使用本地 provider 生成 embedding 缓存；`agent-knowledge suggest-aliases` 只输出 dry-run JSON 建议。
 - `agent-knowledge write-candidate` 只写候选知识到 `knowledge/_inbox/`。
 - 知识 frontmatter 支持可选 `aliases`，用于查询别名扩展和 catalog registry 暴露，不替代规范 `domain` / `scenario`。
 
@@ -41,6 +43,12 @@ CLI 的 workspace root 解析优先级：
 <workspace root>/.memory/logs/YYYY-MM-DD.jsonl
 ```
 
+embedding 缓存固定在：
+
+```text
+<workspace root>/.memory/embeddings/index.jsonl
+```
+
 如果需要项目级隔离知识库，必须设置 `--root` 或 `AGENT_KNOWLEDGE_ROOT`。否则多个项目会共享 `~/.agent_knowledge`。
 
 ## 常用命令
@@ -53,6 +61,8 @@ npm install -g .
 npm uninstall -g agent-knowledge
 node dist/cli.js --help
 node dist/cli.js catalog --root tests/fixtures/basic-knowledge --no-write
+node dist/cli.js embed-index --root tests/fixtures/basic-knowledge --provider local
+node dist/cli.js suggest-aliases --root tests/fixtures/basic-knowledge --provider local
 ```
 
 CLI smoke test：
@@ -92,6 +102,7 @@ src/workspace.ts      初始化 knowledge 目录和发现知识文件
 src/indexer.ts        从 Markdown 重建 SQLite/FTS5 索引
 src/query.ts          查询、过滤、排序和一跳关联扩展
 src/scoring.ts        可插拔 embedding scorer 和默认 reranker
+src/embeddings.ts     本地 embedding provider、JSONL store 和 aliases dry-run 建议
 src/contextPacket.ts  将检索结果组装成 context packet
 src/catalog.ts        生成 catalog API 和 knowledge/_catalog.md
 src/logging.ts        写入 .memory/logs JSONL 运行摘要
@@ -110,6 +121,8 @@ src/cli.ts            命令行入口
 - 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - 修改检索排序时同步更新 eval case 或增加新的 eval case。
+- 测试不得依赖网络或远程模型；embedding 相关测试必须使用 `DeterministicLocalEmbeddingProvider` 或 CLI `--provider local`。
+- Transformers.js provider 默认禁止远程模型下载；只有人工 CLI 调试时才显式传 `--allow-remote-models`。
 - `query` 不应在缺少 domain/scenario 且 FTS 无命中时回退全表；如修改 fallback 策略，必须更新 debug 输出和测试。
 - 任何会影响对外 agent 使用流程的改动，都必须 review `templates/trae/`：
   - Hook 行为、事件、命令或注入上下文变化时，检查 `templates/trae/hooks.json` 和 `templates/trae/README.md`。
@@ -148,11 +161,32 @@ src/cli.ts            命令行入口
 
 ```bash
 agent-knowledge index --root "$AGENT_KNOWLEDGE_ROOT"
+# 需要 alias 建议或离线 embedding 分析时再运行；自动化测试必须使用 --provider local。
+agent-knowledge embed-index --root "$AGENT_KNOWLEDGE_ROOT" --provider local
 agent-knowledge query \
   --root "$AGENT_KNOWLEDGE_ROOT" \
   --task "$CURRENT_TASK" \
   --domain "$CURRENT_DOMAIN" \
   --scenario "$CURRENT_SCENARIO"
+```
+
+如果已构建 embedding 缓存，可显式使用 hybrid 查询：
+
+```bash
+agent-knowledge query \
+  --root "$AGENT_KNOWLEDGE_ROOT" \
+  --task "$CURRENT_TASK" \
+  --retrieval hybrid \
+  --provider transformers \
+  --model /path/to/local/model
+```
+
+Hook 模板不默认运行本地模型，避免会话启动或提交 prompt 时加载模型导致延迟和权限问题。
+
+别名建议只看 dry-run JSON，不会修改 Markdown：
+
+```bash
+agent-knowledge suggest-aliases --root "$AGENT_KNOWLEDGE_ROOT" --provider local
 ```
 
 如果使用 `query --debug`，可把 `debug.queryRunId` 与结果 ID 一起记录有用性反馈：
@@ -172,6 +206,8 @@ agent-knowledge write-candidate \
   --root "$AGENT_KNOWLEDGE_ROOT" \
   --input candidate.json
 ```
+
+候选知识被人类审阅并激活后，重新运行 `agent-knowledge index`；如果使用 embedding 缓存，也重新运行 `agent-knowledge embed-index`。
 
 将 `templates/trae/agents/memory-writer.md` 复制到目标项目的 `.trae/agents/memory-writer.md`。
 将 `templates/trae/hooks.json` 复制到目标项目的 `.trae/hooks.json`。

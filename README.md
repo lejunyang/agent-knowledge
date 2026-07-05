@@ -6,6 +6,7 @@ Agent Knowledge 是一个本地知识持久化工具包，用来让多个 agent 
 
 - Markdown 是唯一事实源，便于人类阅读、审阅和 git diff。
 - SQLite FTS5 是可重建索引，负责全文检索和 BM25 排序。
+- `.memory/embeddings/index.jsonl` 是可重建本地向量缓存，可由 Transformers.js 或 deterministic local provider 生成。
 - CLI 输出结构化 `context packet`，供其他 agent 注入上下文。
 - 自动沉淀先写入 `knowledge/_inbox`，避免模型总结直接污染长期知识。
 
@@ -27,6 +28,12 @@ agent-knowledge query --task "审查 lint 迁移方案"
 
 ```text
 ~/.agent_knowledge/.memory/index.sqlite
+```
+
+默认 embedding JSONL 缓存位置是：
+
+```text
+~/.agent_knowledge/.memory/embeddings/index.jsonl
 ```
 
 可以用两种方式指定位置：
@@ -111,6 +118,66 @@ agent-knowledge index --root /path/to/workspace
 ```
 
 索引只读取 `status: active` 的 Markdown 知识文件。`_inbox` 中的候选知识默认不会参与注入。
+
+## 构建本地 embedding 缓存
+
+`embed-index` 会读取 active Markdown 知识，使用本地 provider 生成向量，并重写：
+
+```text
+<workspace root>/.memory/embeddings/index.jsonl
+```
+
+默认 provider 是 Transformers.js `feature-extraction`，默认不允许联网下载模型，适合使用本机已缓存模型或传入本地模型路径：
+
+```bash
+agent-knowledge embed-index \
+  --root /path/to/workspace \
+  --provider transformers \
+  --model /path/to/local/model
+```
+
+如需显式允许 Transformers.js 下载模型，可加 `--allow-remote-models`。测试和离线 smoke test 应使用 deterministic local provider，避免网络依赖：
+
+```bash
+agent-knowledge embed-index --root /path/to/workspace --provider local
+```
+
+构建 embedding 缓存后，可以用 hybrid 查询把 FTS 候选和 embedding topK 合并：
+
+```bash
+agent-knowledge query \
+  --task "用户自然语言任务" \
+  --retrieval hybrid \
+  --provider transformers \
+  --model /path/to/local/model \
+  --debug
+```
+
+如果只想离线验证流程，可以使用 deterministic local provider：
+
+```bash
+agent-knowledge query --task "用户自然语言任务" --retrieval hybrid --provider local --debug
+```
+
+TypeScript API：
+
+```ts
+import { embedKnowledgeIndex, DeterministicLocalEmbeddingProvider } from "agent-knowledge";
+
+await embedKnowledgeIndex(root, {
+  provider: new DeterministicLocalEmbeddingProvider()
+});
+```
+
+## 建议 aliases（dry-run）
+
+`suggest-aliases` 使用 `.memory/embeddings/index.jsonl`、`.memory/logs/*.jsonl` 中的查询 metadata，以及 Markdown 文档内容生成别名建议。该命令只输出 dry-run JSON，不会修改 Markdown：
+
+```bash
+agent-knowledge suggest-aliases --root /path/to/workspace
+```
+
+输出结构包含每条知识的 `existingAliases` 和 `suggestions`。确认后仍应由人类把合适别名写回 Markdown frontmatter，并重新运行 `agent-knowledge index` / `agent-knowledge embed-index`。
 
 ## 生成知识目录
 

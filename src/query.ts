@@ -15,6 +15,7 @@ import { MemoryQueryRequestSchema } from "./schema.js";
 import type { KnowledgeDocument, MemoryQueryRequest, RankedMemory, SourceAuthority } from "./types.js";
 import { getIndexDbPath } from "./indexer.js";
 import { appendJsonlLog } from "./logging.js";
+import { readEmbeddingRecords, type EmbeddingProvider } from "./embeddings.js";
 import {
   AUTHORITY_SCORE,
   defaultEmbeddingScorer,
@@ -54,6 +55,8 @@ export type QueryDebugInfo = {
   fallbackUsed: boolean;
   fallbackReason: "empty_fts_query" | "no_fts_matches" | null;
   fallbackSuppressedReason: "missing_domain_or_scenario" | null;
+  retrievalMode: "lexical" | "hybrid";
+  embeddingCandidateIds: string[];
   candidateRowCount: number;
   directMatchCount: number;
   relatedCandidateIds: string[];
@@ -83,6 +86,11 @@ export type QueryMemoriesDebugResult = {
 export type QueryScoringOptions = {
   embeddingScorer?: EmbeddingScorer;
   reranker?: MemoryReranker;
+};
+
+export type QueryHybridOptions = QueryScoringOptions & {
+  embeddingProvider: EmbeddingProvider;
+  embeddingTopK?: number;
 };
 
 // 只有这些关系允许自动扩展。冲突和替代关系只应进入 warnings，不能当作普通上下文注入。
@@ -166,6 +174,27 @@ function fuzzyLabelMatches(left: string, right: string): boolean {
 
 function fuzzyIntersects(left: string[], right: string[]): boolean {
   return left.some((leftItem) => right.some((rightItem) => fuzzyLabelMatches(leftItem, rightItem)));
+}
+
+function cosineSimilarity(left: number[], right: number[]): number {
+  const length = Math.min(left.length, right.length);
+  let dot = 0;
+  let leftNorm = 0;
+  let rightNorm = 0;
+
+  for (let index = 0; index < length; index += 1) {
+    const leftValue = left[index] ?? 0;
+    const rightValue = right[index] ?? 0;
+    dot += leftValue * rightValue;
+    leftNorm += leftValue * leftValue;
+    rightNorm += rightValue * rightValue;
+  }
+
+  if (leftNorm === 0 || rightNorm === 0) {
+    return 0;
+  }
+
+  return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
 }
 
 /**
@@ -294,6 +323,8 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
     fallbackUsed: false,
     fallbackReason: null,
     fallbackSuppressedReason: null,
+    retrievalMode: "lexical",
+    embeddingCandidateIds: [],
     candidateRowCount: 0
   } satisfies CandidateSelection["debug"];
 
@@ -362,6 +393,33 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
   }
 }
 
+async function selectEmbeddingRows(
+  rootDir: string,
+  request: MemoryQueryRequest,
+  provider: EmbeddingProvider,
+  topK: number
+): Promise<{ rows: MemoryRow[]; ids: string[] }> {
+  const records = readEmbeddingRecords(rootDir);
+  if (records.length === 0 || topK <= 0) {
+    return { rows: [], ids: [] };
+  }
+
+  const queryText = [request.task, ...request.domains, ...request.scenarios, ...request.paths].join("\n");
+  const [queryVector] = await provider.embed([queryText]);
+  if (!queryVector || queryVector.length === 0) {
+    return { rows: [], ids: [] };
+  }
+
+  const ids = records
+    .map((record) => ({ id: record.id, score: cosineSimilarity(queryVector, record.vector) }))
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, topK)
+    .map((item) => item.id);
+
+  return { rows: selectRowsByIds(rootDir, ids), ids };
+}
+
 /**
  * 按 ID 查询一跳关联知识。
  */
@@ -380,21 +438,15 @@ function selectRowsByIds(rootDir: string, ids: string[]): MemoryRow[] {
   }
 }
 
-/**
- * 查询入口：返回已排序的知识文档。
- *
- * 调用方通常不直接使用这些结果，而是交给 `buildContextPacket` 分区组装。
- */
-export function queryMemoriesWithDebug(
+function rankSelectedRows(
   rootDir: string,
-  rawRequest: unknown,
+  request: MemoryQueryRequest,
+  selection: CandidateSelection,
   scoringOptions: QueryScoringOptions = {}
 ): QueryMemoriesDebugResult {
-  const request = MemoryQueryRequestSchema.parse(rawRequest);
   const queryRunId = randomUUID();
   const embeddingScorer = scoringOptions.embeddingScorer ?? defaultEmbeddingScorer;
   const reranker = scoringOptions.reranker ?? defaultMemoryReranker;
-  const selection = selectCandidateRows(rootDir, request);
   const expandedRequest = expandRequestWithAliases(request, selection.rows);
   const directRows = selection.rows.filter((row) => rowMatchesRequest(row, expandedRequest));
   const directIds = new Set(directRows.map((row) => row.id));
@@ -449,16 +501,74 @@ export function queryMemoriesWithDebug(
     }))
   };
 
+  return { ranked, debug };
+}
+
+/**
+ * 查询入口：返回已排序的知识文档。
+ *
+ * 调用方通常不直接使用这些结果，而是交给 `buildContextPacket` 分区组装。
+ */
+export function queryMemoriesWithDebug(
+  rootDir: string,
+  rawRequest: unknown,
+  scoringOptions: QueryScoringOptions = {}
+): QueryMemoriesDebugResult {
+  const request = MemoryQueryRequestSchema.parse(rawRequest);
+  const selection = selectCandidateRows(rootDir, request);
+  const result = rankSelectedRows(rootDir, request, selection, scoringOptions);
+
   appendJsonlLog(rootDir, {
     event: "query",
-    queryRunId,
+    queryRunId: result.debug.queryRunId,
     taskLength: request.task.length,
-    domains: expandedRequest.domains,
-    scenarios: expandedRequest.scenarios,
-    debug
+    domains: request.domains,
+    scenarios: request.scenarios,
+    debug: result.debug
   });
 
-  return { ranked, debug };
+  return result;
+}
+
+export async function queryMemoriesHybridWithDebug(
+  rootDir: string,
+  rawRequest: unknown,
+  options: QueryHybridOptions
+): Promise<QueryMemoriesDebugResult> {
+  const request = MemoryQueryRequestSchema.parse(rawRequest);
+  const lexicalSelection = selectCandidateRows(rootDir, request);
+  const embeddingSelection = await selectEmbeddingRows(rootDir, request, options.embeddingProvider, options.embeddingTopK ?? 20);
+  const rowsById = new Map<string, MemoryRow>();
+
+  for (const row of lexicalSelection.rows) {
+    rowsById.set(row.id, row);
+  }
+  for (const row of embeddingSelection.rows) {
+    rowsById.set(row.id, rowsById.get(row.id) ?? { ...row, rank_score: 0 });
+  }
+
+  const embeddingCandidateIds = embeddingSelection.ids;
+  const selection: CandidateSelection = {
+    rows: [...rowsById.values()],
+    debug: {
+      ...lexicalSelection.debug,
+      retrievalMode: "hybrid",
+      embeddingCandidateIds,
+      candidateRowCount: rowsById.size
+    }
+  };
+  const result = rankSelectedRows(rootDir, request, selection, options);
+
+  appendJsonlLog(rootDir, {
+    event: "query",
+    queryRunId: result.debug.queryRunId,
+    taskLength: MemoryQueryRequestSchema.parse(rawRequest).task.length,
+    domains: MemoryQueryRequestSchema.parse(rawRequest).domains,
+    scenarios: MemoryQueryRequestSchema.parse(rawRequest).scenarios,
+    debug: result.debug
+  });
+
+  return result;
 }
 
 export function queryMemories(rootDir: string, rawRequest: unknown, scoringOptions: QueryScoringOptions = {}): RankedMemory[] {
