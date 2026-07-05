@@ -41,8 +41,9 @@ CLI 的 workspace root 解析优先级：
 pnpm test
 pnpm typecheck
 pnpm build
+npm install -g .
+npm uninstall -g agent-knowledge
 node dist/cli.js --help
-node dist/cli.js install-global
 ```
 
 CLI smoke test：

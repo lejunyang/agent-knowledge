@@ -55,22 +55,28 @@ pnpm build
 pnpm dev -- --help
 ```
 
-构建后 CLI 入口是：
+把当前目录的本地包安装成全局命令：
 
 ```bash
-node dist/cli.js --help
+npm install -g .
 ```
 
-如果要把当前目录的本地包安装成全局命令，运行：
-
-```bash
-node dist/cli.js install-global
-```
-
-该命令会在当前 package 目录执行 `npm run build`，然后执行 `npm install -g <当前目录>`。安装后可以直接使用：
+安装后可以直接使用：
 
 ```bash
 agent-knowledge --help
+```
+
+卸载全局命令：
+
+```bash
+npm uninstall -g agent-knowledge
+```
+
+本地调试构建产物时，可以直接运行：
+
+```bash
+node dist/cli.js --help
 ```
 
 ## 初始化知识库
