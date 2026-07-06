@@ -422,6 +422,8 @@ agent-knowledge hook doctor
 
 该命令会输出 `cwd`、`isGit`、`gitRoot`、`gitOrigin` 和当前知识库 root。`SessionStart` 与 `UserPromptSubmit` 也会把同一份 runtime context 注入 hook 输出，方便主 Agent 判断当前项目环境。
 
+`UserPromptSubmit` 没有命中可注入知识时，只返回粗粒度 catalog（total、status/type 分布、domains、scenarios），不注入 aliases 和 items，避免无关 prompt 被大量知识库词表污染。命中知识时才会附带较细 catalog 和 context packet。
+
 模板安装会按平台选择 hook 命令：macOS/Linux 使用 `bash -lc 'agent-knowledge hook ...'` 加载用户 shell 配置和 nvm/npm 全局 bin；Windows 使用 `agent-knowledge.cmd hook ...` 调用 npm `.cmd` shim，不依赖 Bash，也不写死 Node 绝对路径。TRAE host hook 的 PATH 可能不同于你手动打开的交互式终端；如果旧模板报 `bash: agent-knowledge: command not found`，重新运行：
 
 ```bash

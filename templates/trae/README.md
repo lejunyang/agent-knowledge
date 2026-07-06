@@ -56,12 +56,17 @@ Hook 输出会包含 runtime context：
 agent-knowledge hook doctor
 ```
 
-`UserPromptSubmit` 注入的 catalog 简表包含：
+`UserPromptSubmit` 未命中知识时只注入粗粒度 catalog，包含：
 
 - 当前知识总数。
 - status/type 分布。
 - 可用 domains。
 - 可用 scenarios。
+
+这能避免无关 prompt 被大量 aliases/items 污染；主 Agent 如果判断任务需要历史知识，可根据 domains/scenarios 再调用 `memory-reader` 精查。
+
+命中知识并注入 context packet 时，catalog 简表会额外包含：
+
 - 可用 aliases。
 - 前 20 条知识的 ID、标题、类型、状态、别名、domain 和 scenarios。
 

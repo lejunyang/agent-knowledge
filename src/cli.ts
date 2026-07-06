@@ -38,6 +38,7 @@ import {
 } from "./index.js";
 import { getDefaultKnowledgeRoot } from "./paths.js";
 import { getGitRuntimeContext, type GitRuntimeContext } from "./gitContext.js";
+import { coarseCatalogForHook, compactCatalogForHook } from "./hookOutput.js";
 
 const program = new Command();
 
@@ -94,26 +95,6 @@ function hookContext(hookEventName: "SessionStart" | "UserPromptSubmit", additio
 
 function formatRuntimeContext(context: GitRuntimeContext): string {
   return JSON.stringify(context, null, 2);
-}
-
-function compactCatalogForHook(catalog: Awaited<ReturnType<typeof catalogKnowledge>>): Record<string, unknown> {
-  return {
-    total: catalog.total,
-    byStatus: catalog.byStatus,
-    byType: catalog.byType,
-    domains: catalog.registry.domains,
-    scenarios: catalog.registry.scenarios,
-    aliases: catalog.registry.aliases,
-    items: catalog.items.slice(0, 20).map((item) => ({
-      id: item.id,
-      title: item.title,
-      type: item.type,
-      status: item.status,
-      aliases: item.aliases,
-      domain: item.domain,
-      scenarios: item.scenarios
-    }))
-  };
 }
 
 program
@@ -447,7 +428,7 @@ hook
         "UserPromptSubmit",
         hasContext
           ? `Hook runtime context:\n\n${formatRuntimeContext(runtimeContext)}\n\nAgent Knowledge catalog:\n\n${JSON.stringify(compactCatalogForHook(catalog), null, 2)}\n\nAgent Knowledge context packet:\n\n${JSON.stringify(packet, null, 2)}`
-          : `Hook runtime context:\n\n${formatRuntimeContext(runtimeContext)}\n\nAgent Knowledge catalog:\n\n${JSON.stringify(compactCatalogForHook(catalog), null, 2)}\n\nAgent Knowledge 已查询 ${root}，没有命中可注入的 active 知识。可根据 catalog 中的 domains/scenarios 重新选择更精确的查询条件。`
+          : `Hook runtime context:\n\n${formatRuntimeContext(runtimeContext)}\n\nAgent Knowledge coarse catalog:\n\n${JSON.stringify(coarseCatalogForHook(catalog), null, 2)}\n\nAgent Knowledge 已查询 ${root}，没有命中可注入的 active 知识。仅注入粗粒度 catalog；如任务需要历史知识，可根据 domains/scenarios 调用 memory-reader 精查。`
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
