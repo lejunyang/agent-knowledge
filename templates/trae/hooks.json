@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-knowledge hook session-start",
+            "command": "bash -lc 'agent-knowledge hook session-start'",
             "timeout": 30
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-knowledge hook user-prompt-submit",
+            "command": "bash -lc 'agent-knowledge hook user-prompt-submit'",
             "timeout": 30
           }
         ]

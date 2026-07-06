@@ -33,8 +33,10 @@ templates/trae/hooks.json -> ~/.trae-cn/hooks.json
 
 `hooks.json` 遵循 TRAE Hook `version: 1` 配置格式，包含：
 
-- `SessionStart`：执行 `agent-knowledge hook session-start`，初始化 `AGENT_KNOWLEDGE_ROOT`，并向当前会话补充知识库路径说明。
-- `UserPromptSubmit`：执行 `agent-knowledge hook user-prompt-submit`，在主 Agent 处理用户请求前注入 catalog 简表和 context packet。
+- `SessionStart`：通过 `bash -lc 'agent-knowledge hook session-start'` 执行，初始化 `AGENT_KNOWLEDGE_ROOT`，并向当前会话补充知识库路径说明。
+- `UserPromptSubmit`：通过 `bash -lc 'agent-knowledge hook user-prompt-submit'` 执行，在主 Agent 处理用户请求前注入 catalog 简表和 context packet。
+
+这里使用 `bash -lc` 是为了让 TRAE hook 的非交互执行环境加载用户 shell 配置，从而找到 nvm/npm 全局安装的 `agent-knowledge`。如果直接写 `agent-knowledge hook ...`，TRAE host hook 可能因为 PATH 与交互式终端不同而报 `command not found`。
 
 Hook 输出会包含 runtime context：
 
