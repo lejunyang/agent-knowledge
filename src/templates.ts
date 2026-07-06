@@ -13,6 +13,7 @@ export type LinkTraeTemplatesOptions = {
   packageRoot: string;
   targetDir?: string;
   force?: boolean;
+  platform?: NodeJS.Platform;
 };
 
 export type LinkedTemplate = {
@@ -28,6 +29,10 @@ export type LinkTraeTemplatesResult = {
 
 export function getDefaultTraeConfigDir(): string {
   return path.join(homedir(), ".trae-cn");
+}
+
+function getHooksTemplateName(platform: NodeJS.Platform): string {
+  return platform === "win32" ? "hooks.windows.json" : "hooks.json";
 }
 
 async function linkFile(source: string, target: string, force: boolean): Promise<LinkedTemplate> {
@@ -60,10 +65,11 @@ export async function linkTraeTemplates(options: LinkTraeTemplatesOptions): Prom
   const templateAgentsRoot = path.join(templatesRoot, "agents");
   const projectSkillsRoot = path.join(packageRoot, ".trae", "skills");
   const force = options.force ?? false;
+  const hooksTemplateName = getHooksTemplateName(options.platform ?? process.platform);
 
   const files: Array<{ source: string; target: string }> = [
     {
-      source: path.join(templatesRoot, "hooks.json"),
+      source: path.join(templatesRoot, hooksTemplateName),
       target: path.join(targetDir, "hooks.json")
     }
   ];

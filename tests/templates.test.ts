@@ -57,6 +57,29 @@ describe("linkTraeTemplates", () => {
     ]);
   });
 
+  it("uses the Windows hook template on win32", async () => {
+    const targetDir = await mkdtemp(path.join(tmpdir(), "agent-knowledge-trae-windows-"));
+    tempDirs.push(targetDir);
+
+    const result = await linkTraeTemplates({
+      packageRoot: process.cwd(),
+      targetDir,
+      platform: "win32"
+    });
+
+    const hooksTarget = path.join(targetDir, "hooks.json");
+
+    expect((await lstat(hooksTarget)).isSymbolicLink()).toBe(true);
+    expect(path.resolve(path.dirname(hooksTarget), await readlink(hooksTarget))).toBe(
+      path.join(process.cwd(), "templates", "trae", "hooks.windows.json")
+    );
+    expect(result.linked[0]).toMatchObject({
+      source: path.join(process.cwd(), "templates", "trae", "hooks.windows.json"),
+      target: hooksTarget,
+      status: "linked"
+    });
+  });
+
   it("refuses to overwrite existing files unless force is set", async () => {
     const targetDir = await mkdtemp(path.join(tmpdir(), "agent-knowledge-trae-existing-"));
     tempDirs.push(targetDir);
