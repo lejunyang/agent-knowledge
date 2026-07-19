@@ -38,6 +38,9 @@ agent-knowledge configure
 | `embeddings.cacheDir` | `~/.cache/agent-knowledge/models` | Agent Knowledge 自有 Transformers.js 模型缓存 |
 | `embeddings.retrieval` | `lexical` | `hybrid` 会合并 lexical 与 dense retrieval |
 | `embeddings.rerankerProfile` | `bge-reranker-large` | Cross-encoder reranker profile |
+| `embeddings.rerankerCandidateLimit` | `30` | 送入 cross-encoder 的融合候选数 |
+| `embeddings.rerankerResultLimit` | `8` | 重排后的最大结果数 |
+| `embeddings.rerankerMinScore` | `0.55` | 低于该融合分数的候选不注入 |
 | `integration.product` | `trae` | 默认安装产品 |
 | `integration.mode` | `merge` | `merge` 保留外部配置；`overwrite` 替换目标 |
 | `sync.provider` | `none` | `webdav` 或 `s3` 启用远端同步 |

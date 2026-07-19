@@ -37,6 +37,7 @@ import {
   organizeInbox,
   queryMemories,
   queryMemoriesHybridWithDebug,
+  queryMemoriesRerankedWithDebug,
   queryMemoriesWithDebug,
   rebuildIndex,
   runEvalSuite,
@@ -44,6 +45,7 @@ import {
   resolveRetrievalModelDescriptor,
   S3HttpObjectClient,
   S3SyncBackend,
+  TransformersBatchReranker,
   stageHookEvent,
   getStagingStatus,
   drainStagedEvents,
@@ -75,6 +77,10 @@ import {
   promptForIntegrationInstall,
   TerminalIntegrationPrompter
 } from "./cli/integration.js";
+import {
+  promptForRetrievalModelKind,
+  TerminalModelPrompter
+} from "./cli/model.js";
 
 function readArgValue(name: string): string | undefined {
   const direct = process.argv.find((argument) => argument.startsWith(`${name}=`));
@@ -252,15 +258,21 @@ const embeddingCommand = program
 embeddingCommand
   .command("status")
   .description(t("离线检查当前模型是否已完整缓存", "Check whether the configured model is fully cached"))
-  .option("--kind <kind>", t("模型类型：embedding 或 reranker", "model kind: embedding or reranker"), "embedding")
+  .option("--kind <kind>", t("模型类型：embedding 或 reranker；TTY 缺省时交互选择", "model kind: embedding or reranker; prompts on TTY when omitted"))
   .option("--model <model>", t("临时覆盖模型 ID", "override the configured model ID"))
   .option("--cache-dir <dir>", t("临时覆盖模型缓存目录", "override the model cache directory"))
   .option("--json", t("输出完整 JSON", "emit full JSON"), false)
-  .action(async (options: { kind: string; model?: string; cacheDir?: string; json: boolean }) => {
-    if (options.kind !== "embedding" && options.kind !== "reranker") {
+  .action(async (options: { kind?: string; model?: string; cacheDir?: string; json: boolean }) => {
+    let kind = options.kind;
+    if (!kind && process.stdin.isTTY) {
+      const prompter = new TerminalModelPrompter();
+      kind = await promptForRetrievalModelKind(prompter, locale);
+    }
+    kind ??= "embedding";
+    if (kind !== "embedding" && kind !== "reranker") {
       throw new Error(t("--kind 必须是 embedding 或 reranker", "--kind must be embedding or reranker"));
     }
-    const descriptor = resolveRetrievalModelDescriptor(userConfig().embeddings, options.kind);
+    const descriptor = resolveRetrievalModelDescriptor(userConfig().embeddings, kind);
     const status = await getRetrievalModelStatus({
       ...descriptor,
       model: options.model ?? descriptor.model,
@@ -294,15 +306,21 @@ embeddingCommand
 embeddingCommand
   .command("download")
   .description(t("显式下载当前配置的检索模型", "Explicitly download the configured retrieval model"))
-  .option("--kind <kind>", t("模型类型：embedding 或 reranker", "model kind: embedding or reranker"), "embedding")
+  .option("--kind <kind>", t("模型类型：embedding 或 reranker；TTY 缺省时交互选择", "model kind: embedding or reranker; prompts on TTY when omitted"))
   .option("--model <model>", t("临时覆盖模型 ID", "override the configured model ID"))
   .option("--cache-dir <dir>", t("临时覆盖模型缓存目录", "override the model cache directory"))
   .option("--json", t("完成后输出完整 JSON", "emit full JSON after completion"), false)
-  .action(async (options: { kind: string; model?: string; cacheDir?: string; json: boolean }) => {
-    if (options.kind !== "embedding" && options.kind !== "reranker") {
+  .action(async (options: { kind?: string; model?: string; cacheDir?: string; json: boolean }) => {
+    let kind = options.kind;
+    if (!kind && process.stdin.isTTY) {
+      const prompter = new TerminalModelPrompter();
+      kind = await promptForRetrievalModelKind(prompter, locale);
+    }
+    kind ??= "embedding";
+    if (kind !== "embedding" && kind !== "reranker") {
       throw new Error(t("--kind 必须是 embedding 或 reranker", "--kind must be embedding or reranker"));
     }
-    const descriptor = resolveRetrievalModelDescriptor(userConfig().embeddings, options.kind);
+    const descriptor = resolveRetrievalModelDescriptor(userConfig().embeddings, kind);
     const selected = {
       ...descriptor,
       model: options.model ?? descriptor.model,
@@ -463,6 +481,7 @@ program
   .option("--profile <profile>", "embedding profile: multilingual-e5-small or bge-small-zh-v1.5")
   .option("--model <model>", "Transformers.js model id or local model path for hybrid retrieval")
   .option("--embedding-top-k <count>", "embedding topK for hybrid retrieval; defaults to user config")
+  .option("--rerank", t("使用本地 cross-encoder 批量重排", "use local cross-encoder batch reranking"), false)
   .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
   .action(async (options: {
     task: string;
@@ -479,6 +498,7 @@ program
     profile?: string;
     model?: string;
     embeddingTopK?: string;
+    rerank: boolean;
     allowRemoteModels: boolean;
   }) => {
     const configuredEmbeddings = userConfig().embeddings;
@@ -502,7 +522,7 @@ program
       projectIds: options.projectId ?? []
     });
     const root = resolveCliRoot(options.root);
-    const { ranked, debug } =
+    const baseResult =
       retrievalMode === "hybrid"
         ? await queryMemoriesHybridWithDebug(root, request, {
             embeddingProvider: createEmbeddingProvider({
@@ -519,6 +539,23 @@ program
               : configuredEmbeddings.embeddingTopK
           })
         : queryMemoriesWithDebug(root, request);
+    const { ranked, debug } = options.rerank
+      ? await queryMemoriesRerankedWithDebug(root, request, {
+          baseResult,
+          batchReranker: new TransformersBatchReranker({
+            model:
+              configuredEmbeddings.rerankerModel ??
+              "Xenova/bge-reranker-large",
+            cacheDir: configuredEmbeddings.cacheDir,
+            localFilesOnly: true
+          }),
+          candidateLimit: configuredEmbeddings.rerankerCandidateLimit,
+          resultLimit: configuredEmbeddings.rerankerResultLimit,
+          minScore: configuredEmbeddings.rerankerMinScore,
+          baseWeight: configuredEmbeddings.rerankerBaseWeight,
+          rerankerWeight: configuredEmbeddings.rerankerModelWeight
+        })
+      : baseResult;
     const packet = buildContextPacket({ request, ranked });
     console.log(JSON.stringify(options.debug ? { packet, debug } : packet, null, 2));
   });

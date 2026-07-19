@@ -28,7 +28,12 @@ agent-knowledge query --task "自然语言问题" --retrieval hybrid --debug
 ```bash
 agent-knowledge embedding status --kind reranker
 agent-knowledge embedding download --kind reranker
+agent-knowledge query --task "自然语言问题" --retrieval hybrid --rerank --debug
 ```
+
+未传 `--kind` 且处于交互式终端时，`embedding status/download` 会用方向键选择 Embedding 或 Reranker。
+
+`--rerank` 默认从融合结果取 top 30，使用本地 BGE cross-encoder 批量打分，阈值过滤后保留 top 8。普通 Hook 不会自动加载 reranker。
 
 Embedding manifest 会校验 model、revision、dtype、dimensions、pooling 和 prefix，避免不兼容向量静默混用。
 

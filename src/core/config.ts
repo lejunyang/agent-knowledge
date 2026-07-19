@@ -37,7 +37,12 @@ const EmbeddingsConfigSchema = z
     retrieval: z.enum(["lexical", "hybrid"]).default("lexical"),
     embeddingTopK: z.number().int().positive().default(20),
     rerankerProfile: z.enum(["bge-reranker-large"]).default("bge-reranker-large"),
-    rerankerModel: z.string().min(1).nullable().default(null)
+    rerankerModel: z.string().min(1).nullable().default(null),
+    rerankerCandidateLimit: z.number().int().positive().default(30),
+    rerankerResultLimit: z.number().int().positive().default(8),
+    rerankerMinScore: z.number().min(0).max(1).default(0.55),
+    rerankerBaseWeight: z.number().min(0).max(1).default(0.3),
+    rerankerModelWeight: z.number().min(0).max(1).default(0.7)
   })
   .default({});
 

@@ -4,6 +4,7 @@ import {
   promptForIntegrationInstall,
   type IntegrationPrompter
 } from "../src/cli/integration.js";
+import { promptForRetrievalModelKind } from "../src/cli/model.js";
 import type { InstallIntegrationResult } from "../src/integration/manager.js";
 import { DEFAULT_USER_CONFIG } from "../src/core/config.js";
 
@@ -115,5 +116,14 @@ describe("integration CLI helpers", () => {
     expect(prompter.calls).toContain("select:Installation scope");
     expect(prompter.calls).toContain("checkbox:Components (space to toggle, enter to confirm)");
     expect(prompter.calls).toContain("select:Write mode");
+  });
+
+  it("uses a select control to choose embedding or reranker model management", async () => {
+    const prompter = new RichPrompter();
+
+    const kind = await promptForRetrievalModelKind(prompter, "en");
+
+    expect(kind).toBe("embedding");
+    expect(prompter.calls).toContain("select:Model kind");
   });
 });

@@ -29,6 +29,10 @@ import {
   type MemoryReranker,
   type ScoreFeatures
 } from "./scoring.js";
+import {
+  applyBatchRerank,
+  type BatchCandidateReranker
+} from "./reranker.js";
 
 const require = createRequire(import.meta.url);
 // 与 indexer 保持一致，使用 Node 内置 sqlite 读取 FTS5 索引。
@@ -77,6 +81,12 @@ export type QueryDebugInfo = {
     embeddingScorer: string;
     reranker: string;
   };
+  batchReranker?: {
+    name: string;
+    candidateLimit: number;
+    resultLimit: number;
+    minScore: number;
+  };
   resultScores: Array<{
     id: string;
     lexicalScore: number;
@@ -86,6 +96,7 @@ export type QueryDebugInfo = {
     sourceAuthorityScore: number;
     relationScore: number;
     rrfScore: number;
+    rerankerScore?: number;
     finalScore: number;
   }>;
 };
@@ -103,6 +114,16 @@ export type QueryScoringOptions = {
 export type QueryHybridOptions = QueryScoringOptions & {
   embeddingProvider: EmbeddingProvider;
   embeddingTopK?: number;
+};
+
+export type QueryBatchRerankOptions = QueryScoringOptions & {
+  baseResult?: QueryMemoriesDebugResult;
+  batchReranker: BatchCandidateReranker;
+  candidateLimit?: number;
+  resultLimit?: number;
+  minScore?: number;
+  baseWeight?: number;
+  rerankerWeight?: number;
 };
 
 // 只有这些关系允许自动扩展。冲突和替代关系只应进入 warnings，不能当作普通上下文注入。
@@ -778,4 +799,72 @@ export async function queryMemoriesHybridWithDebug(
 
 export function queryMemories(rootDir: string, rawRequest: unknown, scoringOptions: QueryScoringOptions = {}): RankedMemory[] {
   return queryMemoriesWithDebug(rootDir, rawRequest, scoringOptions).ranked;
+}
+
+export async function queryMemoriesRerankedWithDebug(
+  rootDir: string,
+  rawRequest: unknown,
+  options: QueryBatchRerankOptions
+): Promise<QueryMemoriesDebugResult> {
+  const request = MemoryQueryRequestSchema.parse(rawRequest);
+  const base = options.baseResult ?? queryMemoriesWithDebug(rootDir, request, options);
+  const candidateLimit = options.candidateLimit ?? 30;
+  const resultLimit = options.resultLimit ?? 8;
+  const minScore = options.minScore ?? 0.55;
+  const reranked = await applyBatchRerank({
+    query: request.task,
+    candidates: base.ranked.map((memory) => ({
+      id: memory.document.frontmatter.id,
+      text: [
+        memory.document.frontmatter.title,
+        memory.document.frontmatter.aliases.join(" "),
+        memory.document.body
+      ].join("\n"),
+      baseScore: memory.finalScore
+    })),
+    reranker: options.batchReranker,
+    candidateLimit,
+    resultLimit,
+    minScore,
+    baseWeight: options.baseWeight ?? 0.3,
+    rerankerWeight: options.rerankerWeight ?? 0.7
+  });
+  const resultById = new Map(reranked.map((item) => [item.id, item]));
+  const ranked = reranked
+    .map((item) => {
+      const memory = base.ranked.find(
+        (candidate) => candidate.document.frontmatter.id === item.id
+      );
+      return memory
+        ? {
+            ...memory,
+            finalScore: item.finalScore
+          }
+        : null;
+    })
+    .filter((memory): memory is RankedMemory => memory !== null);
+  const scoresById = new Map(base.debug.resultScores.map((item) => [item.id, item]));
+  return {
+    ranked,
+    debug: {
+      ...base.debug,
+      batchReranker: {
+        name: options.batchReranker.name,
+        candidateLimit,
+        resultLimit,
+        minScore
+      },
+      resultIds: ranked.map((memory) => memory.document.frontmatter.id),
+      resultScores: ranked.map((memory) => {
+        const id = memory.document.frontmatter.id;
+        const original = scoresById.get(id)!;
+        const result = resultById.get(id)!;
+        return {
+          ...original,
+          rerankerScore: result.rerankerScore,
+          finalScore: result.finalScore
+        };
+      })
+    }
+  };
 }

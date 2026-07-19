@@ -9,6 +9,8 @@ import { queryMemories, queryMemoriesWithDebug } from "../src/retrieval/query.js
 import { getLogFilePath } from "../src/core/logging.js";
 import type { MemoryQueryRequest } from "../src/core/types.js";
 import type { EmbeddingScorer, MemoryReranker } from "../src/retrieval/scoring.js";
+import { DeterministicBatchReranker } from "../src/retrieval/reranker.js";
+import { queryMemoriesRerankedWithDebug } from "../src/retrieval/query.js";
 
 let tempDirs: string[] = [];
 
@@ -302,6 +304,41 @@ describe("queryMemories", () => {
     });
     expect(ranked[0]?.document.frontmatter.id).toBe("k_20260705_lint_validation_flow");
     expect(ranked[0]?.embeddingScore).toBe(1);
+  });
+
+  it("batch reranks fused candidates and exposes reranker decisions", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-batch-rerank-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+    const reranker = new DeterministicBatchReranker({
+      score: ({ document }) => (document.includes("ESLint fallback") ? 1 : 0.2)
+    });
+
+    const result = await queryMemoriesRerankedWithDebug(
+      root,
+      {
+        task: "lint fallback",
+        agentRole: "main",
+        domains: ["frontend/lint"],
+        scenarios: ["lint-migration"]
+      },
+      {
+        batchReranker: reranker,
+        candidateLimit: 30,
+        resultLimit: 8,
+        minScore: 0.4
+      }
+    );
+
+    expect(result.ranked[0]?.document.frontmatter.id).toBe("k_20260705_frontend_lint_vue_sfc");
+    expect(result.debug.batchReranker).toMatchObject({
+      name: "deterministic-batch-reranker",
+      candidateLimit: 30,
+      resultLimit: 8,
+      minScore: 0.4
+    });
+    expect(result.debug.resultScores[0]?.rerankerScore).toBe(1);
   });
 
   it("filters validity, visibility, sensitivity, and project scope before ranking", async () => {
