@@ -69,6 +69,7 @@ export type CaptureMaterialResult = {
     id: string;
     status: MemoryStatus;
     filePath: string;
+    deduplicated?: boolean;
   }>;
   indexed?: number;
 };
@@ -394,8 +395,29 @@ export async function captureMaterial(
   await initKnowledgeWorkspace(rootDir);
   const written: CaptureMaterialResult["written"] = [];
   const existingDocuments = await readAllKnowledgeDocuments(rootDir);
+  const existingById = new Map(
+    existingDocuments.map((document) => [document.frontmatter.id, document])
+  );
 
   for (const input of inputs) {
+    const existing = input.id ? existingById.get(input.id) : undefined;
+    if (existing) {
+      const contentMatches = input.content
+        ? existing.body === input.content.trimStart()
+        : existing.body.includes(input.summary);
+      if (!contentMatches) {
+        throw new Error(
+          `Knowledge with explicit ID already exists but content differs: ${input.id}`
+        );
+      }
+      written.push({
+        id: existing.frontmatter.id,
+        status: existing.frontmatter.status,
+        filePath: resolveWorkspacePath(rootDir, existing.filePath),
+        deduplicated: true
+      });
+      continue;
+    }
     if (options.target === "inbox") {
       const result = await writeCandidateMemory(rootDir, input);
       written.push(result);

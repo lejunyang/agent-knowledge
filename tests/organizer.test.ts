@@ -358,6 +358,32 @@ describe("captureMaterial", () => {
     expect(result.written[0]?.filePath).toContain(
       "knowledge/source/bytedance/business/source/lark/"
     );
+
+    const repeated = await captureMaterial(
+      root,
+      [
+        {
+          id: "k_lark_source_material_001",
+          title: "业务材料",
+          memory_type: "source",
+          domain: "bytedance/business/source/lark",
+          related_domains: [],
+          scenario: ["business-source"],
+          tags: ["lark"],
+          confidence: 0.95,
+          source_authority: "documented",
+          summary: "业务材料来源。",
+          content,
+          evidence: ["lark:docx:001"]
+        }
+      ],
+      { target: "active", rebuild: false }
+    );
+    expect(repeated.written[0]).toMatchObject({
+      id: "k_lark_source_material_001",
+      filePath: result.written[0]!.filePath,
+      deduplicated: true
+    });
   });
 
   it("deprecates superseded active knowledge when a trusted replacement is captured", async () => {
