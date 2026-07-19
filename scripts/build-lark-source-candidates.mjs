@@ -41,6 +41,10 @@ export function sanitizeLarkSourceXml(content) {
     .replace(/\s+href="https:\/\/internal-api-drive-stream\.[^"]*"/g, "")
     .replace(/\s+src="[^"]*"/g, "")
     .replace(/\s+token="[^"]*"/g, "")
+    .replace(
+      /<cite\b[^>]*\btype="user"[^>]*>[\s\S]*?<\/cite>/gi,
+      "[REDACTED_PERSON]"
+    )
     .replace(/\s+doc-id="([^"]*)"/g, ' doc-ref="$1"')
     .replace(/\s+src-token="([^"]*)"/g, ' doc-ref="$1"')
     .replace(/\s+src-block-id="[^"]*"/g, "");
@@ -49,6 +53,28 @@ export function sanitizeLarkSourceXml(content) {
 /** 遮蔽常见凭据值，保留字段名和周边说明供知识审阅。 */
 export function redactSecretLikeContent(content) {
   return content
+    .replace(
+      /<cite\b[^>]*\btype="user"[^>]*>[\s\S]*?<\/cite>/gi,
+      "[REDACTED_PERSON]"
+    )
+    .replace(
+      /<table\b[^>]*>[\s\S]*?<\/table>/gi,
+      (table) =>
+        /(?:账号|手机号)[^<\d]{0,20}\d{11}[\s\S]{0,80}(?:验证码|密码|\/|\s)\s*[A-Za-z0-9!@#$%^&*._+-]{4,}/i.test(
+          table.replace(/<[^>]+>/g, " ")
+        )
+          ? "[REDACTED_CREDENTIAL_TABLE]"
+          : table
+    )
+    .replace(
+      /<p\b[^>]*>[\s\S]*?<\/p>/gi,
+      (paragraph) =>
+        /(?:(?:测试)?(?:账号|手机号)\s*[:：]?\s*\d{11}|(?:验证码|密码)\s*[:：]\s*[A-Za-z0-9!@#$%^&*._+-]{4,})/i.test(
+          paragraph
+        )
+          ? "[REDACTED_CREDENTIAL_ROW]"
+          : paragraph
+    )
     .replace(
       /-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |OPENSSH |EC )?PRIVATE KEY-----/g,
       "[REDACTED_PRIVATE_KEY]"
@@ -61,7 +87,51 @@ export function redactSecretLikeContent(content) {
       /(token\s*=\s*["']?)[a-z0-9_.-]{20,}/gi,
       "$1[REDACTED_SECRET]"
     )
-    .replace(/sk-[a-z0-9]{20,}/gi, "[REDACTED_SECRET]");
+    .replace(
+      /(token\s*[:=]\s*["']?)[a-z0-9+/_=.-]{20,}/gi,
+      "$1[REDACTED_SECRET]"
+    )
+    .replace(
+      /((?:access[_-]?token|refresh[_-]?token|app[_-]?token|msToken|password|passwd|pwd)\s*[:=]\s*["']?)[^&"'\s<]{4,}/gi,
+      "$1[REDACTED_SECRET]"
+    )
+    .replace(
+      /([?&](?:access[_-]?token|refresh[_-]?token|app[_-]?token|msToken|token|password|passwd|pwd|mobile|phone)=)[^&"<\s]+/gi,
+      "$1[REDACTED_SECRET]"
+    )
+    .replace(/sk-[a-z0-9]{20,}/gi, "[REDACTED_SECRET]")
+    .replace(/\b\d{17}[\dXx]\b/g, "[REDACTED_ID_NUMBER]")
+    .replace(/\b\d{11}\b/g, "[REDACTED_PHONE]")
+    .replace(
+      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
+      "[REDACTED_EMAIL]"
+    );
+}
+
+/**
+ * 检查脱敏后的 source 是否仍含明确凭据或个人标识。
+ *
+ * 这里只检查实际值，不把“密码重置”“测试账号流程”等普通业务术语当成敏感内容。
+ */
+export function auditLarkSourceContent(content) {
+  const checks = [
+    ["temporary_download_url", /https:\/\/internal-api-drive-stream\./i],
+    ["lark_user_identity", /(?:user-id|user-name)="|<cite\b[^>]*\btype="user"/i],
+    [
+      "secret_assignment",
+      /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|app[_-]?token|msToken|password|passwd|pwd)\s*[:=]\s*(?!["']?\[REDACTED_SECRET\])["']?[^&"'\s<]{4,}|token\s*[:=]\s*["']?[a-z0-9+/_=.-]{20,}/i
+    ],
+    ["private_key", /BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY/i],
+    ["phone_number", /\b\d{11}\b/],
+    ["id_number", /\b\d{17}[\dXx]\b/],
+    [
+      "email_address",
+      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
+    ]
+  ];
+  return checks
+    .filter(([, pattern]) => pattern.test(content))
+    .map(([kind]) => kind);
 }
 
 /** 解析 CLI 参数。 */
@@ -117,6 +187,12 @@ export async function buildLarkSourceCandidates(options) {
       "utf8"
     );
     const content = redactSecretLikeContent(sanitizeLarkSourceXml(raw));
+    const privacyFindings = auditLarkSourceContent(content);
+    if (privacyFindings.length > 0) {
+      throw new Error(
+        `Source privacy audit failed for ${document.key}: ${privacyFindings.join(", ")}`
+      );
+    }
     const id = stableId(document.key);
     candidates.push({
       id,

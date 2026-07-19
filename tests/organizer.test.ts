@@ -386,6 +386,98 @@ describe("captureMaterial", () => {
     });
   });
 
+  it("replaces only an existing documented active source when explicitly enabled", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-capture-replace-source-"));
+    tempDirs.push(root);
+    const base = {
+      id: "k_lark_source_material_replace",
+      title: "可刷新来源",
+      memory_type: "source" as const,
+      domain: "bytedance/business/source/lark",
+      related_domains: [],
+      scenario: ["business-source"],
+      tags: ["lark"],
+      confidence: 0.95,
+      source_authority: "documented" as const,
+      summary: "可持续刷新的飞书来源。",
+      evidence: ["lark:docx:replace"],
+      capture_mode: "direct_material" as const,
+      actor_type: "owner" as const
+    };
+    const first = await captureMaterial(
+      root,
+      [{ ...base, content: "<title>第一版</title><p>旧正文。</p>" }],
+      { target: "active", rebuild: false }
+    );
+
+    const replaced = await captureMaterial(
+      root,
+      [{ ...base, content: "<title>第二版</title><p>脱敏后的新正文。</p>" }],
+      { target: "active", rebuild: false, replaceExistingSources: true }
+    );
+    const document = parseKnowledgeMarkdown(
+      first.written[0]!.filePath,
+      await readFile(first.written[0]!.filePath, "utf8")
+    );
+
+    expect(replaced.written[0]).toMatchObject({
+      id: base.id,
+      filePath: first.written[0]!.filePath,
+      replaced: true
+    });
+    expect(document.body).toBe("<title>第二版</title><p>脱敏后的新正文。</p>");
+  });
+
+  it("refuses replacement for non-source or non-documented knowledge", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-capture-replace-guard-"));
+    tempDirs.push(root);
+    const first = await captureMaterial(
+      root,
+      [
+        {
+          id: "k_guarded_semantic",
+          title: "不可覆盖的精炼知识",
+          memory_type: "semantic",
+          domain: "knowledge/governance",
+          related_domains: [],
+          scenario: ["knowledge-organization"],
+          tags: ["governance"],
+          confidence: 0.95,
+          source_authority: "user_confirmed",
+          summary: "精炼知识必须通过 supersedes 更新。",
+          evidence: ["owner:confirmed"]
+        }
+      ],
+      { target: "active", rebuild: false }
+    );
+
+    await expect(
+      captureMaterial(
+        root,
+        [
+          {
+            id: "k_guarded_semantic",
+            title: "不可覆盖的精炼知识",
+            memory_type: "semantic",
+            domain: "knowledge/governance",
+            related_domains: [],
+            scenario: ["knowledge-organization"],
+            tags: ["governance"],
+            confidence: 0.95,
+            source_authority: "user_confirmed",
+            summary: "试图覆盖精炼知识。",
+            evidence: ["owner:confirmed"]
+          }
+        ],
+        { target: "active", rebuild: false, replaceExistingSources: true }
+      )
+    ).rejects.toThrow("Only documented active source knowledge can be replaced");
+
+    await expect(readFile(first.written[0]!.filePath, "utf8")).resolves.toContain(
+      "精炼知识必须通过 supersedes 更新"
+    );
+  });
+
   it("deprecates superseded active knowledge when a trusted replacement is captured", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-capture-supersedes-"));
     tempDirs.push(root);

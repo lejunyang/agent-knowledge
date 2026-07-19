@@ -81,6 +81,8 @@ agent-knowledge organize-inbox --approve "$MEMORY_ID" --apply
 9. 不要把可由 Agent 当场搜索到的普通代码结构、目录树、函数签名或已有 `AGENTS.md` 内容重复保存。
 10. 适合项目知识库的是稳定架构决策、跨模块隐含约束、项目特有业务语义、事故教训和验证 SOP。
 11. 用户明确提供/指定拉取的正式文档可使用 `source_authority: "documented"`、`actor_type: "owner"`、`capture_mode: "direct_material"`；confidence 至少 `0.8` 时可按用户要求直接 active。后台自动发现或客户转述不能使用这条放行路径。
+12. `type: source` 的原始证据必须先删除临时下载 URL，并遮蔽账号、验证码、密码、token、用户标识和其他个人信息；不应把“内部测试账号表”复制进长期知识。
+13. 同一外部文档更新或脱敏规则升级时，可使用 `capture-material --replace-source` 刷新同 ID 的 active documented source。该参数不能覆盖 semantic/procedural/profile/episodic；精炼知识变化必须新增版本并使用 `supersedes`。
 
 JSON 可以是单个对象，也可以是数组：
 
@@ -105,6 +107,15 @@ JSON 可以是单个对象，也可以是数组：
 
 ```bash
 agent-knowledge capture-material --input material.json --target active
+```
+
+刷新已导入且稳定映射到同一外部文档的 source：
+
+```bash
+agent-knowledge capture-material \
+  --input source-batch.json \
+  --target active \
+  --replace-source
 ```
 
 ## 分类建议

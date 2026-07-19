@@ -68,6 +68,17 @@ agent-knowledge write-candidate --input candidate.json
 agent-knowledge capture-material --input material.json --target active
 ```
 
+`type: source` 只保存经过治理的原始证据：导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、飞书用户标识和个人信息。上游文档内容变化或脱敏规则升级时，可以刷新稳定 ID 对应的来源证据：
+
+```bash
+agent-knowledge capture-material \
+  --input source-batch.json \
+  --target active \
+  --replace-source
+```
+
+`--replace-source` 只允许替换同 ID、`active`、`documented` 的 `type: source` 文档。它不能覆盖 semantic/procedural/profile/episodic；精炼知识发生变化时应新增版本并用 `supersedes` 保留历史。
+
 只有 owner 的受信直接材料才适合 `--target active`。外部材料、不确定内容或用户要求先审阅时使用 `--target inbox`。
 
 ## Hook、详细日志与 staging

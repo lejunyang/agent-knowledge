@@ -61,6 +61,7 @@ export type OrganizeInboxResult = {
 export type CaptureMaterialOptions = {
   target: "active" | "inbox";
   rebuild: boolean;
+  replaceExistingSources?: boolean;
 };
 
 export type CaptureMaterialResult = {
@@ -70,6 +71,7 @@ export type CaptureMaterialResult = {
     status: MemoryStatus;
     filePath: string;
     deduplicated?: boolean;
+    replaced?: boolean;
   }>;
   indexed?: number;
 };
@@ -405,16 +407,62 @@ export async function captureMaterial(
       const contentMatches = input.content
         ? existing.body === input.content.trimStart()
         : existing.body.includes(input.summary);
-      if (!contentMatches) {
+      if (contentMatches) {
+        written.push({
+          id: existing.frontmatter.id,
+          status: existing.frontmatter.status,
+          filePath: resolveWorkspacePath(rootDir, existing.filePath),
+          deduplicated: true
+        });
+        continue;
+      }
+      if (!options.replaceExistingSources) {
         throw new Error(
           `Knowledge with explicit ID already exists but content differs: ${input.id}`
         );
       }
+      // 原始证据会随上游文档或脱敏规则变化，允许显式刷新；精炼知识仍必须通过 supersedes 演进。
+      if (
+        options.target !== "active" ||
+        existing.frontmatter.type !== "source" ||
+        existing.frontmatter.status !== "active" ||
+        existing.frontmatter.source_authority !== "documented" ||
+        input.memory_type !== "source" ||
+        input.source_authority !== "documented"
+      ) {
+        throw new Error(
+          `Only documented active source knowledge can be replaced: ${input.id}`
+        );
+      }
+      const replacement = documentFromMaterialInput(input);
+      if (
+        replacement.frontmatter.status !== "active" ||
+        promotionBlockedReason(replacement)
+      ) {
+        throw new Error(
+          `Only documented active source knowledge can be replaced: ${input.id}`
+        );
+      }
+      const replacementDocument = KnowledgeDocumentSchema.parse({
+        ...replacement,
+        filePath: existing.filePath,
+        frontmatter: {
+          ...replacement.frontmatter,
+          created_at: existing.frontmatter.created_at,
+          valid_from: existing.frontmatter.valid_from
+        }
+      });
+      const existingPath = resolveWorkspacePath(rootDir, existing.filePath);
+      await writeFile(
+        existingPath,
+        serializeKnowledgeMarkdown(replacementDocument),
+        "utf8"
+      );
       written.push({
-        id: existing.frontmatter.id,
-        status: existing.frontmatter.status,
-        filePath: resolveWorkspacePath(rootDir, existing.filePath),
-        deduplicated: true
+        id: replacementDocument.frontmatter.id,
+        status: replacementDocument.frontmatter.status,
+        filePath: existingPath,
+        replaced: true
       });
       continue;
     }

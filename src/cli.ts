@@ -837,8 +837,15 @@ program
   .requiredOption("--input <file>", t("单个或多个候选对象的 JSON 文件", "JSON file containing one or more candidates"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--target <target>", t("active 或 inbox", "active or inbox"), "active")
+  .option("--replace-source", t("仅刷新同 ID 的 active documented source 原始证据", "replace only active documented source evidence with the same ID"), false)
   .option("--no-rebuild", t("写入后不重建索引", "skip index rebuild after writing material"))
-  .action(async (options: { input: string; root?: string; target: string; rebuild: boolean }) => {
+  .action(async (options: {
+    input: string;
+    root?: string;
+    target: string;
+    replaceSource: boolean;
+    rebuild: boolean;
+  }) => {
     if (options.target !== "active" && options.target !== "inbox") {
       throw new Error("--target must be either active or inbox");
     }
@@ -846,7 +853,8 @@ program
     const inputs = (Array.isArray(rawInput) ? rawInput : [rawInput]).map(applyCapturePolicyOverrides);
     const result = await captureMaterial(resolveCliRoot(options.root), inputs, {
       target: options.target,
-      rebuild: options.rebuild
+      rebuild: options.rebuild,
+      replaceExistingSources: options.replaceSource
     });
     console.log(JSON.stringify(result, null, 2));
   });

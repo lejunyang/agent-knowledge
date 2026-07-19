@@ -129,6 +129,17 @@ Hook 自动路径不加载 embedding 或 reranker。
 
 外部客户和 automatic session 只能生成 proposed observation，不能直接成为 active 事实。
 
+完整 `source` 导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、用户标识和个人信息。同一外部文档更新或脱敏规则升级时，可使用：
+
+```bash
+agent-knowledge capture-material \
+  --input source-batch.json \
+  --target active \
+  --replace-source
+```
+
+该参数只刷新同 ID、active、documented 的 source，不能覆盖精炼知识。
+
 Writer 应主动处理显式记忆、已验证可复用结果和 `AGENTS.md` 未覆盖的稳定项目/业务约束；不应记录一次性命令、普通源码结构或未验证推断。
 
 `knowledge/_inbox-skills` 中的 `SKILL.md` 使用 Skill frontmatter，不是 KnowledgeDocument；不会进入 index、embedding、catalog、graph 或同步。

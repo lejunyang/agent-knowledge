@@ -157,6 +157,8 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 
 一旦传 `--approve`，该次命令只处理列出的 ID；未知 ID 会在写文件前报错。
 
+用户明确指定拉取的正式文档可以先由 `knowledge-organizer` 拆成精炼知识，同时把经过治理的完整正文保存为 `type: source` 证据。source 导入前必须遮蔽测试账号、验证码、密码、token、用户标识和个人信息；同一外部文档更新或脱敏规则升级时，使用 `capture-material --replace-source` 刷新稳定 ID 对应的 active documented source。该参数不能覆盖精炼知识，semantic/procedural/profile/episodic 更新仍应新增版本并使用 `supersedes`。
+
 ## 主动记忆何时发生
 
 主动记忆不是“所有对话自动写入”：
