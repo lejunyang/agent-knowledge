@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -10,6 +10,11 @@ import {
   writeUserConfig
 } from "../src/core/config.js";
 import { runConfigurationWizard, type ConfigurationPrompter } from "../src/cli/configure.js";
+import {
+  getProjectConfigPaths,
+  loadEffectiveConfig,
+  mergeConfigSources
+} from "../src/core/projectConfig.js";
 
 let tempDirs: string[] = [];
 
@@ -83,6 +88,136 @@ describe("user configuration", () => {
         }
       })
     ).toThrow();
+  });
+
+  it("deep-merges user, project, and project-local config while replacing arrays", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-project-config-"));
+    tempDirs.push(root);
+    const userPath = path.join(root, "user.json");
+    const projectRoot = path.join(root, "repo");
+    await writeUserConfig(
+      userPath,
+      resolveUserConfig({
+        knowledgeRoot: "/global/knowledge",
+        identity: {
+          actorType: "owner",
+          visibilityScopes: ["private", "project", "team"]
+        },
+        embeddings: {
+          retrieval: "hybrid",
+          cacheDir: "/global/model-cache"
+        }
+      })
+    );
+    await writeFile(
+      path.join(projectRoot, ".agent-knowledge.json"),
+      `${JSON.stringify({
+        knowledgeRoot: "/project/knowledge",
+        identity: {
+          actorType: "agent",
+          visibilityScopes: ["project", "team"]
+        },
+        embeddings: {
+          graphDepth: 2
+        }
+      })}\n`,
+      { encoding: "utf8", flag: "w" }
+    ).catch(async () => {
+      const { mkdir } = await import("node:fs/promises");
+      await mkdir(projectRoot, { recursive: true });
+      await writeFile(
+        path.join(projectRoot, ".agent-knowledge.json"),
+        `${JSON.stringify({
+          knowledgeRoot: "/project/knowledge",
+          identity: {
+            actorType: "agent",
+            visibilityScopes: ["project", "team"]
+          },
+          embeddings: {
+            graphDepth: 2
+          }
+        })}\n`,
+        "utf8"
+      );
+    });
+    await writeFile(
+      path.join(projectRoot, ".agent-knowledge.local.json"),
+      `${JSON.stringify({
+        knowledgeRoot: "/project/local-knowledge",
+        embeddings: {
+          retrieval: "hybrid-graph",
+          allowRemoteModels: false
+        }
+      })}\n`,
+      "utf8"
+    );
+
+    const loaded = loadEffectiveConfig({
+      userConfigPath: userPath,
+      projectRoot,
+      environment: {
+        AGENT_KNOWLEDGE_ROOT: "/environment/knowledge",
+        AGENT_KNOWLEDGE_ACTOR_TYPE: "customer"
+      }
+    });
+
+    expect(loaded.config).toMatchObject({
+      knowledgeRoot: "/project/local-knowledge",
+      identity: {
+        actorType: "agent",
+        visibilityScopes: ["project", "team"]
+      },
+      embeddings: {
+        retrieval: "hybrid-graph",
+        graphDepth: 2,
+        cacheDir: "/global/model-cache",
+        allowRemoteModels: false
+      }
+    });
+    expect(loaded.sources.project).not.toBeNull();
+    expect(loaded.sources.projectLocal).not.toBeNull();
+    expect(loaded.sources.project!.path).toBe(
+      path.join(projectRoot, ".agent-knowledge.json")
+    );
+    expect(loaded.sources.projectLocal!.path).toBe(
+      path.join(projectRoot, ".agent-knowledge.local.json")
+    );
+    expect(loaded.sources.project!.exists).toBe(true);
+    expect(loaded.sources.projectLocal!.exists).toBe(true);
+
+    const projectEditorDefaults = loadEffectiveConfig({
+      userConfigPath: userPath,
+      projectRoot,
+      includeProjectLocal: false
+    });
+    expect(projectEditorDefaults.config.knowledgeRoot).toBe(
+      "/project/knowledge"
+    );
+    expect(projectEditorDefaults.config.embeddings.retrieval).toBe("hybrid");
+  });
+
+  it("uses environment below config files and can disable project discovery", () => {
+    expect(
+      mergeConfigSources(
+        { knowledgeRoot: "/environment", identity: { actorType: "customer" } },
+        { knowledgeRoot: "/user", identity: { captureMode: "verified_task" } },
+        { identity: { actorType: "agent" } },
+        { knowledgeRoot: "/local" }
+      )
+    ).toEqual({
+      knowledgeRoot: "/local",
+      identity: {
+        actorType: "agent",
+        captureMode: "verified_task"
+      }
+    });
+
+    const sources = getProjectConfigPaths(process.cwd(), {
+      AGENT_KNOWLEDGE_DISABLE_PROJECT_CONFIG: "1"
+    });
+    expect(sources.root).toBeNull();
+    expect(sources.project).toBeNull();
+    expect(sources.projectLocal).toBeNull();
   });
 
   it("runs the full wizard and stores credential environment variable names only", async () => {

@@ -75,7 +75,6 @@ import {
   installIntegration,
   listIntegrationProducts,
   uninstallIntegration,
-  loadUserConfig,
   writeCandidateMemory,
   type CandidateMemoryInput,
   type CalibrationCase,
@@ -87,6 +86,11 @@ import {
   type SupportedLocale
 } from "./index.js";
 import { getDefaultKnowledgeRoot } from "./core/paths.js";
+import {
+  loadEffectiveConfig,
+  PROJECT_CONFIG_FILE,
+  PROJECT_LOCAL_CONFIG_FILE
+} from "./core/projectConfig.js";
 import { getGitRuntimeContext, type GitRuntimeContext } from "./hooks/gitContext.js";
 import { hookContextJson } from "./hooks/hookOutput.js";
 import {
@@ -116,7 +120,10 @@ function readArgValue(name: string): string | undefined {
 const startupConfigPath = path.resolve(
   readArgValue("--config") ?? getDefaultUserConfigPath()
 );
-const startupConfig = loadUserConfig(startupConfigPath);
+const startupEffectiveConfig = loadEffectiveConfig({
+  userConfigPath: startupConfigPath
+});
+const startupConfig = startupEffectiveConfig.config;
 const locale: SupportedLocale = resolveLocale({
   explicit: readArgValue("--locale"),
   configured: startupConfig.locale
@@ -140,32 +147,21 @@ function resolveConfigPath(): string {
 
 /** 每次使用时重新加载用户配置，使同一长进程能读取刚由向导写入的设置。 */
 function userConfig(): UserConfig {
-  return loadUserConfig(resolveConfigPath());
+  return loadEffectiveConfig({
+    userConfigPath: resolveConfigPath()
+  }).config;
 }
 
-/** 区分“用户确实配置了值”和“仅使用 schema 默认值”，用于保留旧环境变量优先级。 */
-function hasUserConfigFile(): boolean {
-  return existsSync(resolveConfigPath());
-}
-
-/** 按显式参数、用户配置、兼容环境变量、内置默认值解析 workspace root。 */
+/** 按显式参数和生效分层配置解析 workspace root。 */
 function resolveCliRoot(root?: string): string {
-  return (
-    root ??
-    (hasUserConfigFile() ? userConfig().knowledgeRoot : undefined) ??
-    process.env.AGENT_KNOWLEDGE_ROOT ??
-    getDefaultKnowledgeRoot()
-  );
+  return root ?? userConfig().knowledgeRoot ?? getDefaultKnowledgeRoot();
 }
 
 /** 解析并校验 caller 可见范围，拒绝未知值进入后续权限判断。 */
 function resolveVisibilityScopes(explicit?: string[]): Array<"private" | "project" | "team"> {
   const values =
     explicit ??
-    (hasUserConfigFile() ? userConfig().identity.visibilityScopes : undefined) ??
-    process.env.AGENT_KNOWLEDGE_VISIBILITY_SCOPES?.split(",")
-      .map((value) => value.trim())
-      .filter(Boolean) ??
+    userConfig().identity.visibilityScopes ??
     ["private", "project", "team"];
   const allowed = new Set(["private", "project", "team"]);
   if (values.some((scope) => !allowed.has(scope))) {
@@ -180,8 +176,7 @@ function resolveSensitivityClearance(
 ): "public" | "internal" | "confidential" | "secret" {
   const value =
     explicit ??
-    (hasUserConfigFile() ? userConfig().identity.sensitivityClearance : undefined) ??
-    process.env.AGENT_KNOWLEDGE_SENSITIVITY_CLEARANCE ??
+    userConfig().identity.sensitivityClearance ??
     "internal";
   if (value !== "public" && value !== "internal" && value !== "confidential" && value !== "secret") {
     throw new Error("sensitivity clearance must be public, internal, confidential, or secret");
@@ -194,11 +189,9 @@ function resolveSensitivityClearance(
  * 只接受 schema 支持值；无效环境变量会被忽略，避免绕过候选治理枚举。
  */
 function applyCapturePolicyOverrides(input: CandidateMemoryInput): CandidateMemoryInput {
-  const configuredIdentity = hasUserConfigFile() ? userConfig().identity : undefined;
-  const actorType =
-    configuredIdentity?.actorType ?? process.env.AGENT_KNOWLEDGE_ACTOR_TYPE;
-  const captureMode =
-    configuredIdentity?.captureMode ?? process.env.AGENT_KNOWLEDGE_CAPTURE_MODE;
+  const configuredIdentity = userConfig().identity;
+  const actorType = configuredIdentity.actorType;
+  const captureMode = configuredIdentity.captureMode;
   return {
     ...input,
     ...(actorType === "owner" ||
@@ -252,14 +245,47 @@ async function readHookInput(): Promise<Record<string, unknown>> {
 program
   .command("configure")
   .description(t("交互式配置 Agent Knowledge 默认设置", "Interactively configure Agent Knowledge defaults"))
-  .action(async () => {
-    const configPath = resolveConfigPath();
+  .option(
+    "--scope <scope>",
+    t(
+      "写入 user、project 或 project-local 配置",
+      "write user, project, or project-local config"
+    ),
+    "user"
+  )
+  .action(async (options: { scope: string }) => {
+    if (
+      options.scope !== "user" &&
+      options.scope !== "project" &&
+      options.scope !== "project-local"
+    ) {
+      throw new Error(
+        t(
+          "--scope 必须是 user、project 或 project-local",
+          "--scope must be user, project, or project-local"
+        )
+      );
+    }
+    const effective = loadEffectiveConfig({
+      userConfigPath: resolveConfigPath(),
+      includeProject: options.scope !== "user",
+      includeProjectLocal: options.scope === "project-local"
+    });
+    const configPath =
+      options.scope === "user"
+        ? resolveConfigPath()
+        : path.join(
+            effective.projectRoot ?? process.cwd(),
+            options.scope === "project"
+              ? PROJECT_CONFIG_FILE
+              : PROJECT_LOCAL_CONFIG_FILE
+          );
     const prompter = new TerminalConfigurationPrompter();
     try {
       const configured = await runConfigurationWizard({
         configPath,
         prompter,
-        current: loadUserConfig(configPath),
+        current: effective.config,
         locale
       });
       console.log(t(`已保存 Agent Knowledge 配置：${configPath}`, `Saved Agent Knowledge configuration to ${configPath}`));
@@ -276,14 +302,26 @@ program
 
 const configCommand = program
   .command("config")
-  .description(t("查看当前用户配置", "Inspect the active user configuration"));
+  .description(t("查看当前生效配置", "Inspect the active configuration"));
 
 configCommand.command("path").action(() => {
   console.log(resolveConfigPath());
 });
 
 configCommand.command("show").action(() => {
-  console.log(JSON.stringify(loadUserConfig(resolveConfigPath()), null, 2));
+  console.log(JSON.stringify(userConfig(), null, 2));
+});
+
+configCommand.command("sources").action(() => {
+  console.log(
+    JSON.stringify(
+      loadEffectiveConfig({
+        userConfigPath: resolveConfigPath()
+      }).sources,
+      null,
+      2
+    )
+  );
 });
 
 const embeddingCommand = program

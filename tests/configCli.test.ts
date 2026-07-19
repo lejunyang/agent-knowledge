@@ -2,11 +2,13 @@ import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveUserConfig, writeUserConfig } from "../src/core/config.js";
 
 const execFileAsync = promisify(execFile);
+const tsxLoader = path.resolve("node_modules", "tsx", "dist", "loader.mjs");
 let tempDirs: string[] = [];
 
 afterEach(async () => {
@@ -15,9 +17,14 @@ afterEach(async () => {
 });
 
 async function runCli(args: string[], environment: NodeJS.ProcessEnv = {}): Promise<string> {
-  const result = await execFileAsync("node", ["--import", "tsx", "src/cli.ts", ...args], {
-    cwd: process.cwd(),
-    env: { ...process.env, ...environment }
+  const result = await execFileAsync("node", ["--import", tsxLoader, path.resolve("src/cli.ts"), ...args], {
+    cwd: environment.TEST_CWD ?? process.cwd(),
+    env: {
+      ...process.env,
+      AGENT_KNOWLEDGE_DISABLE_PROJECT_CONFIG: "1",
+      ...environment,
+      TEST_CWD: undefined
+    }
   });
   return result.stdout.trim();
 }
@@ -62,6 +69,76 @@ describe("CLI user configuration", () => {
 
     expect(printedPath).toBe(configPath);
     expect(printedConfig.integration.product).toBe("trae-cn");
+  });
+
+  it("loads project shared and local config above the selected user config", async () => {
+    const temp = await mkdtemp(path.join(tmpdir(), "agent-knowledge-project-config-cli-"));
+    tempDirs.push(temp);
+    const configPath = path.join(temp, "user.json");
+    const projectRoot = path.join(temp, "repo");
+    const nested = path.join(projectRoot, "nested");
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    await mkdir(nested, { recursive: true });
+    await execFileAsync("git", ["init"], { cwd: projectRoot });
+    writeUserConfig(
+      configPath,
+      resolveUserConfig({
+        knowledgeRoot: "/global",
+        embeddings: { retrieval: "lexical" }
+      })
+    );
+    await writeFile(
+      path.join(projectRoot, ".agent-knowledge.json"),
+      `${JSON.stringify({
+        knowledgeRoot: "/project",
+        embeddings: { retrieval: "hybrid" }
+      })}\n`,
+      "utf8"
+    );
+    await writeFile(
+      path.join(projectRoot, ".agent-knowledge.local.json"),
+      `${JSON.stringify({
+        knowledgeRoot: "/project-local",
+        embeddings: { graphDepth: 2 }
+      })}\n`,
+      "utf8"
+    );
+
+    const printedConfig = JSON.parse(
+      await runCli(["--config", configPath, "config", "show"], {
+        AGENT_KNOWLEDGE_DISABLE_PROJECT_CONFIG: "0",
+        TEST_CWD: nested
+      })
+    ) as {
+      knowledgeRoot: string;
+      embeddings: { retrieval: string; graphDepth: number };
+    };
+    const sources = JSON.parse(
+      await runCli(["--config", configPath, "config", "sources"], {
+        AGENT_KNOWLEDGE_DISABLE_PROJECT_CONFIG: "0",
+        TEST_CWD: nested
+      })
+    ) as {
+      project: { path: string; exists: boolean };
+      projectLocal: { path: string; exists: boolean };
+    };
+
+    expect(printedConfig.knowledgeRoot).toBe("/project-local");
+    expect(printedConfig.embeddings).toMatchObject({
+      retrieval: "hybrid",
+      graphDepth: 2
+    });
+    expect(sources.project).toEqual({
+      path: path.join(realpathSync(projectRoot), ".agent-knowledge.json"),
+      exists: true
+    });
+    expect(sources.projectLocal).toEqual({
+      path: path.join(
+        realpathSync(projectRoot),
+        ".agent-knowledge.local.json"
+      ),
+      exists: true
+    });
   });
 
   it("renders Chinese help by default and English help with a manual override", async () => {
