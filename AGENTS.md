@@ -171,6 +171,7 @@ src/cli.ts            命令行入口和各模块编排
 - `_inbox` / `_archive` 必须按路径硬排除，不能只依赖 status。
 - `_inbox-skills` 保存 Skill proposal 草稿，使用 Skill frontmatter 而不是 KnowledgeDocument schema；index、embedding、catalog、graph、list 和同步必须在解析前按路径硬排除。
 - embedding query 必须校验 manifest/profile，不能对不同模型、维度、pooling 或 prefix 的向量静默 cosine。
+- `type: source` 保存完整证据，不属于默认 query includeTypes，也不得进入 embedding 缓存；检索内容应由 organizer 拆成 semantic/procedural/episodic/profile。
 - Batch reranker 默认只在显式 `query --rerank` 或 reranked eval 中启用；Hook 热路径不得加载 cross-encoder。默认 pipeline 是融合 top 30 -> batch rerank -> threshold -> top 8。
 - Calibration 只能输出 dry-run 参数建议，不得自动改用户配置；目标函数必须优先惩罚 forbidden injection、abstention failure 和 not_useful feedback。
 - 共享同步默认不包含 `private` 或高于 `internal` 的知识；如修改默认策略，必须更新威胁模型和测试。

@@ -86,6 +86,41 @@ describe("embedding index", () => {
     expect(result.indexed).toBe(2);
   });
 
+  it("does not embed source-only evidence that cannot enter normal query results", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-embed-source-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    const sourceDir = path.join(root, "knowledge", "source", "documents");
+    await mkdir(sourceDir, { recursive: true });
+    const existing = await readFile(
+      path.join(
+        root,
+        "knowledge",
+        "semantic",
+        "frontend-lint",
+        "2026-07-05-vue-sfc-eslint-fallback.md"
+      ),
+      "utf8"
+    );
+    await writeFile(
+      path.join(sourceDir, "raw-source.md"),
+      existing
+        .replace("k_20260705_frontend_lint_vue_sfc", "k_20260719_source_raw")
+        .replace("type: semantic", "type: source")
+        .replace("title: Vue SFC lint 迁移约束", "title: Raw source evidence"),
+      "utf8"
+    );
+
+    const result = await embedKnowledgeIndex(root, {
+      provider: new DeterministicLocalEmbeddingProvider(16)
+    });
+
+    expect(result.indexed).toBe(2);
+    expect(readEmbeddingRecords(root).map((record) => record.id)).not.toContain(
+      "k_20260719_source_raw"
+    );
+  });
+
   it("reuses unchanged embeddings and only regenerates changed documents", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-embed-incremental-"));
     tempDirs.push(root);

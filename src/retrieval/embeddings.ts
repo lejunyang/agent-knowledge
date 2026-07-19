@@ -258,14 +258,22 @@ function parseJsonlRecords(text: string): EmbeddingJsonlRecord[] {
     .filter((record) => record.kind === "document" && Array.isArray(record.vector));
 }
 
-/** 只加载正式目录中的 active Markdown，并按路径硬排除 inbox/archive。 */
+/**
+ * 只加载正常 query 可返回的 active Markdown，并按路径硬排除审阅目录。
+ *
+ * `source` 保存完整证据但不在默认 includeTypes 中；为超长原文建向量会污染 dense topK，
+ * 因此语义召回应依赖 organizer 拆出的 semantic/procedural/episodic/profile 知识。
+ */
 async function loadActiveDocuments(rootDir: string): Promise<KnowledgeDocument[]> {
   const files = await discoverKnowledgeFiles(rootDir);
   const documents: KnowledgeDocument[] = [];
 
   for (const filePath of files) {
     const document = parseKnowledgeMarkdown(filePath, await readFile(resolveWorkspacePath(rootDir, filePath), "utf8"));
-    if (document.frontmatter.status === "active") {
+    if (
+      document.frontmatter.status === "active" &&
+      document.frontmatter.type !== "source"
+    ) {
       documents.push(document);
     }
   }
