@@ -35,6 +35,8 @@ agent-knowledge query \
 
 查询先执行 active、validity、visibility、sensitivity、project、type、domain/scenario 过滤，再排序。没有 domain/scenario 且 lexical 无可靠命中时，不会回退全表，避免无关知识污染上下文。
 
+普通 `query` 未显式传 `--project-id` 时，会自动发现当前 Git 工作树并使用稳定 project ID；从仓库任意子目录执行都能召回绑定当前项目的知识。显式传入 `--project-id` 时完全以参数为准，便于跨项目诊断；非 Git 目录或探测失败时使用空项目作用域，只召回未绑定项目的知识。
+
 基础查询仍保留 `related_knowledge` 的受控一跳扩展，但只允许 `depends_on`、`refines`、`supports`、`often_used_with`。完整多跳遍历请显式使用 graph 模式。
 
 ## Hybrid

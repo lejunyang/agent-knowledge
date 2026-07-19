@@ -168,6 +168,7 @@ src/cli.ts            命令行入口和各模块编排
 - 普通检索、Hook、`embed-index` 和 model status 禁止自动联网；`agent-knowledge embedding download` 是显式模型下载入口。模型缓存默认位于 `~/.cache/agent-knowledge/models`，可由用户配置覆盖。
 - `query` 不应在缺少 domain/scenario 且 FTS 无命中时回退全表；如修改 fallback 策略，必须更新 debug 输出和测试。
 - direct result 和 related expansion 必须执行相同的 validity、visibility、sensitivity、project 和 type 过滤。
+- 普通 `query` 未传 `--project-id` 时必须自动发现当前 Git 项目的稳定 ID；显式参数完全优先，非 Git 或探测失败回退空项目作用域。
 - `_inbox` / `_archive` 必须按路径硬排除，不能只依赖 status。
 - `_inbox-skills` 保存 Skill proposal 草稿，使用 Skill frontmatter 而不是 KnowledgeDocument schema；index、embedding、catalog、graph、list 和同步必须在解析前按路径硬排除。
 - embedding query 必须校验 manifest/profile，不能对不同模型、维度、pooling 或 prefix 的向量静默 cosine。

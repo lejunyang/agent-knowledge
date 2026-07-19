@@ -6,6 +6,8 @@ import { realpathSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveUserConfig, writeUserConfig } from "../src/core/config.js";
+import { captureMaterial } from "../src/memory/organizer.js";
+import { detectProject } from "../src/integration/projects.js";
 
 const execFileAsync = promisify(execFile);
 const tsxLoader = path.resolve("node_modules", "tsx", "dist", "loader.mjs");
@@ -163,5 +165,84 @@ describe("CLI user configuration", () => {
     expect(chinese).toContain("lexical、hybrid、graph 或 hybrid-graph");
     expect(chinese).toContain("--graph-depth");
     expect(chinese).toContain("--graph-decay");
+  });
+
+  it("automatically scopes query to the current Git project unless project IDs are explicit", async () => {
+    const temp = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-project-"));
+    tempDirs.push(temp);
+    const projectRoot = path.join(temp, "repo");
+    const nested = path.join(projectRoot, "packages", "app");
+    const knowledgeRoot = path.join(temp, "knowledge-root");
+    const configPath = path.join(temp, "missing-config.json");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(nested, { recursive: true });
+    await execFileAsync("git", ["init"], { cwd: projectRoot });
+    await execFileAsync(
+      "git",
+      ["remote", "add", "origin", "git@github.com:Example/Scoped-Repo.git"],
+      { cwd: projectRoot }
+    );
+    const project = await detectProject(knowledgeRoot, nested);
+    await captureMaterial(
+      knowledgeRoot,
+      [
+        {
+          id: "k_project_scoped_query_marker",
+          title: "项目专用检索标记",
+          aliases: ["alpha-scope-marker"],
+          memory_type: "semantic",
+          domain: "project/query-scope",
+          related_domains: [],
+          scenario: ["project-query"],
+          tags: ["project-scope"],
+          confidence: 0.95,
+          source_authority: "user_confirmed",
+          summary: "只有当前 Git 项目可以检索这条知识。",
+          evidence: ["test:project-scope"],
+          project_ids: [project.id]
+        }
+      ],
+      { target: "active", rebuild: true }
+    );
+
+    const automatic = JSON.parse(
+      await runCli(
+        [
+          "--config",
+          configPath,
+          "query",
+          "--root",
+          knowledgeRoot,
+          "--task",
+          "alpha-scope-marker",
+          "--retrieval",
+          "lexical"
+        ],
+        { TEST_CWD: nested }
+      )
+    ) as { relevant_facts: Array<{ id: string }> };
+    const explicitOther = JSON.parse(
+      await runCli(
+        [
+          "--config",
+          configPath,
+          "query",
+          "--root",
+          knowledgeRoot,
+          "--task",
+          "alpha-scope-marker",
+          "--retrieval",
+          "lexical",
+          "--project-id",
+          "project_other"
+        ],
+        { TEST_CWD: nested }
+      )
+    ) as { relevant_facts: Array<{ id: string }> };
+
+    expect(automatic.relevant_facts.map((item) => item.id)).toContain(
+      "k_project_scoped_query_marker"
+    );
+    expect(explicitOther.relevant_facts).toEqual([]);
   });
 });

@@ -187,6 +187,29 @@ function resolveSensitivityClearance(
 }
 
 /**
+ * 解析普通 query 的项目作用域。
+ *
+ * 显式 `--project-id` 完全优先，便于跨项目诊断和自动化测试；未显式指定时才从当前 Git
+ * 工作树注册稳定 project ID。Git 不可用或目录不在仓库中时回退空数组，保持全局知识查询兼容。
+ */
+async function resolveQueryProjectIds(
+  rootDir: string,
+  explicitProjectIds?: string[]
+): Promise<string[]> {
+  if (explicitProjectIds !== undefined) {
+    return explicitProjectIds;
+  }
+  const runtimeContext = getGitRuntimeContext();
+  if (!runtimeContext.isGit) {
+    return [];
+  }
+  const detected = await detectProject(rootDir, runtimeContext.cwd).catch(
+    () => undefined
+  );
+  return detected ? [detected.id] : [];
+}
+
+/**
  * 用配置或兼容环境变量覆盖 candidate 的 actor/capture policy。
  * 只接受 schema 支持值；无效环境变量会被忽略，避免绕过候选治理枚举。
  */
@@ -676,6 +699,8 @@ program
     }
     const visibilityScopes = resolveVisibilityScopes(options.visibility);
     const sensitivityClearance = resolveSensitivityClearance(options.sensitivityClearance);
+    const root = resolveCliRoot(options.root);
+    const projectIds = await resolveQueryProjectIds(root, options.projectId);
     const request = MemoryQueryRequestSchema.parse({
       task: options.task,
       agentRole: options.agentRole,
@@ -683,9 +708,8 @@ program
       scenarios: options.scenario ?? [],
       visibilityScopes,
       sensitivityClearance,
-      projectIds: options.projectId ?? []
+      projectIds
     });
-    const root = resolveCliRoot(options.root);
     const embeddingProvider = createEmbeddingProvider({
       provider: providerName,
       profile:
