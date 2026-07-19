@@ -266,34 +266,36 @@ Nomic v1.5 官方语言为英文。它比 MiniLM 有更长上下文、Matryoshka
 
 ## 建议实施顺序
 
+截至 2026-07-19，以下四阶段已全部实现。每项后的证据是对应命令、文件或测试。
+
 ### 阶段一：先建立可信基线
 
-1. 扩展 eval schema：expected rank、relevance grade、forbidden、abstain、语言、domain。
-2. 加入当前 17 条知识的 hard-negative query，以及无答案 query。
-3. 输出 Recall@1/3/5、MRR、nDCG、false injection rate、latency 和 packet tokens。
-4. CI 使用 deterministic provider 做协议测试；真实模型 eval 作为本地或定时任务。
+1. [x] 扩展 eval schema：expected rank、relevance grade、forbidden、abstain、语言、domain。证据：`src/retrieval/eval.ts`、`tests/eval.test.ts`。
+2. [x] 加入 17 条 active 主题、近主题 hard-negative、cross-language、temporal 和无答案 query。证据：`eval/cases/retrieval-complete.yaml`。
+3. [x] 输出 Recall@1/3/5、MRR、nDCG、false injection rate、latency 和 packet tokens。证据：`agent-knowledge eval --fixture eval/cases/retrieval-complete.yaml`。
+4. [x] CI 使用 deterministic provider；真实模型支持 lexical/hybrid/reranked pipeline，可由本地或定时任务运行。证据：`--pipeline lexical|hybrid|reranked`。
 
 ### 阶段二：修 P0
 
-1. inbox/validity/sensitivity/token budget。
-2. embedding manifest 与 profile。
-3. 保留真实 dense score。
-4. CJK lexical index。
-5. RRF 融合与完整 debug。
+1. [x] inbox/validity/sensitivity/token budget。
+2. [x] embedding manifest 与 profile。
+3. [x] 保留真实 dense score。
+4. [x] CJK lexical index。
+5. [x] RRF 融合与完整 debug。
 
 ### 阶段三：升级默认模型和 rerank
 
-1. 默认 profile 切到 E5-small q8。
-2. 提供 BGE-small-zh profile。
-3. 评估 top 30 -> reranker -> top 8。
-4. 用反馈与 hard negatives 调 threshold 和权重。
+1. [x] 默认 profile 切到 E5-small q8。
+2. [x] 提供 BGE-small-zh profile。
+3. [x] 实现融合 top 30 -> BGE cross-encoder batch reranker -> threshold -> top 8。证据：`query --rerank`、`tests/reranker.test.ts`。
+4. [x] 使用 hard-negative、forbidden、abstention 和 usefulness feedback 做 threshold/权重 grid search。证据：`agent-knowledge eval-calibrate`、`tests/calibration.test.ts`。
 
 ### 阶段四：自动沉淀与时间知识
 
-1. 引入 Hivemind 风格的 watermark/lock/background worker，但只写 staging。
-2. LangMem/Mem0 风格 dedupe、consolidate、update proposal。
-3. Graphiti 风格 episode provenance 和 temporal invalidation。
-4. 将稳定、重复成功的 procedural memory 提议为 Skill，保持人工审阅。
+1. [x] 引入 watermark/lock/bounded run/watch worker，只写 staging/proposal。证据：`maintenance run/watch`、`tests/maintenance.test.ts`。
+2. [x] 生成 duplicate、consolidation、update、conflict proposal。
+3. [x] 支持结构化 episode provenance；`supersedes` 激活时设置旧知识 deprecated/valid_until。
+4. [x] 至少 3 个独立 episode、可信来源、正反馈且无冲突时生成 Skill proposal；只输出草稿，不自动写入或安装 Skill。
 
 ## 参考
 

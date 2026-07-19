@@ -17,7 +17,13 @@ import { KnowledgeDocumentSchema } from "../core/schema.js";
 import { serializeKnowledgeMarkdown } from "../storage/markdown.js";
 import { resolveWorkspacePath } from "../core/paths.js";
 import { buildContextPacket, estimateContextPacketTokens } from "./contextPacket.js";
-import { queryMemories } from "./query.js";
+import {
+  queryMemories,
+  queryMemoriesHybridWithDebug,
+  queryMemoriesRerankedWithDebug
+} from "./query.js";
+import type { EmbeddingProvider } from "./embeddings.js";
+import type { BatchCandidateReranker } from "./reranker.js";
 
 export type EvalCase = {
   task: string;
@@ -70,6 +76,23 @@ export type EvalSuiteResult = {
   };
   results: EvalResult[];
 };
+
+export type EvalPipelineOptions =
+  | { pipeline?: "lexical" }
+  | {
+      pipeline: "hybrid";
+      embeddingProvider: EmbeddingProvider;
+      embeddingTopK?: number;
+    }
+  | {
+      pipeline: "reranked";
+      embeddingProvider: EmbeddingProvider;
+      batchReranker: BatchCandidateReranker;
+      embeddingTopK?: number;
+      candidateLimit?: number;
+      resultLimit?: number;
+      minScore?: number;
+    };
 
 const EvalCaseSchema = z.object({
   task: z.string().min(1),
@@ -229,11 +252,15 @@ function normalizedDiscountedCumulativeGain(matchedIds: string[], grades: Record
  *
  * 这里复用真实 query pipeline，而不是 mock 检索结果，确保评估覆盖实际索引和过滤逻辑。
  */
-export async function runEvalCase(rootDir: string, rawEvalCase: EvalCase): Promise<EvalResult> {
+export async function runEvalCase(
+  rootDir: string,
+  rawEvalCase: EvalCase,
+  pipelineOptions: EvalPipelineOptions = {}
+): Promise<EvalResult> {
   const evalCase = EvalCaseSchema.parse(rawEvalCase);
   const startedAt = performance.now();
   const now = evalCase.now ?? new Date().toISOString().slice(0, 10);
-  const ranked = queryMemories(rootDir, {
+  const request = {
     task: evalCase.task,
     agentRole: "main",
     domains: evalCase.domains,
@@ -242,7 +269,32 @@ export async function runEvalCase(rootDir: string, rawEvalCase: EvalCase): Promi
     maxTokens: 4500,
     includeTypes: ["profile", "semantic", "episodic", "procedural"],
     now
-  });
+  };
+  let ranked;
+  if (pipelineOptions.pipeline === "hybrid") {
+    ranked = (
+      await queryMemoriesHybridWithDebug(rootDir, request, {
+        embeddingProvider: pipelineOptions.embeddingProvider,
+        embeddingTopK: pipelineOptions.embeddingTopK
+      })
+    ).ranked;
+  } else if (pipelineOptions.pipeline === "reranked") {
+    const baseResult = await queryMemoriesHybridWithDebug(rootDir, request, {
+      embeddingProvider: pipelineOptions.embeddingProvider,
+      embeddingTopK: pipelineOptions.embeddingTopK
+    });
+    ranked = (
+      await queryMemoriesRerankedWithDebug(rootDir, request, {
+        baseResult,
+        batchReranker: pipelineOptions.batchReranker,
+        candidateLimit: pipelineOptions.candidateLimit,
+        resultLimit: pipelineOptions.resultLimit,
+        minScore: pipelineOptions.minScore
+      })
+    ).ranked;
+  } else {
+    ranked = queryMemories(rootDir, request);
+  }
   const packet = buildContextPacket({
     request: {
       task: evalCase.task,
@@ -314,11 +366,15 @@ function average(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-export async function runEvalSuite(rootDir: string, suite: EvalSuite): Promise<EvalSuiteResult> {
+export async function runEvalSuite(
+  rootDir: string,
+  suite: EvalSuite,
+  pipelineOptions: EvalPipelineOptions = {}
+): Promise<EvalSuiteResult> {
   const validated = EvalSuiteSchema.parse(suite);
   const results: EvalResult[] = [];
   for (const evalCase of validated.cases) {
-    results.push(await runEvalCase(rootDir, evalCase));
+    results.push(await runEvalCase(rootDir, evalCase, pipelineOptions));
   }
 
   const answerable = validated.cases

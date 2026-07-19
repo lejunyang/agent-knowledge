@@ -43,6 +43,8 @@ Embedding manifest 会校验 model、revision、dtype、dimensions、pooling 和
 agent-knowledge query --task "当前任务" --debug
 agent-knowledge eval --input eval/cases/retrieval-baseline.yaml
 agent-knowledge eval --fixture eval/cases/retrieval-complete.yaml --root /tmp/agent-knowledge-eval
+agent-knowledge eval --fixture eval/cases/retrieval-complete.yaml --pipeline hybrid --root /tmp/agent-knowledge-eval
+agent-knowledge eval --fixture eval/cases/retrieval-complete.yaml --pipeline reranked --root /tmp/agent-knowledge-eval
 agent-knowledge eval-calibrate --input calibration-observations.json
 ```
 

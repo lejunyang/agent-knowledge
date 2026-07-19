@@ -365,7 +365,7 @@ program
   .action(async (options: { root?: string }) => {
     const root = resolveCliRoot(options.root);
     await initKnowledgeWorkspace(root);
-    console.log(`Initialized knowledge workspace at ${root}`);
+    console.log(t(`已初始化知识库：${root}`, `Initialized knowledge workspace at ${root}`));
   });
 
 program
@@ -415,8 +415,9 @@ program
   .description(t("运行 YAML 检索评测集", "Run a retrieval eval suite from YAML"))
   .option("--input <file>", t("包含单个 case 或 cases 数组的评测 YAML", "eval YAML containing one case or a cases array"))
   .option("--fixture <file>", t("可选：包含文档和 cases 的完整评测 corpus YAML", "optional corpus YAML containing documents and cases"))
+  .option("--pipeline <pipeline>", t("评测 pipeline：lexical、hybrid、reranked", "eval pipeline: lexical, hybrid, or reranked"), "lexical")
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
-  .action(async (options: { input?: string; fixture?: string; root?: string }) => {
+  .action(async (options: { input?: string; fixture?: string; pipeline: string; root?: string }) => {
     if (!options.input && !options.fixture) {
       throw new Error(t("必须提供 --input 或 --fixture", "Provide --input or --fixture"));
     }
@@ -428,7 +429,56 @@ program
     const suite = options.fixture
       ? { cases: (await loadEvalCorpus(options.fixture)).cases }
       : await loadEvalSuite(options.input!);
-    console.log(JSON.stringify(await runEvalSuite(root, suite), null, 2));
+    const configuredEmbeddings = userConfig().embeddings;
+    if (options.pipeline === "lexical") {
+      console.log(JSON.stringify(await runEvalSuite(root, suite, { pipeline: "lexical" }), null, 2));
+      return;
+    }
+    const embeddingProvider = createEmbeddingProvider({
+      provider: configuredEmbeddings.provider,
+      profile: configuredEmbeddings.profile,
+      model: configuredEmbeddings.model ?? undefined,
+      allowRemoteModels: false
+    });
+    if (options.pipeline === "hybrid") {
+      console.log(
+        JSON.stringify(
+          await runEvalSuite(root, suite, {
+            pipeline: "hybrid",
+            embeddingProvider,
+            embeddingTopK: configuredEmbeddings.embeddingTopK
+          }),
+          null,
+          2
+        )
+      );
+      return;
+    }
+    if (options.pipeline === "reranked") {
+      console.log(
+        JSON.stringify(
+          await runEvalSuite(root, suite, {
+            pipeline: "reranked",
+            embeddingProvider,
+            batchReranker: new TransformersBatchReranker({
+              model:
+                configuredEmbeddings.rerankerModel ??
+                "Xenova/bge-reranker-large",
+              cacheDir: configuredEmbeddings.cacheDir,
+              localFilesOnly: true
+            }),
+            embeddingTopK: configuredEmbeddings.embeddingTopK,
+            candidateLimit: configuredEmbeddings.rerankerCandidateLimit,
+            resultLimit: configuredEmbeddings.rerankerResultLimit,
+            minScore: configuredEmbeddings.rerankerMinScore
+          }),
+          null,
+          2
+        )
+      );
+      return;
+    }
+    throw new Error(t("未知评测 pipeline", "Unknown eval pipeline"));
   });
 
 program
@@ -460,12 +510,12 @@ program
 program
   .command("suggest-aliases")
   .description(t("根据 Embedding、日志和 Markdown 生成别名建议（dry-run）", "Dry-run alias suggestions using embeddings, logs, and Markdown docs"))
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--provider <provider>", "transformers or local; defaults to user config")
-  .option("--model <model>", "Transformers.js model id or local model path")
-  .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
-  .option("--max <count>", "max suggestions per memory", "5")
-  .option("--min-score <score>", "minimum cosine score", "0.35")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--provider <provider>", t("transformers 或 local；默认读取用户配置", "transformers or local; defaults to user config"))
+  .option("--model <model>", t("Transformers.js 模型 ID 或本地路径", "Transformers.js model id or local model path"))
+  .option("--allow-remote-models", t("允许远程下载模型", "allow remote model downloads"), false)
+  .option("--max <count>", t("每条知识的最大建议数", "max suggestions per memory"), "5")
+  .option("--min-score <score>", t("最小 cosine 分数", "minimum cosine score"), "0.35")
   .action(
     async (options: {
       root?: string;
@@ -504,16 +554,16 @@ program
   .option("--scenario <scenario...>", t("场景过滤", "scenarios"))
   .option("--visibility <scope...>", t("允许的可见范围：private、project、team", "allowed visibility scopes: private, project, team"))
   .option("--sensitivity-clearance <level>", t("敏感级别权限：public、internal、confidential、secret", "public, internal, confidential, or secret"))
-  .option("--project-id <id...>", "allowed project IDs")
-  .option("--agent-role <role>", "agent role", "main")
+  .option("--project-id <id...>", t("允许的项目 ID", "allowed project IDs"))
+  .option("--agent-role <role>", t("Agent 角色", "agent role"), "main")
   .option("--debug", t("在 JSON 中包含检索调试信息", "include retrieval debug details in JSON output"), false)
   .option("--retrieval <mode>", t("lexical 或 hybrid；默认读取用户配置", "lexical or hybrid; defaults to user config"))
-  .option("--provider <provider>", "embedding provider for hybrid retrieval: transformers or local")
-  .option("--profile <profile>", "embedding profile: multilingual-e5-small or bge-small-zh-v1.5")
-  .option("--model <model>", "Transformers.js model id or local model path for hybrid retrieval")
-  .option("--embedding-top-k <count>", "embedding topK for hybrid retrieval; defaults to user config")
+  .option("--provider <provider>", t("混合检索的 embedding provider", "embedding provider for hybrid retrieval"))
+  .option("--profile <profile>", t("Embedding profile", "embedding profile"))
+  .option("--model <model>", t("混合检索模型 ID 或本地路径", "model id or local path for hybrid retrieval"))
+  .option("--embedding-top-k <count>", t("混合检索 embedding topK", "embedding topK for hybrid retrieval"))
   .option("--rerank", t("使用本地 cross-encoder 批量重排", "use local cross-encoder batch reranking"), false)
-  .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
+  .option("--allow-remote-models", t("允许远程下载模型", "allow remote model downloads"), false)
   .action(async (options: {
     task: string;
     root?: string;
@@ -594,12 +644,12 @@ program
 program
   .command("feedback")
   .description(t("记录检索知识是否有用，不修改 Markdown 事实", "Log whether a retrieved memory was useful without modifying Markdown facts"))
-  .requiredOption("--memory-id <id>", "knowledge id shown in query output")
-  .requiredOption("--usefulness <value>", "one of: useful, not_useful, neutral")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--query-run-id <id>", "debug.queryRunId from a prior query")
-  .option("--task <task>", "short task text associated with the feedback")
-  .option("--note <note>", "optional feedback note, max 500 characters")
+  .requiredOption("--memory-id <id>", t("查询输出中的知识 ID", "knowledge id shown in query output"))
+  .requiredOption("--usefulness <value>", t("useful、not_useful 或 neutral", "useful, not_useful, or neutral"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--query-run-id <id>", t("之前查询的 debug.queryRunId", "debug.queryRunId from a prior query"))
+  .option("--task <task>", t("反馈关联的简短任务文本", "short task text associated with the feedback"))
+  .option("--note <note>", t("可选备注，最多 500 字符", "optional feedback note, max 500 characters"))
   .action(
     (options: {
       memoryId: string;
@@ -623,8 +673,8 @@ program
 program
   .command("catalog")
   .description(t("生成知识目录并可选刷新 knowledge/_catalog.md", "Build a knowledge catalog and optionally refresh knowledge/_catalog.md"))
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--no-write", "print catalog JSON without rewriting knowledge/_catalog.md")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--no-write", t("只输出 JSON，不重写 knowledge/_catalog.md", "print JSON without rewriting knowledge/_catalog.md"))
   .action(async (options: { root?: string; write: boolean }) => {
     const result = await catalogKnowledge(resolveCliRoot(options.root), { write: options.write });
     console.log(JSON.stringify(result, null, 2));
@@ -632,8 +682,8 @@ program
 
 program
   .command("write-candidate")
-  .requiredOption("--input <file>", "candidate JSON file")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .requiredOption("--input <file>", t("候选 JSON 文件", "candidate JSON file"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { input: string; root?: string }) => {
     const input = JSON.parse(await readFile(options.input, "utf8")) as CandidateMemoryInput;
     const result = await writeCandidateMemory(resolveCliRoot(options.root), applyCapturePolicyOverrides(input));
@@ -643,7 +693,7 @@ program
 program
   .command("list")
   .description(t("汇总知识文件、状态、领域和 inbox", "Summarize knowledge files, statuses, domains, and inbox items"))
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { root?: string }) => {
     const result = await listKnowledge(resolveCliRoot(options.root));
     console.log(JSON.stringify(result, null, 2));
@@ -652,9 +702,9 @@ program
 program
   .command("organize-inbox")
   .description(t("预览或应用 inbox 知识晋升", "Plan or apply promotion of inbox Markdown into active directories"))
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--apply", "move files and activate them; defaults to dry-run", false)
-  .option("--no-rebuild", "skip index rebuild after applying changes")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--apply", t("移动并激活文件；默认 dry-run", "move and activate files; defaults to dry-run"), false)
+  .option("--no-rebuild", t("应用后不重建索引", "skip index rebuild after applying changes"))
   .action(async (options: { root?: string; apply: boolean; rebuild: boolean }) => {
     const result = await organizeInbox(resolveCliRoot(options.root), {
       apply: options.apply,
@@ -666,10 +716,10 @@ program
 program
   .command("capture-material")
   .description(t("把用户材料写入 active 知识或 inbox", "Write user-provided material into active knowledge or inbox"))
-  .requiredOption("--input <file>", "JSON file containing one candidate object or an array of candidates")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--target <target>", "active or inbox", "active")
-  .option("--no-rebuild", "skip index rebuild after writing material")
+  .requiredOption("--input <file>", t("单个或多个候选对象的 JSON 文件", "JSON file containing one or more candidates"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--target <target>", t("active 或 inbox", "active or inbox"), "active")
+  .option("--no-rebuild", t("写入后不重建索引", "skip index rebuild after writing material"))
   .action(async (options: { input: string; root?: string; target: string; rebuild: boolean }) => {
     if (options.target !== "active" && options.target !== "inbox") {
       throw new Error("--target must be either active or inbox");
@@ -702,8 +752,8 @@ function configuredSyncPolicy(config: UserConfig["sync"]): {
 sync
   .command("run")
   .description(t("按用户配置执行一次同步", "Run one synchronization using the user config"))
-  .option("--root <dir>", "workspace root override")
-  .option("--json", "emit the full JSON result", false)
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--json", t("输出完整 JSON", "emit the full JSON result"), false)
   .action(async (options: { root?: string; json: boolean }) => {
     const configuredSync = userConfig().sync;
     const backend = createConfiguredSyncBackend(configuredSync);
@@ -726,8 +776,8 @@ sync
 sync
   .command("watch")
   .description(t("立即同步并按配置间隔持续运行", "Run synchronization immediately and repeat at a configured interval"))
-  .option("--root <dir>", "workspace root override")
-  .option("--interval-minutes <minutes>", "override the configured sync interval")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--interval-minutes <minutes>", t("覆盖配置的同步间隔", "override the configured sync interval"))
   .action(async (options: { root?: string; intervalMinutes?: string }) => {
     const configuredSync = userConfig().sync;
     const intervalMinutes = options.intervalMinutes
@@ -763,12 +813,12 @@ sync
 
 sync
   .command("webdav")
-  .requiredOption("--url <url>", "WebDAV collection URL")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--username <username>", "WebDAV username; defaults to WEBDAV_USERNAME")
-  .option("--password-env <name>", "environment variable containing WebDAV password", "WEBDAV_PASSWORD")
-  .option("--visibility <scope...>", "visibility scopes to sync", ["project", "team"])
-  .option("--sensitivity-clearance <level>", "maximum sensitivity to sync", "internal")
+  .requiredOption("--url <url>", t("WebDAV 集合 URL", "WebDAV collection URL"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--username <username>", t("WebDAV 用户名", "WebDAV username"))
+  .option("--password-env <name>", t("保存 WebDAV 密码的环境变量名", "environment variable containing WebDAV password"), "WEBDAV_PASSWORD")
+  .option("--visibility <scope...>", t("同步可见范围", "visibility scopes to sync"), ["project", "team"])
+  .option("--sensitivity-clearance <level>", t("同步最高敏感级别", "maximum sensitivity to sync"), "internal")
   .action(
     async (options: {
       url: string;
@@ -798,14 +848,14 @@ sync
 
 sync
   .command("s3")
-  .requiredOption("--bucket <bucket>", "S3 bucket")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--region <region>", "AWS region; defaults to AWS_REGION or us-east-1")
-  .option("--prefix <prefix>", "object prefix", "")
-  .option("--endpoint <url>", "S3-compatible endpoint")
-  .option("--force-path-style", "use path-style bucket addressing", false)
-  .option("--visibility <scope...>", "visibility scopes to sync", ["project", "team"])
-  .option("--sensitivity-clearance <level>", "maximum sensitivity to sync", "internal")
+  .requiredOption("--bucket <bucket>", t("S3 bucket", "S3 bucket"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--region <region>", t("AWS region", "AWS region"), "us-east-1")
+  .option("--prefix <prefix>", t("对象前缀", "object prefix"), "")
+  .option("--endpoint <url>", t("S3 兼容 endpoint", "S3-compatible endpoint"))
+  .option("--force-path-style", t("使用 path-style bucket 寻址", "use path-style bucket addressing"), false)
+  .option("--visibility <scope...>", t("同步可见范围", "visibility scopes to sync"), ["project", "team"])
+  .option("--sensitivity-clearance <level>", t("同步最高敏感级别", "maximum sensitivity to sync"), "internal")
   .action(
     async (options: {
       bucket: string;
@@ -852,21 +902,21 @@ sync
 
 program
   .command("staging")
-  .description("Inspect and drain proactive-memory staging events");
+  .description(t("查看和消费主动记忆 staging 事件", "Inspect and drain proactive-memory staging events"));
 
 const staging = program.commands.find((command) => command.name() === "staging")!;
 
 staging
   .command("status")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { root?: string }) => {
     console.log(JSON.stringify(await getStagingStatus(resolveCliRoot(options.root)), null, 2));
   });
 
 staging
   .command("drain")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--limit <count>", "maximum events to consume", "100")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--limit <count>", t("最大消费事件数", "maximum events to consume"), "100")
   .action(async (options: { root?: string; limit: string }) => {
     console.log(
       JSON.stringify(
@@ -938,8 +988,8 @@ const project = program.commands.find((command) => command.name() === "project")
 
 project
   .command("detect")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--cwd <dir>", "directory to inspect", process.cwd())
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--cwd <dir>", t("要检查的目录", "directory to inspect"), process.cwd())
   .action(async (options: { root?: string; cwd: string }) => {
     console.log(JSON.stringify(await detectProject(resolveCliRoot(options.root), options.cwd), null, 2));
   });
@@ -959,13 +1009,13 @@ integration
 
 integration
   .command("install")
-  .option("--product <product>", "trae, trae-cn, or claude-code")
-  .option("--scope <scope>", "user or project")
-  .option("--components <components>", "comma-separated hooks,agents,skills,plugin-bundle")
-  .option("--target-dir <dir>", "override product config root; primarily for project installs and testing")
-  .option("--mode <mode>", "merge or overwrite")
-  .option("--overwrite", "replace target files and symlinks instead of merging", false)
-  .option("--debug", "emit the full JSON result", false)
+  .option("--product <product>", t("trae、trae-cn 或 claude-code", "trae, trae-cn, or claude-code"))
+  .option("--scope <scope>", t("user 或 project", "user or project"))
+  .option("--components <components>", t("逗号分隔的 hooks,agents,skills,plugin-bundle", "comma-separated hooks,agents,skills,plugin-bundle"))
+  .option("--target-dir <dir>", t("覆盖产品配置根目录", "override product config root"))
+  .option("--mode <mode>", t("merge 或 overwrite", "merge or overwrite"))
+  .option("--overwrite", t("覆盖目标文件和 symlink", "replace target files and symlinks"), false)
+  .option("--debug", t("输出完整 JSON", "emit the full JSON result"), false)
   .action(
     async (options: {
       product?: string;
@@ -1052,9 +1102,9 @@ integration
 
 integration
   .command("uninstall")
-  .requiredOption("--product <product>", "trae or claude-code")
-  .option("--scope <scope>", "user or project", "user")
-  .option("--target-dir <dir>", "override product config root")
+  .requiredOption("--product <product>", t("trae、trae-cn 或 claude-code", "trae, trae-cn, or claude-code"))
+  .option("--scope <scope>", t("user 或 project", "user or project"), "user")
+  .option("--target-dir <dir>", t("覆盖产品配置根目录", "override product config root"))
   .action(async (options: { product: string; scope: string; targetDir?: string }) => {
     if (
       options.product !== "trae" &&
@@ -1081,9 +1131,9 @@ integration
 
 integration
   .command("doctor")
-  .requiredOption("--product <product>", "trae or claude-code")
-  .option("--scope <scope>", "user or project", "user")
-  .option("--target-dir <dir>", "override product config root")
+  .requiredOption("--product <product>", t("trae、trae-cn 或 claude-code", "trae, trae-cn, or claude-code"))
+  .option("--scope <scope>", t("user 或 project", "user or project"), "user")
+  .option("--target-dir <dir>", t("覆盖产品配置根目录", "override product config root"))
   .action(async (options: { product: string; scope: string; targetDir?: string }) => {
     if (
       options.product !== "trae" &&
@@ -1110,19 +1160,19 @@ integration
 
 program
   .command("install-global")
-  .description("Build the local package in the current directory and install it globally with npm")
-  .option("--package-dir <dir>", "local package directory", process.cwd())
-  .option("--skip-build", "skip npm run build before global installation", false)
+  .description(t("构建并用 npm 全局安装当前包", "Build and install the local package globally with npm"))
+  .option("--package-dir <dir>", t("本地包目录", "local package directory"), process.cwd())
+  .option("--skip-build", t("全局安装前跳过构建", "skip build before global installation"), false)
   .action((options: { packageDir: string; skipBuild: boolean }) => {
     const packageDir = path.resolve(options.packageDir);
     if (!options.skipBuild) {
       execFileSync("npm", ["run", "build"], { cwd: packageDir, stdio: "inherit" });
     }
     execFileSync("npm", ["install", "-g", packageDir], { stdio: "inherit" });
-    console.log(`Installed global command from ${packageDir}`);
+    console.log(t(`已从 ${packageDir} 全局安装命令`, `Installed global command from ${packageDir}`));
   });
 
-const hook = program.command("hook").description("Commands intended to be called from TRAE hooks.json templates");
+const hook = program.command("hook").description(t("供 TRAE hooks.json 调用的内部命令", "Internal commands called by TRAE hooks.json"));
 
 async function stageCurrentHook(root: string): Promise<void> {
   const input = await readHookInput();
@@ -1150,8 +1200,8 @@ async function stageCurrentHook(root: string): Promise<void> {
 
 hook
   .command("stage-event")
-  .description("Stage a bounded, redacted lifecycle event for later memory maintenance")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .description(t("记录有界、脱敏的生命周期事件", "Stage a bounded, redacted lifecycle event"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { root?: string }) => {
     const root = resolveCliRoot(options.root);
     await initKnowledgeWorkspace(root);
@@ -1160,8 +1210,8 @@ hook
 
 hook
   .command("session-start")
-  .description("Initialize AGENT_KNOWLEDGE_ROOT for the TRAE session and provide startup context")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .description(t("初始化 TRAE 会话的知识库并提供启动上下文", "Initialize the TRAE session knowledge root"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { root?: string }) => {
     const root = resolveCliRoot(options.root);
     const runtimeContext = getGitRuntimeContext();
@@ -1180,14 +1230,17 @@ hook
     });
     hookContext(
       "SessionStart",
-      `Agent Knowledge 已启用。默认知识库 workspace root：${root}。知识文件位于 ${root}/knowledge，索引位于 ${root}/.memory/index.sqlite。${detectedProject ? ` 当前 project ID：${detectedProject.id}。` : ""}\n\nHook runtime context:\n\n${formatRuntimeContext(runtimeContext)}`
+      t(
+        `Agent Knowledge 已启用。知识库：${root}。${detectedProject ? `项目 ID：${detectedProject.id}。` : ""}\n\nHook 运行环境：\n${formatRuntimeContext(runtimeContext)}`,
+        `Agent Knowledge is enabled. Knowledge root: ${root}. ${detectedProject ? `Project ID: ${detectedProject.id}.` : ""}\n\nHook runtime context:\n${formatRuntimeContext(runtimeContext)}`
+      )
     );
   });
 
 hook
   .command("doctor")
-  .description("Print hook runtime diagnostics such as cwd, git root, and git origin")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .description(t("输出 Hook runtime 诊断", "Print hook runtime diagnostics"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action((options: { root?: string }) => {
     console.log(
       JSON.stringify(
@@ -1203,8 +1256,8 @@ hook
 
 hook
   .command("user-prompt-submit")
-  .description("Query Agent Knowledge for the submitted prompt and return additional context")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .description(t("为提交的 prompt 查询相关知识上下文", "Query relevant knowledge for the submitted prompt"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { root?: string }) => {
     const startedAt = performance.now();
     const root = resolveCliRoot(options.root);

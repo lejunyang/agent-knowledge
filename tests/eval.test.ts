@@ -10,6 +10,8 @@ import {
   runEvalCase,
   runEvalSuite
 } from "../src/retrieval/eval.js";
+import { DeterministicLocalEmbeddingProvider, embedKnowledgeIndex } from "../src/retrieval/embeddings.js";
+import { DeterministicBatchReranker } from "../src/retrieval/reranker.js";
 
 let tempDirs: string[] = [];
 
@@ -161,5 +163,35 @@ describe("runEvalCase", () => {
     expect(suite.metrics.recallAt[1]).toBe(1);
     expect(suite.metrics.falseInjectionRate).toBe(0);
     expect(suite.metrics.abstentionPrecision).toBe(1);
+  });
+
+  it("supports lexical, hybrid, and reranked eval pipelines", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-eval-pipelines-"));
+    tempDirs.push(root);
+    const corpus = await loadEvalCorpus("eval/cases/retrieval-complete.yaml");
+    await materializeEvalCorpus(root, corpus);
+    rebuildIndex(root);
+    const provider = new DeterministicLocalEmbeddingProvider(64);
+    await embedKnowledgeIndex(root, { provider });
+    const subset = { cases: corpus.cases.slice(0, 4) };
+
+    const lexical = await runEvalSuite(root, subset, { pipeline: "lexical" });
+    const hybrid = await runEvalSuite(root, subset, {
+      pipeline: "hybrid",
+      embeddingProvider: provider
+    });
+    const reranked = await runEvalSuite(root, subset, {
+      pipeline: "reranked",
+      embeddingProvider: provider,
+      batchReranker: new DeterministicBatchReranker({
+        score: ({ query, document }) =>
+          document.toLowerCase().includes(query.split(/\s+/)[0]!.toLowerCase()) ? 1 : 0.5
+      }),
+      minScore: 0
+    });
+
+    expect(lexical.total).toBe(4);
+    expect(hybrid.total).toBe(4);
+    expect(reranked.total).toBe(4);
   });
 });

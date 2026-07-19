@@ -79,8 +79,12 @@ agent-knowledge organize-inbox
 
 # 检索与 embedding
 agent-knowledge embed-index
+agent-knowledge embedding status
+agent-knowledge embedding download
 agent-knowledge query --task "当前任务" --debug
 agent-knowledge eval --input eval/cases/retrieval-baseline.yaml
+agent-knowledge eval --fixture eval/cases/retrieval-complete.yaml --pipeline lexical
+agent-knowledge eval-calibrate --input calibration-observations.json
 
 # 同步
 agent-knowledge sync run
@@ -89,6 +93,7 @@ agent-knowledge sync watch
 # 主动记忆 staging
 agent-knowledge staging status
 agent-knowledge staging drain --limit 100
+agent-knowledge maintenance run --input observations.json
 ```
 
 ## 默认位置
