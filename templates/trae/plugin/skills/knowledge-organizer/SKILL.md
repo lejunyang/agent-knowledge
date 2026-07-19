@@ -3,7 +3,7 @@ name: "knowledge-organizer"
 description: "整理 Agent Knowledge inbox 候选、已审阅 maintenance proposal 和用户直接提供的材料。"
 ---
 
-# Knowledge Organizer
+# 知识整理器
 
 Markdown 是事实源；索引和 `.memory` 都是可重建产物。
 

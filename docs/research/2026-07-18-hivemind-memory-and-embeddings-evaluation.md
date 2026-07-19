@@ -6,7 +6,7 @@
 
 本仓库的总体方向是对的，而且在“可审计事实源、写入治理、来源权威性、有效期、冲突关系”方面比 Hivemind 更严格。Hivemind 更强的部分是全链路自动化、跨 agent 接入、后台增量处理、运行时可观测性和真实任务成本评测。
 
-当前效果的主要瓶颈不是缺少更大的 embedding 模型，而是检索实现有正确性缺口：
+调研时确认的主要瓶颈不是缺少更大的 embedding 模型，而是检索实现有正确性缺口：
 
 1. hybrid 只用真实 embedding 选候选，最终 `embeddingScore` 仍来自 token cosine，真实向量分数没有进入最终排序。
 2. embedding 缓存没有校验 query provider 与缓存的 model、dimensions、prefix、pooling 是否一致。
@@ -16,6 +16,8 @@
 6. indexer 和 embedding loader 没有明确排除 `_inbox`；若 inbox 文件被标为 `active`，会进入检索。
 
 优先修复这些问题，再升级模型。否则更强模型只能改善部分候选召回，不能稳定改善最终注入结果。
+
+截至 2026-07-19，上述 P0/P1 关键问题已经修复并完成真实业务语料验证。后文“当前仓库的具体问题”保留为当时的缺陷记录，不再表示未完成待办。
 
 模型建议：
 
@@ -67,7 +69,7 @@ Hivemind README 的 LoCoMo 结果是 100 个 QA 上的内部 eval，只报告成
 | 检索 | SQLite FTS5 + 可选 embedding + 一跳关系 | summary/session 双表，semantic + lexical，另有 code graph |
 | 注入 | 分类后的 context packet | proactive recall 单条 snippet，或 agent 主动 grep/read |
 | 自动化 | TRAE hook + reader/writer 模板 | 多 agent hooks、MCP、VFS、后台 workers |
-| 团队共享 | 未实现 | 核心能力 |
+| 团队共享 | 已实现 WebDAV/S3 正式 Markdown 同步与定时 watch；默认受 visibility/sensitivity 边界约束 | 核心能力 |
 | 事实可审计性 | 强 | summary/Skill 可读，但原始事实主要在云端 trace |
 | 隐私面 | 默认不保存原始会话和 secret | 默认捕获完整活动，依赖 notice、workspace 和 opt-out |
 
@@ -137,7 +139,54 @@ Hivemind 的 Skillify 从最近 session 中提炼可复用 `SKILL.md`，与 sess
 - 只用云数据库作为事实源会削弱 Git diff、人工审阅和本地可恢复性。
 - proactive recall 一次只注入一条适合 Hivemind summary，不一定适合本仓库“事实 + 流程 + warning”的 context packet。
 
-## 当前仓库的具体问题
+## 2026-07-19 真实业务语料验证
+
+### 语料构建
+
+用户指定 5 个飞书 Wiki 入口后，递归读取所有可访问的内嵌文档并保存 manifest：
+
+- 成功读取并保存完整正文：656 份。
+- 发现电子表格、画板、Base、文件和思维笔记等嵌入资源：864 个。
+- 遍历失败且保留错误审计：2242 个，主要是资源不存在、无权限或旧 Doc/Wiki API 错误。
+- 最终 `pending=0`、`complete=true`；失败引用没有伪装为已读取。
+
+完整正文先移除临时下载 URL，再遮蔽测试账号、验证码、密码、token、飞书用户标识、手机号、邮箱和身份证号。656 份 source 全部通过导入前隐私审计；`type: source` 不进入 FTS 或 embedding。
+
+从 source 中使用 `knowledge-organizer` 提炼 9 条新增 active 知识：
+
+- 3 条 semantic：PC 微前端架构、共享状态、移动端 MPA/请求边界。
+- 6 条 procedural：登录态排查、移动端联调、开户卡住、资质复用、结果事件、B 号额度查询。
+- 每条都带稳定项目 ID、明确 source ID 和可解释 `related_knowledge`。
+
+项目最终包含 24 条迁入的既有精炼知识、9 条新增精炼知识和 656 条 source 证据；正常检索/embedding 只处理 33 条精炼知识。
+
+### 检索迭代
+
+真实语料验证先后发现并修复：
+
+1. 普通 CLI query 没有自动携带当前 Git project ID，项目知识被安全过滤。
+2. FTS5 BM25 未显式排序，并错误使用绝对值固定缩放，最相关 SOP 被压到第 16-18 名。
+3. metadata 0 分候选参与 RRF，dense/related-only 候选获得虚假 lexical 分。
+4. `uid`、`商家中心` 等短通用 alias 在长查询中获得满分，压过具体 SOP。
+5. context packet 只受 token budget 限制，低相关 direct/related 长尾会在预算充足时注入。
+6. eval 按候选列表而不是最终 packet 判断 forbidden injection，并把 synthetic query 写入真实运行日志。
+7. 模型 status/download 使用专用 cacheDir，但 embedding provider 回落到 Transformers.js 默认目录，导致“状态已缓存、运行找不到模型”。
+
+最终私有 13-case 评测覆盖 9 个正向业务问题、项目隔离和无答案查询；使用 Hook 同口径的 1200 token 预算：
+
+| Pipeline | Recall@1 | Recall@3 | MRR | false injection | abstention precision | 平均延迟 |
+|---|---:|---:|---:|---:|---:|---:|
+| lexical（最终） | **1.000** | **1.000** | **1.000** | **0** | **1.000** | 约 8.5ms |
+| hybrid | 0.556 | 1.000 | 0.778 | 0.308 | 0 | 约 80ms |
+| reranked | 0.556 | 1.000 | 0.778 | 0.308 | 0 | 约 257ms |
+
+最终 lexical 平均 context packet 约 570 token。`multilingual-e5-small` 和 `bge-reranker-large` 均从全局 q8 缓存加载成功；项目生成 33 条 384 维 embedding，并构建 1458 节点、3593 边的知识关系图。
+
+该结果说明“模型效果好”必须在当前语料上衡量。当前 Hook/日常自动路径应保持 lexical；hybrid/reranker 保留为 lexical 未命中后的人工诊断能力，不能因为模型已经下载就默认启用。
+
+为避免私有语料只能本机回归，新增 `eval/cases/project-business-retrieval.yaml`：10 条脱敏知识、12 个正向/hard-negative/项目隔离/无答案 case，CI 要求 Recall@1/3/5、MRR、nDCG、abstention precision 均为 1，false injection 为 0。
+
+## 调研时识别的具体问题（现已修复）
 
 ### P0：正确性与治理
 
@@ -270,9 +319,9 @@ Nomic v1.5 官方语言为英文。它比 MiniLM 有更长上下文、Matryoshka
 
 ### 阶段一：先建立可信基线
 
-1. [x] 扩展 eval schema：expected rank、relevance grade、forbidden、abstain、语言、domain。证据：`src/retrieval/eval.ts`、`tests/eval.test.ts`。
-2. [x] 加入 17 条 active 主题、近主题 hard-negative、cross-language、temporal 和无答案 query。证据：`eval/cases/retrieval-complete.yaml`。
-3. [x] 输出 Recall@1/3/5、MRR、nDCG、false injection rate、latency 和 packet tokens。证据：`agent-knowledge eval --fixture eval/cases/retrieval-complete.yaml`。
+1. [x] 扩展 eval schema：expected rank、relevance grade、forbidden、abstain、语言、domain、project IDs、max token budget，并区分候选 `matchedIds` 与最终 `injectedIds`。证据：`src/retrieval/eval.ts`、`tests/eval.test.ts`。
+2. [x] 加入 17 条通用 active 主题与 10 条脱敏项目业务知识，覆盖近主题 hard-negative、cross-language、temporal、项目隔离和无答案 query。证据：`eval/cases/retrieval-complete.yaml`、`eval/cases/project-business-retrieval.yaml`。
+3. [x] 输出 Recall@1/3/5、MRR、nDCG、false injection rate、abstention precision、latency 和 packet tokens；forbidden/abstain 按最终 context packet 判断。证据：`agent-knowledge eval --fixture eval/cases/project-business-retrieval.yaml --pipeline lexical`。
 4. [x] CI 使用 deterministic provider；真实模型支持 lexical/hybrid/reranked pipeline，可由本地或定时任务运行。证据：`--pipeline lexical|hybrid|reranked`。
 
 ### 阶段二：修 P0
@@ -281,7 +330,8 @@ Nomic v1.5 官方语言为英文。它比 MiniLM 有更长上下文、Matryoshka
 2. [x] embedding manifest 与 profile。
 3. [x] 保留真实 dense score。
 4. [x] CJK lexical index。
-5. [x] RRF 融合与完整 debug。
+5. [x] RRF 融合与完整 debug；BM25 按单次 query 归一化并显式排序，metadata 0 分和 dense/related-only 候选不获取虚假 lexical 信用。
+6. [x] Context packet 同时执行 token budget、绝对/相对相关性门控；低相关长尾保留在 debug，不注入 Agent 上下文。
 
 ### 阶段三：升级默认模型和 rerank
 
@@ -289,6 +339,8 @@ Nomic v1.5 官方语言为英文。它比 MiniLM 有更长上下文、Matryoshka
 2. [x] 提供 BGE-small-zh profile。
 3. [x] 实现融合 top 30 -> BGE cross-encoder batch reranker -> threshold -> top 8。证据：`query --rerank`、`tests/reranker.test.ts`。
 4. [x] 使用 hard-negative、forbidden、abstention 和 usefulness feedback 做 threshold/权重 grid search。证据：`agent-knowledge eval-calibrate`、`tests/calibration.test.ts`。
+5. [x] `embedding status/download`、embed-index、hybrid query 和 reranker 统一使用 `embeddings.cacheDir`；真实项目复用全局 q8 缓存生成 33 条向量，未重复下载。
+6. [x] 在真实业务语料上比较 lexical/hybrid/reranked；结论是自动路径保持 lexical，模型检索作为人工诊断能力，不因为模型已缓存而默认启用。
 
 ### 阶段四：自动沉淀与时间知识
 
@@ -296,6 +348,8 @@ Nomic v1.5 官方语言为英文。它比 MiniLM 有更长上下文、Matryoshka
 2. [x] 生成 duplicate、consolidation、update、conflict proposal。
 3. [x] 支持结构化 episode provenance；`supersedes` 激活时设置旧知识 deprecated/valid_until。
 4. [x] 至少 3 个独立 episode、可信来源、足够净正反馈且无冲突时生成 Skill proposal；只输出草稿，不自动写入或安装 Skill。真实 maintenance 会读取 `.memory/logs`，按 `memoryId + queryRunId` 去重 usefulness，并在 feedback 晚到时重新评估已消费 observation。证据：`src/memory/maintenance.ts`、`tests/maintenance.test.ts`。
+5. [x] 项目配置支持用户、项目共享和 `.local` 分层；普通 query 自动发现 Git project ID，显式 project IDs 完全优先。
+6. [x] 支持 WebDAV/S3 同步与前台定时 watch；支持递归外部文档导入、source 隐私审计、稳定 ID source 刷新和已消费日志 cleanup。
 
 ## 参考
 

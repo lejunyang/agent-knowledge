@@ -32,23 +32,15 @@ description: Retrieves Agent Knowledge when a task may depend on project-scoped 
 
 ## 推荐流程
 
-### 先看目录
-
-先查看知识库 catalog，理解可用领域、场景和别名：
-
-```bash
-agent-knowledge catalog --no-write
-```
-
-如果主 Agent 指定了知识库 root：
-
-```bash
-agent-knowledge catalog --root "$AGENT_KNOWLEDGE_ROOT" --no-write
-```
-
 ### 基础查询
 
-优先使用普通查询和 debug 输出：
+先直接使用普通查询和 debug 输出，不要为每个任务预先注入 catalog：
+
+```bash
+agent-knowledge query --task "$CURRENT_TASK" --debug
+```
+
+如果主 Agent 已知 domain/scenario，再显式缩小范围：
 
 ```bash
 agent-knowledge query \
@@ -58,18 +50,16 @@ agent-knowledge query \
   --debug
 ```
 
-如果不知道 domain 或 scenario，可以先只传 task：
-
-```bash
-agent-knowledge query --task "$CURRENT_TASK" --debug
-```
+只有用户明确要求浏览知识目录，或 task-only 查询未命中且需要发现可用 domain/scenario 时，才运行 `agent-knowledge catalog --no-write`。不要把完整 catalog 或 aliases 词表当作普通任务上下文。
 
 ### 选择检索模式
 
 - `lexical`：默认。适合术语、路径、错误码和明确关键词，不需要模型。
-- `hybrid`：适合同义改写、自然语言和跨语言查询，需要 embedding 缓存。
+- `hybrid`：只在 lexical 未命中、同义改写或跨语言需求明确时人工尝试，需要兼容的 embedding 缓存。
 - `graph`：从 lexical seed 沿可信知识关系补充依赖和配套规则，需要 graph index。
 - `hybrid-graph`：hybrid seed + graph 扩展，召回最广、成本最高。
+
+模型已下载不代表 hybrid 必然优于 lexical。应以当前知识库 eval 为准；未经评测不要把 hybrid/reranker 放入自动 Hook 热路径。
 
 如果普通查询未命中，且已经构建 embedding 缓存，可使用 hybrid：
 

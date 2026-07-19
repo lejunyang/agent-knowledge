@@ -1,9 +1,9 @@
 ---
 name: "knowledge-organizer"
-description: "Organizes Agent Knowledge. Invoke when user asks to整理知识库, 归类知识, 审阅 inbox, or turn provided material into structured memory."
+description: "整理 Agent Knowledge。用户要求整理知识库、归类知识、审阅 inbox，或把直接材料沉淀为结构化长期知识时调用。"
 ---
 
-# Knowledge Organizer
+# 知识整理器
 
 本 Skill 用于主动整理 Agent Knowledge。它处理两类场景：
 
@@ -22,8 +22,11 @@ description: "Organizes Agent Knowledge. Invoke when user asks to整理知识库
 CLI root 优先级：
 
 1. `--root <dir>`
-2. `AGENT_KNOWLEDGE_ROOT`
-3. `~/.agent_knowledge`
+2. 项目 local 配置。
+3. 项目共享配置。
+4. 用户配置。
+5. 兼容环境变量 `AGENT_KNOWLEDGE_ROOT`。
+6. `~/.agent_knowledge`
 
 如果用户没有指定项目级知识库，默认使用 `~/.agent_knowledge`。
 

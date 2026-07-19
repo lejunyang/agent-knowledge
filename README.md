@@ -72,6 +72,8 @@ agent-knowledge embed-index
 agent-knowledge query --task "当前任务" --retrieval hybrid
 ```
 
+不要仅因为模型已经下载就把日常或 Hook 默认切到 hybrid。当前项目真实业务语料的 13-case 评测中，优化后的 lexical 达到 Recall@1/3/5、MRR、nDCG、abstention precision 均为 `1`，false injection 为 `0`，平均 context packet 约 570 token；同一批语料的 hybrid/reranked Recall@1 只有约 `0.56`，且 dense 通道会给无答案问题返回候选。推荐 lexical 作为自动路径，hybrid/reranker 仅用于 lexical 未命中后的人工诊断，并先用自己的 eval 校准。
+
 ## 推荐使用方式
 
 ### 个人电脑
@@ -88,7 +90,7 @@ agent-knowledge index
 日常不需要在每个任务前手工查询。推荐分工是：
 
 1. `UserPromptSubmit` Hook 只在高相关命中时注入精简 `context_packet`；无命中和低分命中完全静默。
-2. Hook 内容不足、任务依赖历史决策或业务规则时，主 Agent 主动调用 `memory-reader`。
+2. Hook 内容不足、任务依赖历史决策或业务规则时，主 Agent 主动调用 `memory-reader`；reader 先直接 query，只有不知道领域或用户明确想浏览知识时才看 catalog。
 3. 用户明确要求记忆，或任务产生了已验证且可复用的结果时，主 Agent 调用 `memory-writer` 生成 candidate JSON。
 4. candidate 通过 `write-candidate` 进入 `_inbox`；不会因为 Subagent 输出就直接修改 active 知识。
 5. 主 Agent 实际使用或拒绝某条知识时记录 `feedback`，为阈值校准和 Skill 沉淀提供证据。
@@ -158,6 +160,13 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 一旦传 `--approve`，该次命令只处理列出的 ID；未知 ID 会在写文件前报错。
 
 用户明确指定拉取的正式文档可以先由 `knowledge-organizer` 拆成精炼知识，同时把经过治理的完整正文保存为 `type: source` 证据。source 导入前必须遮蔽测试账号、验证码、密码、token、用户标识和个人信息；同一外部文档更新或脱敏规则升级时，使用 `capture-material --replace-source` 刷新稳定 ID 对应的 active documented source。该参数不能覆盖精炼知识，semantic/procedural/profile/episodic 更新仍应新增版本并使用 `supersedes`。
+
+批量导入正式文档时推荐按“两层语料”处理：
+
+1. 完整脱敏正文保存为 `source`，用于审计、graph/source 关系和后续重新整理，不进入 FTS/embedding。
+2. 用 `knowledge-organizer` 从 source 拆出小而稳定的 semantic/procedural 知识，显式关联 source ID，再用真实问题反复评测。
+
+本项目首批 5 个飞书入口递归遍历后，成功保存 656 份可访问文档并记录 864 个嵌入资源；不可访问或失效引用保留失败清单，不伪装成已拉取。真实检索只使用 33 条精炼知识（24 条已有 + 9 条新增），避免 656 份长原文污染召回。
 
 ## 主动记忆何时发生
 
@@ -258,6 +267,7 @@ agent-knowledge query --task "当前任务" --debug
 agent-knowledge query --task "当前任务" --retrieval graph --graph-depth 2
 agent-knowledge eval --input eval/cases/retrieval-baseline.yaml
 agent-knowledge eval --fixture eval/cases/retrieval-complete.yaml --pipeline lexical
+agent-knowledge eval --fixture eval/cases/project-business-retrieval.yaml --pipeline lexical
 agent-knowledge eval-calibrate --input calibration-observations.json
 
 # 知识图谱
