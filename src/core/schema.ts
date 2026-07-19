@@ -35,6 +35,15 @@ export const RelatedKnowledgeSchema = z.object({
   reason: z.string().min(1)
 });
 
+export const EpisodeProvenanceSchema = z.object({
+  episode_id: z.string().min(1),
+  session_hash: z.string().min(1),
+  turn_hash: z.string().min(1).optional(),
+  project_id: z.string().min(1).optional(),
+  observed_at: z.string().datetime(),
+  evidence_refs: z.array(z.string().min(1)).default([])
+});
+
 /**
  * Markdown frontmatter 的权威 schema。
  *
@@ -62,6 +71,7 @@ export const KnowledgeFrontmatterSchema = z.object({
   capture_mode: CaptureModeSchema.default("direct_material"),
   actor_type: ActorTypeSchema.default("owner"),
   corroboration_count: z.number().int().nonnegative().default(1),
+  episodes: z.array(EpisodeProvenanceSchema).default([]),
   created_at: DateStringSchema,
   updated_at: DateStringSchema,
   valid_from: DateStringSchema,

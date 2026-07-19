@@ -13,6 +13,7 @@ import type {
   RelatedKnowledge,
   SourceAuthority
 } from "../core/types.js";
+import type { EpisodeProvenance } from "../core/types.js";
 
 export type CandidateMemoryInput = {
   title: string;
@@ -35,6 +36,7 @@ export type CandidateMemoryInput = {
   conflicts_with?: string[];
   visibility?: "private" | "project" | "team";
   sensitivity?: "public" | "internal" | "confidential" | "secret";
+  episodes?: EpisodeProvenance[];
 };
 
 export type GovernanceDecision = {

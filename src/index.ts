@@ -26,6 +26,8 @@ export * from "./retrieval/calibration.js";
 export * from "./memory/governance.js";
 export * from "./memory/inbox.js";
 export * from "./memory/organizer.js";
+export * from "./memory/proposals.js";
+export * from "./memory/maintenance.js";
 export * from "./integration/manager.js";
 export * from "./integration/projects.js";
 export * from "./sync/core.js";

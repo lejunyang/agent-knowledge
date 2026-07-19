@@ -59,6 +59,7 @@ function makeRanked(score: number): RankedMemory[] {
           capture_mode: "direct_material",
           actor_type: "owner",
           corroboration_count: 1,
+          episodes: [],
           created_at: "2026-07-19",
           updated_at: "2026-07-19",
           valid_from: "2026-07-19",

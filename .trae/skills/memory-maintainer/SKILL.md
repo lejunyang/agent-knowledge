@@ -50,6 +50,8 @@ agent-knowledge write-candidate --input candidate.json
 
 6. Report candidate IDs, rejected signals, duplicate/consolidation suggestions, and whether human review is required.
 
+Use `agent-knowledge maintenance run --input observations.json` to generate deterministic duplicate, consolidation, update, conflict, and Skill proposals under `.memory/proposals/`. Proposals are review artifacts and never activate knowledge or install Skills.
+
 ## Safety
 
 - Never recover or infer raw prompts from hashes or lengths.

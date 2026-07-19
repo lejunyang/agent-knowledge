@@ -75,6 +75,39 @@ describe("KnowledgeFrontmatterSchema", () => {
     ).toThrow();
   });
 
+  it("accepts structured episode provenance and defaults legacy memories to none", () => {
+    const legacy = KnowledgeFrontmatterSchema.parse({
+      id: "k_20260719_legacy_episode",
+      type: "semantic",
+      title: "Legacy memory",
+      domain: "agent/memory",
+      scenario: ["compatibility"],
+      status: "active",
+      confidence: 0.8,
+      source_authority: "documented",
+      created_at: "2026-07-19",
+      updated_at: "2026-07-19",
+      valid_from: "2026-07-19"
+    });
+    const withEpisodes = KnowledgeFrontmatterSchema.parse({
+      ...legacy,
+      id: "k_20260719_episode",
+      episodes: [
+        {
+          episode_id: "episode-1",
+          session_hash: "session-a",
+          turn_hash: "turn-a",
+          project_id: "project-a",
+          observed_at: "2026-07-19T00:00:00.000Z",
+          evidence_refs: ["test:one"]
+        }
+      ]
+    });
+
+    expect(legacy.episodes).toEqual([]);
+    expect(withEpisodes.episodes[0]?.session_hash).toBe("session-a");
+  });
+
   it("rejects invalid confidence values", () => {
     expect(() =>
       KnowledgeFrontmatterSchema.parse({

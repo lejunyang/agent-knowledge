@@ -34,6 +34,15 @@ export type RelatedKnowledge = {
   reason: string;
 };
 
+export type EpisodeProvenance = {
+  episode_id: string;
+  session_hash: string;
+  turn_hash?: string;
+  project_id?: string;
+  observed_at: string;
+  evidence_refs: string[];
+};
+
 /**
  * 一条 Markdown 知识的 frontmatter。
  *
@@ -62,6 +71,7 @@ export type KnowledgeFrontmatter = {
   capture_mode: CaptureMode;
   actor_type: ActorType;
   corroboration_count: number;
+  episodes: EpisodeProvenance[];
   created_at: string;
   updated_at: string;
   valid_from: string;

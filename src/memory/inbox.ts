@@ -93,6 +93,7 @@ export async function writeCandidateMemory(rootDir: string, input: CandidateMemo
       capture_mode: input.capture_mode ?? "direct_material",
       actor_type: actorType,
       corroboration_count: input.corroboration_count ?? 1,
+      episodes: input.episodes ?? [],
       created_at: date,
       updated_at: date,
       valid_from: date,

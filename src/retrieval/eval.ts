@@ -165,6 +165,7 @@ export async function materializeEvalCorpus(rootDir: string, corpus: EvalCorpus)
         capture_mode: "direct_material",
         actor_type: "owner",
         corroboration_count: 1,
+        episodes: [],
         created_at: item.valid_from,
         updated_at: item.valid_from,
         valid_from: item.valid_from,

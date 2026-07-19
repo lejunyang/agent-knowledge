@@ -30,7 +30,17 @@ tools: ""
   "capture_mode": "explicit_remember | verified_task | automated_session | direct_material",
   "actor_type": "owner | teammate | customer | agent",
   "corroboration_count": 1,
-  "project_ids": ["project_id_if_known"]
+  "project_ids": ["project_id_if_known"],
+  "episodes": [
+    {
+      "episode_id": "episode-id",
+      "session_hash": "hashed-session-id",
+      "turn_hash": "hashed-turn-id",
+      "project_id": "project_id_if_known",
+      "observed_at": "2026-07-19T00:00:00.000Z",
+      "evidence_refs": ["conversation:current-session"]
+    }
+  ]
 }
 ```
 
@@ -55,6 +65,14 @@ tools: ""
   "actor_type": "agent",
   "corroboration_count": 1,
   "project_ids": ["project_example"],
+  "episodes": [
+    {
+      "episode_id": "verified-task-episode",
+      "session_hash": "hashed-session-id",
+      "observed_at": "2026-07-19T00:00:00.000Z",
+      "evidence_refs": ["conversation:current-session"]
+    }
+  ],
   "related_knowledge": [
     {
       "id": "k_20260705_frontend_lint_vue_sfc",

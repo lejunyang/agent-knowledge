@@ -32,6 +32,7 @@ import {
   loadEvalSuite,
   loadEvalCorpus,
   materializeEvalCorpus,
+  generateMaintenanceProposals,
   initKnowledgeWorkspace,
   listKnowledge,
   logMemoryFeedback,
@@ -63,6 +64,7 @@ import {
   type CandidateMemoryInput,
   type CalibrationCase,
   type CalibrationFeedback,
+  type MaintenanceObservation,
   type UserConfig,
   resolveLocale,
   translate,
@@ -875,6 +877,57 @@ staging
         2
       )
     );
+  });
+
+const maintenance = program
+  .command("maintenance")
+  .description(t("生成可审阅的知识维护 proposal", "Generate reviewable knowledge maintenance proposals"));
+
+maintenance
+  .command("run")
+  .description(t("处理一批 observation 并生成 proposal", "Process observations and generate proposals"))
+  .requiredOption("--input <file>", t("Observation JSON 数组", "observation JSON array"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--limit <count>", t("本次最多处理数量", "maximum observations to process"), "100")
+  .action(async (options: { input: string; root?: string; limit: string }) => {
+    const observations = JSON.parse(await readFile(options.input, "utf8")) as MaintenanceObservation[];
+    const result = await generateMaintenanceProposals(resolveCliRoot(options.root), observations, {
+      limit: Number.parseInt(options.limit, 10)
+    });
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+maintenance
+  .command("watch")
+  .description(t("定时处理 append-only observation 文件", "Periodically process an append-only observation file"))
+  .requiredOption("--input <file>", t("Observation JSON 数组", "observation JSON array"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--limit <count>", t("每批最多处理数量", "maximum observations per batch"), "100")
+  .option("--interval-minutes <minutes>", t("运行间隔（分钟）", "run interval in minutes"), "30")
+  .action(async (options: {
+    input: string;
+    root?: string;
+    limit: string;
+    intervalMinutes: string;
+  }) => {
+    const controller = new AbortController();
+    const stop = (): void => controller.abort();
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+    await runScheduledSync({
+      intervalMinutes: Number.parseInt(options.intervalMinutes, 10),
+      signal: controller.signal,
+      run: async () => {
+        const observations = JSON.parse(await readFile(options.input, "utf8")) as MaintenanceObservation[];
+        const result = await generateMaintenanceProposals(resolveCliRoot(options.root), observations, {
+          limit: Number.parseInt(options.limit, 10)
+        });
+        console.log(JSON.stringify(result));
+      },
+      onError: (error) => {
+        console.error(t(`Maintenance 失败：${error.message}`, `Maintenance failed: ${error.message}`));
+      }
+    });
   });
 
 program
