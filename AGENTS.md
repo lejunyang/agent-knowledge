@@ -157,6 +157,7 @@ src/cli.ts            命令行入口和各模块编排
 - 定时同步使用前台 `agent-knowledge sync watch` 循环；不要在安装或配置命令中静默创建 cron、launchd 或 systemd 任务。需要后台常驻时由用户显式交给系统进程管理器托管。
 - `sync.intervalMinutes: 0` 表示禁用定时同步；`sync watch` 要求正数间隔，并在单次失败后记录错误、等待下一周期重试。
 - Maintenance worker 只能写 `.memory/proposals` 和 watermark/lock，禁止直接修改 active Markdown。Skill proposal 必须满足至少 3 个独立 session、trusted authority、positive feedback、无 unresolved conflict，并且不得自动写入或安装 `.trae/skills`。
+- 正常 maintenance 流程必须能从 `.memory/subagents` 自动抽取 `.memory/observations/events.jsonl`；不得要求普通用户手写 `observations.json`。`--input` 仅保留为高级导入模式。
 - 任何会影响对外 agent 使用流程的改动，都必须 review `templates/trae/`：
   - Hook 行为、事件、命令或注入上下文变化时，检查 `templates/trae/hooks.json` 和 `templates/trae/README.md`。
   - Subagent 输入、输出、frontmatter、工具权限或候选 JSON 字段变化时，检查 `templates/trae/agents/memory-writer.md`。

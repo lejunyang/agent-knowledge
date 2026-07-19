@@ -142,3 +142,4 @@ agent-knowledge feedback \
 - 不要为了有结果而推荐无关知识。
 - 不要在 hook 自动执行路径中加载本地模型；hybrid 查询只在主 Agent 明确按需检索时使用。
 - TRAE 安装的 `SubagentStart` / `SubagentStop` hook 会向 `.memory/staging/events.jsonl` 写脱敏事件，可用 `agent-knowledge staging status` 检查你是否被实际调用；日志不包含你的完整输入或输出。
+- 同时会写本地 `.memory/subagents` 详细 payload 供用户调试，且不会注入上下文或参与同步。

@@ -181,7 +181,7 @@ agent-knowledge feedback \
   --query-run-id "$QUERY_RUN_ID"
 ```
 
-TRAE 安装的 `SubagentStart` / `SubagentStop` hook 会在 `.memory/staging/events.jsonl` 写脱敏摘要。使用：
+TRAE 安装的 `SubagentStart` / `SubagentStop` hook 会在 `.memory/subagents` 写详细本地 payload，并在 `.memory/staging/events.jsonl` 写脱敏信号。使用：
 
 ```bash
 agent-knowledge staging status

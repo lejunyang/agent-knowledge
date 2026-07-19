@@ -27,8 +27,10 @@ import {
   createConfiguredSyncBackend,
   decideHookInjection,
   downloadRetrievalModel,
+  extractMaintenanceObservations,
   getDefaultUserConfigPath,
   getRetrievalModelStatus,
+  getObservationStatus,
   getSubagentLogStatus,
   embedKnowledgeIndex,
   loadEvalSuite,
@@ -48,6 +50,7 @@ import {
   runScheduledSync,
   readSubagentLogs,
   resolveRetrievalModelDescriptor,
+  readMaintenanceObservations,
   S3HttpObjectClient,
   S3SyncBackend,
   TransformersBatchReranker,
@@ -982,14 +985,41 @@ const maintenance = program
   .description(t("生成可审阅的知识维护 proposal", "Generate reviewable knowledge maintenance proposals"));
 
 maintenance
+  .command("extract")
+  .description(t("从详细 Subagent 日志抽取 maintenance observations", "Extract maintenance observations from detailed Subagent logs"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await extractMaintenanceObservations(resolveCliRoot(options.root)),
+        null,
+        2
+      )
+    );
+  });
+
+maintenance
+  .command("status")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { root?: string }) => {
+    console.log(
+      JSON.stringify(await getObservationStatus(resolveCliRoot(options.root)), null, 2)
+    );
+  });
+
+maintenance
   .command("run")
-  .description(t("处理一批 observation 并生成 proposal", "Process observations and generate proposals"))
-  .requiredOption("--input <file>", t("Observation JSON 数组", "observation JSON array"))
+  .description(t("自动抽取 observations 并生成 proposal", "Extract observations and generate proposals"))
+  .option("--input <file>", t("高级用法：外部 Observation JSON 数组", "advanced: external observation JSON array"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--limit <count>", t("本次最多处理数量", "maximum observations to process"), "100")
-  .action(async (options: { input: string; root?: string; limit: string }) => {
-    const observations = JSON.parse(await readFile(options.input, "utf8")) as MaintenanceObservation[];
-    const result = await generateMaintenanceProposals(resolveCliRoot(options.root), observations, {
+  .action(async (options: { input?: string; root?: string; limit: string }) => {
+    const root = resolveCliRoot(options.root);
+    const observations = options.input
+      ? (JSON.parse(await readFile(options.input, "utf8")) as MaintenanceObservation[])
+      : (await extractMaintenanceObservations(root),
+        await readMaintenanceObservations(root));
+    const result = await generateMaintenanceProposals(root, observations, {
       limit: Number.parseInt(options.limit, 10)
     });
     console.log(JSON.stringify(result, null, 2));
@@ -997,13 +1027,13 @@ maintenance
 
 maintenance
   .command("watch")
-  .description(t("定时处理 append-only observation 文件", "Periodically process an append-only observation file"))
-  .requiredOption("--input <file>", t("Observation JSON 数组", "observation JSON array"))
+  .description(t("定时抽取并处理 observations", "Periodically extract and process observations"))
+  .option("--input <file>", t("高级用法：外部 Observation JSON 数组", "advanced: external observation JSON array"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--limit <count>", t("每批最多处理数量", "maximum observations per batch"), "100")
   .option("--interval-minutes <minutes>", t("运行间隔（分钟）", "run interval in minutes"), "30")
   .action(async (options: {
-    input: string;
+    input?: string;
     root?: string;
     limit: string;
     intervalMinutes: string;
@@ -1016,7 +1046,11 @@ maintenance
       intervalMinutes: Number.parseInt(options.intervalMinutes, 10),
       signal: controller.signal,
       run: async () => {
-        const observations = JSON.parse(await readFile(options.input, "utf8")) as MaintenanceObservation[];
+        const root = resolveCliRoot(options.root);
+        const observations = options.input
+          ? (JSON.parse(await readFile(options.input, "utf8")) as MaintenanceObservation[])
+          : (await extractMaintenanceObservations(root),
+            await readMaintenanceObservations(root));
         const result = await generateMaintenanceProposals(resolveCliRoot(options.root), observations, {
           limit: Number.parseInt(options.limit, 10)
         });

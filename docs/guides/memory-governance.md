@@ -31,8 +31,10 @@ Staging 只保存 hash、长度、agent type、reason 和 project ID，不保存
 ## Maintenance proposals
 
 ```bash
-agent-knowledge maintenance run --input observations.json
-agent-knowledge maintenance watch --input observations.json --interval-minutes 30
+agent-knowledge maintenance extract
+agent-knowledge maintenance run
+agent-knowledge maintenance watch --interval-minutes 30
+agent-knowledge maintenance status
 ```
 
 Worker 使用 watermark 和 lock，生成 `.memory/proposals/*.json`：
@@ -46,6 +48,8 @@ Worker 使用 watermark 和 lock，生成 `.memory/proposals/*.json`：
 Proposal 不会修改 active Markdown。Skill proposal 只在 procedural 流程有至少 3 个独立 session、可信来源、正反馈且无冲突时生成，输出候选 `SKILL.md` 草稿但不写入 `.trae/skills`。
 
 知识 frontmatter 可选保存结构化 `episodes`，包含 session/turn/project hash、观察时间和 evidence refs，用于时间更新和独立证据判断。
+
+正常流程不需要手写 `observations.json`：`maintenance extract/run/watch` 会从 `.memory/subagents` 的 SubagentStop 详细日志自动生成 `.memory/observations/events.jsonl`。`--input` 只用于导入外部 observation。
 
 ## 整理
 

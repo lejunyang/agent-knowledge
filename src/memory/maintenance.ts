@@ -7,6 +7,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { resolveWorkspacePath } from "../core/paths.js";
+import type { EpisodeProvenance } from "../core/types.js";
 import { catalogKnowledge } from "../storage/catalog.js";
 import {
   maintenanceProposalId,
@@ -26,6 +27,7 @@ export type MaintenanceObservation = {
   conflictsWith?: string;
   memoryType?: "profile" | "semantic" | "episodic" | "procedural";
   usefulFeedback?: number;
+  episode?: EpisodeProvenance;
 };
 
 export type MaintenanceResult = {
