@@ -131,6 +131,8 @@ agent-knowledge maintenance status
 
 `watch` 的 input 来自 Hook 自动写入的详细 Subagent 日志，不是另一个人工脚本。它不会自动成为系统服务；持续机器人应交给 systemd、launchd、容器或其他进程管理器。
 
+也可以直接要求 AI 使用 `memory-maintainer` Skill 完成状态检查、run、proposal 汇总和日志清理；用户负责 accept/reject、精确 ID approve 和 Skill 安装决策。
+
 Worker 使用 watermark 防止重复消费，使用 lock 防止并发 worker 同时生成提案，每次按 limit 有界处理。它生成：
 
 - `duplicate`
@@ -201,6 +203,23 @@ Feedback 计算规则：
 - 外部 observation 已显式携带 `usefulFeedback` 时保留该值，不用本地日志覆盖。
 
 这意味着主 Agent 实际使用或拒绝检索结果后，应尽量记录带 `queryRunId` 的 feedback；但不要为了满足 Skill 门槛批量伪造正反馈。
+
+## 已消费日志清理
+
+Maintenance 成功后可运行：
+
+```bash
+agent-knowledge maintenance cleanup
+agent-knowledge maintenance cleanup --apply
+```
+
+- 默认 dry-run，列出待删除 Subagent daily logs 和 feedback 事件数。
+- 有待抽取 SubagentStop 时 `--apply` 拒绝执行。
+- 有未匹配 SubagentStart 时 `--apply` 拒绝执行，避免删除仍在运行的原始调试日志。
+- Feedback 先固化到 `.memory/feedback/ledger.json`，再从 `.memory/logs` 删除对应 feedback 行。
+- 同一 `memoryId + queryRunId` 的最新值继续保留在 ledger，后续晚到 feedback 可覆盖。
+- Query、catalog、Hook 日志继续保留，支持 alias 建议和诊断。
+- Observations、proposals、active knowledge、pair state 和 feedback ledger 永不由 cleanup 删除。
 
 ### 第一步：接受到审阅 inbox
 

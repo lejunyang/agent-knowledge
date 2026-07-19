@@ -5,6 +5,7 @@
  * 也不会直接修改 Markdown 知识，避免把一次性偏好误写入长期记忆。
  */
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
 import { appendJsonlLog } from "../core/logging.js";
 
 export const MemoryUsefulnessSchema = z.enum(["useful", "not_useful", "neutral"]);
@@ -36,6 +37,7 @@ export function logMemoryFeedback(rootDir: string, rawInput: unknown): MemoryFee
   const input = MemoryFeedbackInputSchema.parse(rawInput);
   const logPath = appendJsonlLog(rootDir, {
     event: "feedback.memory_usefulness",
+    eventId: randomUUID(),
     memoryId: input.memoryId,
     usefulness: input.usefulness,
     queryRunId: input.queryRunId,

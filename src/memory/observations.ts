@@ -207,6 +207,16 @@ async function writeExtractionState(
   await writeFile(target, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
+/** 清理全部已消费 Subagent 日志后把 source watermark 重置为零。 */
+export async function resetObservationSourceWatermark(
+  rootDir: string
+): Promise<void> {
+  await writeExtractionState(rootDir, {
+    sourceWatermark: 0,
+    updatedAt: new Date().toISOString()
+  });
+}
+
 /** 只接受普通对象，拒绝数组和 null。 */
 function objectValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)

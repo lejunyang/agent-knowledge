@@ -55,6 +55,12 @@ describe("managed integrations", () => {
     await expect(readFile(maintainerTarget, "utf8")).resolves.toContain(
       "maintenance install-skill"
     );
+    await expect(readFile(maintainerTarget, "utf8")).resolves.toContain(
+      "maintenance cleanup --apply"
+    );
+    await expect(readFile(maintainerTarget, "utf8")).resolves.toContain(
+      "用户明确决定"
+    );
     expect(result.conflicts).toEqual([]);
     expect(result.managed.length).toBeGreaterThanOrEqual(4);
   });
@@ -262,6 +268,19 @@ describe("managed integrations", () => {
         "utf8"
       )
     ).resolves.toContain("maintenance install-skill");
+    await expect(
+      readFile(
+        path.join(
+          windowsTarget,
+          "plugins",
+          "agent-knowledge",
+          "skills",
+          "memory-maintainer",
+          "SKILL.md"
+        ),
+        "utf8"
+      )
+    ).resolves.toContain("maintenance cleanup --apply");
     await expect(readFile(path.join(claudeTarget, "settings.json"), "utf8")).resolves.toContain(
       "agent-knowledge hook"
     );

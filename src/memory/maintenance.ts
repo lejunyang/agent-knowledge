@@ -5,7 +5,7 @@
  * 进入本模块后，每个动作都必须落为可审计 JSON。
  */
 import { existsSync } from "node:fs";
-import { mkdir, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { resolveWorkspacePath } from "../core/paths.js";
 import type { EpisodeProvenance } from "../core/types.js";
 import { catalogKnowledge } from "../storage/catalog.js";
@@ -15,6 +15,10 @@ import {
   writeMaintenanceProposal,
   type MaintenanceProposal
 } from "./proposals.js";
+import {
+  readFeedbackScores,
+  refreshFeedbackLedger
+} from "./feedbackLedger.js";
 
 export type MaintenanceObservation = {
   id: string;
@@ -46,14 +50,6 @@ type MaintenanceState = {
   updatedAt: string;
 };
 
-type FeedbackLogEvent = {
-  timestamp?: string;
-  event?: string;
-  memoryId?: string;
-  usefulness?: "useful" | "not_useful" | "neutral";
-  queryRunId?: string;
-};
-
 /**
  * 在互斥锁保护下，从当前水位开始有界生成 maintenance proposal。
  *
@@ -77,7 +73,8 @@ export async function generateMaintenanceProposals(
       watermarkBefore + Math.max(0, options.limit)
     );
     const catalog = await catalogKnowledge(rootDir, { write: false });
-    const feedbackScores = await readUsefulFeedbackScores(rootDir);
+    refreshFeedbackLedger(rootDir);
+    const feedbackScores = readFeedbackScores(rootDir);
     const existingById = new Map(
       (await readMaintenanceProposals(rootDir)).map((proposal) => [
         proposal.id,
@@ -333,81 +330,6 @@ function skillProposalsForObservations(
     });
   }
   return proposals;
-}
-
-/**
- * 从运行日志读取并汇总每条知识的净 usefulness。
- *
- * 同一 `memoryId + queryRunId` 只采用时间最新的一条，避免重试或重复上报放大票数；没有
- * queryRunId 的事件按日志位置视为独立人工反馈。损坏 JSONL 行会跳过，不能阻断维护 worker。
- */
-async function readUsefulFeedbackScores(
-  rootDir: string
-): Promise<Map<string, number>> {
-  const directory = resolveWorkspacePath(rootDir, ".memory", "logs");
-  if (!existsSync(directory)) {
-    return new Map();
-  }
-  const latestByKey = new Map<
-    string,
-    { timestamp: string; memoryId: string; score: number }
-  >();
-  const entries = await readdir(directory, { withFileTypes: true });
-  for (const entry of entries.sort((left, right) =>
-    left.name.localeCompare(right.name)
-  )) {
-    if (!entry.isFile() || !entry.name.endsWith(".jsonl")) {
-      continue;
-    }
-    const lines = (await readFile(
-      resolveWorkspacePath(rootDir, ".memory", "logs", entry.name),
-      "utf8"
-    )).split("\n");
-    for (const [lineIndex, line] of lines.entries()) {
-      if (!line.trim()) {
-        continue;
-      }
-      let event: FeedbackLogEvent;
-      try {
-        event = JSON.parse(line) as FeedbackLogEvent;
-      } catch {
-        continue;
-      }
-      if (
-        event.event !== "feedback.memory_usefulness" ||
-        !event.memoryId ||
-        !event.usefulness
-      ) {
-        continue;
-      }
-      const timestamp = event.timestamp ?? `${entry.name}:${lineIndex}`;
-      const key = `${event.memoryId}\0${
-        event.queryRunId ?? `${entry.name}:${lineIndex}`
-      }`;
-      const previous = latestByKey.get(key);
-      if (previous && previous.timestamp > timestamp) {
-        continue;
-      }
-      latestByKey.set(key, {
-        timestamp,
-        memoryId: event.memoryId,
-        score:
-          event.usefulness === "useful"
-            ? 1
-            : event.usefulness === "not_useful"
-              ? -1
-              : 0
-      });
-    }
-  }
-  const scores = new Map<string, number>();
-  for (const feedback of latestByKey.values()) {
-    scores.set(
-      feedback.memoryId,
-      (scores.get(feedback.memoryId) ?? 0) + feedback.score
-    );
-  }
-  return scores;
 }
 
 /** 生成最小可审阅 Skill 草稿；丰富工具流程应在人工审阅阶段完成。 */

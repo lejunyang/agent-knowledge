@@ -140,8 +140,11 @@ Writer 应主动处理显式记忆、已验证可复用结果和 `AGENTS.md` 未
 3. 逐条 `list/show/accept/reject`。
 4. 将知识 proposal 写入 `_inbox` 后，通过明确知识 ID 人工批准。
 5. 将 Skill proposal 先写 `_inbox-skills`，审阅后再 `maintenance install-skill`。
+6. 在无 pending source event 后运行 `maintenance cleanup --apply` 清理已消费日志。
 
 普通用户不需要手写 `observations.json` 或先 drain staging；`--input` 只用于外部 observation 导入。
+
+用户也可以直接要求 AI 使用 `memory-maintainer` Skill运行维护和 cleanup；AI 汇总 proposal/candidate/Skill，用户决定接受、拒绝、批准和安装。
 
 Skill proposal 的 positive feedback 来自 `.memory/logs`：同一 `memoryId + queryRunId` 只采用最新一条，净正反馈数量必须至少覆盖独立 session 数。Feedback 晚于 observation 到达时，后续 maintenance 会重新评估已消费 observation；不会要求重置 watermark。
 

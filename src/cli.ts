@@ -18,6 +18,7 @@ import { Command } from "commander";
 import {
   MemoryQueryRequestSchema,
   acceptMaintenanceProposal,
+  applyMaintenanceCleanup,
   appendJsonlLog,
   appendSubagentEvent,
   buildKnowledgeGraph,
@@ -44,6 +45,7 @@ import {
   listKnowledge,
   logMemoryFeedback,
   organizeInbox,
+  planMaintenanceCleanup,
   queryKnowledgeGraph,
   queryMemoriesGraphWithDebug,
   queryMemories,
@@ -1115,6 +1117,33 @@ maintenance
   .action(async (options: { root?: string }) => {
     console.log(
       JSON.stringify(await getObservationStatus(resolveCliRoot(options.root)), null, 2)
+    );
+  });
+
+maintenance
+  .command("cleanup")
+  .description(
+    t(
+      "预览或删除已消费的 Subagent 和 feedback 原始日志",
+      "Preview or delete consumed Subagent and feedback source logs"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option(
+    "--apply",
+    t("应用删除；默认 dry-run", "apply deletion; defaults to dry-run"),
+    false
+  )
+  .action(async (options: { root?: string; apply: boolean }) => {
+    const root = resolveCliRoot(options.root);
+    console.log(
+      JSON.stringify(
+        options.apply
+          ? await applyMaintenanceCleanup(root)
+          : await planMaintenanceCleanup(root),
+        null,
+        2
+      )
     );
   });
 

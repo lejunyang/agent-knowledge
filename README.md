@@ -105,6 +105,15 @@ agent-knowledge organize-inbox
 
 `maintenance` 会读取 `.memory/logs` 中的 usefulness feedback。同一 `memoryId + queryRunId` 的重复上报只采用最新一条，不能通过重复日志放大票数；Skill proposal 的净正反馈数量必须至少覆盖独立 session 数。如果 feedback 晚于 observation 到达，下次 `maintenance run/watch` 会重新检查已消费 observation，不需要重置 watermark。
 
+也可以直接要求 AI 使用 `memory-maintainer` Skill：AI 负责运行 maintenance、汇总 proposal/candidate/Skill、清理已消费日志；用户只决定接受、拒绝、批准和安装。清理命令：
+
+```bash
+agent-knowledge maintenance cleanup
+agent-knowledge maintenance cleanup --apply
+```
+
+Cleanup 只在没有待抽取 SubagentStop 时删除已消费 Subagent daily logs，并把 feedback 固化到 ledger 后移除原 feedback 行；query/catalog/Hook 日志与 observations/proposals 保留。
+
 逐条查看并处理自动提案：
 
 ```bash
