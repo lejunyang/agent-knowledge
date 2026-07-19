@@ -92,7 +92,8 @@ const HookConfigSchema = z
   .object({
     minScore: z.number().min(0).max(1).default(0.55),
     maxTokens: z.number().int().positive().default(1200),
-    catalogMaxItems: z.number().int().positive().max(20).default(5)
+    catalogMaxItems: z.number().int().positive().max(20).default(5),
+    detailedSubagentLogging: z.boolean().default(true)
   })
   .default({});
 

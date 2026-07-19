@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -lc 'agent-knowledge hook stage-event'",
+            "command": "bash -lc 'agent-knowledge hook subagent-event'",
             "timeout": 10,
             "async": true,
             "statusMessage": "recording memory subagent start"
@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -lc 'agent-knowledge hook stage-event'",
+            "command": "bash -lc 'agent-knowledge hook subagent-event'",
             "timeout": 10,
             "async": true,
             "statusMessage": "recording memory subagent result"

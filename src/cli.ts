@@ -18,6 +18,7 @@ import { Command } from "commander";
 import {
   MemoryQueryRequestSchema,
   appendJsonlLog,
+  appendSubagentEvent,
   buildContextPacket,
   calibrateRetrieval,
   catalogKnowledge,
@@ -28,6 +29,7 @@ import {
   downloadRetrievalModel,
   getDefaultUserConfigPath,
   getRetrievalModelStatus,
+  getSubagentLogStatus,
   embedKnowledgeIndex,
   loadEvalSuite,
   loadEvalCorpus,
@@ -44,6 +46,7 @@ import {
   rebuildIndex,
   runEvalSuite,
   runScheduledSync,
+  readSubagentLogs,
   resolveRetrievalModelDescriptor,
   S3HttpObjectClient,
   S3SyncBackend,
@@ -929,6 +932,51 @@ staging
     );
   });
 
+const subagents = program
+  .command("subagents")
+  .description(t("查看详细 Subagent 运行日志", "Inspect detailed Subagent execution logs"));
+
+subagents
+  .command("status")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { root?: string }) => {
+    console.log(
+      JSON.stringify(await getSubagentLogStatus(resolveCliRoot(options.root)), null, 2)
+    );
+  });
+
+subagents
+  .command("logs")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--agent-type <type>", t("按 Subagent 类型过滤", "filter by Subagent type"))
+  .option("--event <event>", t("subagent_start 或 subagent_stop", "subagent_start or subagent_stop"))
+  .option("--limit <count>", t("最大日志条数", "maximum log records"), "100")
+  .action(async (options: {
+    root?: string;
+    agentType?: string;
+    event?: string;
+    limit: string;
+  }) => {
+    if (
+      options.event !== undefined &&
+      options.event !== "subagent_start" &&
+      options.event !== "subagent_stop"
+    ) {
+      throw new Error(t("未知 Subagent 事件", "Unknown Subagent event"));
+    }
+    console.log(
+      JSON.stringify(
+        await readSubagentLogs(resolveCliRoot(options.root), {
+          agentType: options.agentType,
+          event: options.event as "subagent_start" | "subagent_stop" | undefined,
+          limit: Number.parseInt(options.limit, 10)
+        }),
+        null,
+        2
+      )
+    );
+  });
+
 const maintenance = program
   .command("maintenance")
   .description(t("生成可审阅的知识维护 proposal", "Generate reviewable knowledge maintenance proposals"));
@@ -1206,6 +1254,34 @@ hook
     const root = resolveCliRoot(options.root);
     await initKnowledgeWorkspace(root);
     await stageCurrentHook(root);
+  });
+
+hook
+  .command("subagent-event")
+  .description(
+    t(
+      "记录详细 Subagent 事件和 staging 信号",
+      "Record a detailed Subagent event and staging signal"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { root?: string }) => {
+    const root = resolveCliRoot(options.root);
+    await initKnowledgeWorkspace(root);
+    const input = await readHookInput();
+    await appendSubagentEvent(root, input, {
+      enabled: userConfig().hooks.detailedSubagentLogging
+    });
+    const runtimeContext = getGitRuntimeContext(
+      typeof input.cwd === "string" ? input.cwd : process.cwd()
+    );
+    const detectedProject = runtimeContext.isGit
+      ? await detectProject(root, runtimeContext.cwd).catch(() => undefined)
+      : undefined;
+    await stageHookEvent(root, {
+      ...input,
+      project_id: detectedProject?.id
+    });
   });
 
 hook

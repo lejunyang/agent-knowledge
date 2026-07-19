@@ -24,6 +24,19 @@ agent-knowledge integration install
 - 只有明确询问“有哪些知识/记忆/SOP/目录”时，才返回最多 5 条与 prompt 相关的知识菜单。
 - 普通任务不会注入 runtime context、全量 catalog、aliases registry 或“没有命中”的提示。
 
+`SubagentStart` / `SubagentStop` 使用专用详细日志：
+
+```text
+.memory/subagents/YYYY-MM-DD.jsonl
+```
+
+日志保留本地原始 Hook payload、Start/Stop 配对和持续时间，便于改进 Subagent；不参与同步，不注入上下文。可运行：
+
+```bash
+agent-knowledge subagents status
+agent-knowledge subagents logs --agent-type memory-writer
+```
+
 ## 写入模式
 
 - `merge`：默认。只替换 Agent Knowledge 自有 Hook，保留其他配置；未托管的同名 Agent/Skill 报冲突。

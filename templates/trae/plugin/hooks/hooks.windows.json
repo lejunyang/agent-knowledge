@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-knowledge.cmd hook stage-event",
+            "command": "agent-knowledge.cmd hook subagent-event",
             "timeout": 10,
             "async": true
           }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-knowledge.cmd hook stage-event",
+            "command": "agent-knowledge.cmd hook subagent-event",
             "timeout": 10,
             "async": true
           }

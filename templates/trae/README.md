@@ -53,10 +53,10 @@ agent-knowledge integration install \
 
 - `SessionStart`：初始化 `AGENT_KNOWLEDGE_ROOT`，并向当前会话补充知识库路径说明。
 - `UserPromptSubmit`：在主 Agent 处理用户请求前注入 catalog 简表和 context packet。
-- `SubagentStart` / `SubagentStop`：异步记录脱敏 Subagent staging。
+- `SubagentStart` / `SubagentStop`：异步记录本地详细 Subagent payload、配对和持续时间，同时保留 staging 信号。
 - `Stop` / `SessionEnd`：异步记录回合/会话结束信号。
 
-Staging hook 不返回 block、allow 或 continuation，不会强制模型继续。它只记录 hash、长度、agent type、reason 和 project ID，不保存完整 prompt、response、tool payload 或 transcript。
+Subagent 详细日志写入 `.memory/subagents/`，不参与同步或模型上下文。其他 staging hook 不返回 block、allow 或 continuation，只记录脱敏摘要。
 
 安装命令会按平台选择 hook 模板：
 

@@ -37,3 +37,4 @@ export * from "./sync/configured.js";
 export * from "./sync/scheduler.js";
 export * from "./hooks/staging.js";
 export * from "./hooks/relevance.js";
+export * from "./hooks/subagentLogs.js";

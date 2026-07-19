@@ -213,6 +213,9 @@ describe("managed integrations", () => {
     await expect(readFile(path.join(windowsTarget, "hooks.json"), "utf8")).resolves.toContain(
       "agent-knowledge.cmd hook"
     );
+    await expect(readFile(path.join(windowsTarget, "hooks.json"), "utf8")).resolves.toContain(
+      "agent-knowledge.cmd hook subagent-event"
+    );
     await expect(
       readFile(path.join(windowsTarget, "plugins", "agent-knowledge", ".codex-plugin", "plugin.json"), "utf8")
     ).resolves.toContain('"name": "agent-knowledge"');
