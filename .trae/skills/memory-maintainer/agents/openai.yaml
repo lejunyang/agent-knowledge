@@ -1,0 +1,4 @@
+interface:
+  display_name: "Memory Maintainer"
+  short_description: "Review staged Agent Knowledge events and create safe candidates"
+  default_prompt: "Review pending memory staging events and propose only durable, well-supported knowledge."

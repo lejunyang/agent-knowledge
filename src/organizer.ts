@@ -46,6 +46,11 @@ export type OrganizeInboxItem = {
 export type OrganizeInboxResult = {
   applied: boolean;
   moved: OrganizeInboxItem[];
+  blocked: Array<{
+    id: string;
+    title: string;
+    reason: string;
+  }>;
   indexed?: number;
 };
 
@@ -153,6 +158,46 @@ async function readAllKnowledgeDocuments(rootDir: string): Promise<KnowledgeDocu
   return documents;
 }
 
+function promotionBlockedReason(document: KnowledgeDocument): string | null {
+  if (document.frontmatter.actor_type === "customer") {
+    return "customer_observation_requires_trusted_review";
+  }
+  if (document.frontmatter.capture_mode === "automated_session") {
+    return "automated_session_requires_trusted_review";
+  }
+  return null;
+}
+
+async function invalidateSupersededDocuments(
+  rootDir: string,
+  supersededIds: string[],
+  documents: KnowledgeDocument[]
+): Promise<void> {
+  if (supersededIds.length === 0) {
+    return;
+  }
+  const ids = new Set(supersededIds);
+  for (const document of documents) {
+    if (!ids.has(document.frontmatter.id) || document.frontmatter.status !== "active") {
+      continue;
+    }
+    const updated = KnowledgeDocumentSchema.parse({
+      ...document,
+      frontmatter: {
+        ...document.frontmatter,
+        status: "deprecated",
+        updated_at: today(),
+        valid_until: today()
+      }
+    });
+    await writeFile(
+      resolveWorkspacePath(rootDir, document.filePath),
+      serializeKnowledgeMarkdown(updated),
+      "utf8"
+    );
+  }
+}
+
 export async function listKnowledge(rootDir: string): Promise<KnowledgeListSummary> {
   await initKnowledgeWorkspace(rootDir);
   const documents = await readAllKnowledgeDocuments(rootDir);
@@ -194,9 +239,20 @@ export async function organizeInbox(
   const documents = (await readAllKnowledgeDocuments(rootDir)).filter((document) =>
     document.filePath.startsWith("knowledge/_inbox/")
   );
+  const allDocuments = await readAllKnowledgeDocuments(rootDir);
   const moved: OrganizeInboxItem[] = [];
+  const blocked: OrganizeInboxResult["blocked"] = [];
 
   for (const document of documents) {
+    const blockedReason = promotionBlockedReason(document);
+    if (blockedReason) {
+      blocked.push({
+        id: document.frontmatter.id,
+        title: document.frontmatter.title,
+        reason: blockedReason
+      });
+      continue;
+    }
     const statusBefore = document.frontmatter.status;
     const updatedDocument = KnowledgeDocumentSchema.parse({
       ...document,
@@ -224,11 +280,12 @@ export async function organizeInbox(
     const targetAbsolutePath = resolveWorkspacePath(rootDir, targetRelativePath);
     await mkdir(path.dirname(targetAbsolutePath), { recursive: true });
     await writeFile(targetAbsolutePath, serializeKnowledgeMarkdown({ ...updatedDocument, filePath: targetRelativePath }), "utf8");
+    await invalidateSupersededDocuments(rootDir, updatedDocument.frontmatter.supersedes, allDocuments);
     await rename(resolveWorkspacePath(rootDir, document.filePath), resolveWorkspacePath(rootDir, "knowledge", "_archive", path.basename(document.filePath)));
   }
 
   const indexed = options.apply && options.rebuild ? rebuildIndex(rootDir).indexed : undefined;
-  return { applied: options.apply, moved, indexed };
+  return { applied: options.apply, moved, blocked, indexed };
 }
 
 function documentFromMaterialInput(input: CandidateMemoryInput): KnowledgeDocument {
@@ -252,10 +309,14 @@ function documentFromMaterialInput(input: CandidateMemoryInput): KnowledgeDocume
       source_authority: input.source_authority,
       source: input.evidence,
       related_knowledge: input.related_knowledge ?? [],
-      supersedes: [],
-      conflicts_with: [],
-      visibility: "project",
-      sensitivity: "internal",
+      supersedes: input.supersedes ?? [],
+      conflicts_with: input.conflicts_with ?? [],
+      visibility: input.visibility ?? "project",
+      sensitivity: input.sensitivity ?? "internal",
+      project_ids: input.project_ids ?? [],
+      capture_mode: input.capture_mode ?? "direct_material",
+      actor_type: input.actor_type ?? "owner",
+      corroboration_count: input.corroboration_count ?? 1,
       created_at: date,
       updated_at: date,
       valid_from: date,
@@ -277,6 +338,7 @@ export async function captureMaterial(
 ): Promise<CaptureMaterialResult> {
   await initKnowledgeWorkspace(rootDir);
   const written: CaptureMaterialResult["written"] = [];
+  const existingDocuments = await readAllKnowledgeDocuments(rootDir);
 
   for (const input of inputs) {
     if (options.target === "inbox") {
@@ -286,10 +348,16 @@ export async function captureMaterial(
     }
 
     const document = documentFromMaterialInput(input);
+    if (document.frontmatter.status !== "active" || promotionBlockedReason(document)) {
+      const result = await writeCandidateMemory(rootDir, input);
+      written.push(result);
+      continue;
+    }
     const targetRelativePath = await uniqueRelativePath(rootDir, activeRelativePath(document.frontmatter));
     const targetAbsolutePath = resolveWorkspacePath(rootDir, targetRelativePath);
     await mkdir(path.dirname(targetAbsolutePath), { recursive: true });
     await writeFile(targetAbsolutePath, serializeKnowledgeMarkdown({ ...document, filePath: targetRelativePath }), "utf8");
+    await invalidateSupersededDocuments(rootDir, document.frontmatter.supersedes, existingDocuments);
     written.push({
       id: document.frontmatter.id,
       status: document.frontmatter.status,

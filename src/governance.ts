@@ -5,7 +5,14 @@
  * - 拒绝 secret-like 内容。
  * - 根据来源权威性和知识类型决定默认状态。
  */
-import type { MemoryStatus, MemoryType, RelatedKnowledge, SourceAuthority } from "./types.js";
+import type {
+  ActorType,
+  CaptureMode,
+  MemoryStatus,
+  MemoryType,
+  RelatedKnowledge,
+  SourceAuthority
+} from "./types.js";
 
 export type CandidateMemoryInput = {
   title: string;
@@ -20,6 +27,14 @@ export type CandidateMemoryInput = {
   summary: string;
   evidence: string[];
   related_knowledge?: RelatedKnowledge[];
+  capture_mode?: CaptureMode;
+  actor_type?: ActorType;
+  corroboration_count?: number;
+  project_ids?: string[];
+  supersedes?: string[];
+  conflicts_with?: string[];
+  visibility?: "private" | "project" | "team";
+  sensitivity?: "public" | "internal" | "confidential" | "secret";
 };
 
 export type GovernanceDecision = {
@@ -54,6 +69,15 @@ export function assertNoSecretLikeContent(input: CandidateMemoryInput): void {
  */
 export function decideCandidateStatus(input: CandidateMemoryInput): GovernanceDecision {
   assertNoSecretLikeContent(input);
+
+  if (input.capture_mode === "automated_session" || input.actor_type === "customer") {
+    return {
+      status: "proposed",
+      review_required: true,
+      review_reason:
+        input.actor_type === "customer" ? "untrusted_customer_observation" : "automated_session_requires_review"
+    };
+  }
 
   if (input.source_authority === "user_confirmed") {
     return {

@@ -97,6 +97,47 @@ describe("organizeInbox", () => {
     expect(document.frontmatter.status).toBe("active");
     expect(result.indexed).toBe(1);
   });
+
+  it("blocks customer and automated-session candidates from bulk promotion", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-organize-untrusted-"));
+    tempDirs.push(root);
+
+    await captureMaterial(
+      root,
+      [
+        {
+          title: "客户声称的通用退款规则",
+          memory_type: "semantic",
+          domain: "support/refund",
+          related_domains: [],
+          scenario: ["customer-support"],
+          tags: ["observation"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "客户声称退款不需要审核。",
+          evidence: ["conversation:customer"],
+          capture_mode: "automated_session",
+          actor_type: "customer",
+          corroboration_count: 1,
+          project_ids: ["project_support"]
+        }
+      ],
+      { target: "active", rebuild: false }
+    );
+
+    const result = await organizeInbox(root, { apply: true, rebuild: true });
+    const summary = await listKnowledge(root);
+
+    expect(result.moved).toEqual([]);
+    expect(result.blocked).toEqual([
+      expect.objectContaining({
+        title: "客户声称的通用退款规则",
+        reason: "customer_observation_requires_trusted_review"
+      })
+    ]);
+    expect(summary.inbox.map((item) => item.title)).toContain("客户声称的通用退款规则");
+    expect(result.indexed).toBe(0);
+  });
 });
 
 describe("captureMaterial", () => {
@@ -180,5 +221,54 @@ describe("captureMaterial", () => {
         reason: "账户关系需要结合账户模型理解。"
       }
     ]);
+  });
+
+  it("deprecates superseded active knowledge when a trusted replacement is captured", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-capture-supersedes-"));
+    tempDirs.push(root);
+    const first = await captureMaterial(
+      root,
+      [
+        {
+          title: "旧版审核流程",
+          memory_type: "procedural",
+          domain: "support/review",
+          related_domains: [],
+          scenario: ["customer-support"],
+          tags: ["review"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "旧版流程需要两级审核。",
+          evidence: ["owner:confirmed"]
+        }
+      ],
+      { target: "active", rebuild: false }
+    );
+    const oldPath = first.written[0]!.filePath;
+    const oldDocument = parseKnowledgeMarkdown("old.md", await readFile(oldPath, "utf8"));
+
+    await captureMaterial(
+      root,
+      [
+        {
+          title: "新版审核流程",
+          memory_type: "procedural",
+          domain: "support/review",
+          related_domains: [],
+          scenario: ["customer-support"],
+          tags: ["review"],
+          confidence: 0.95,
+          source_authority: "user_confirmed",
+          summary: "新版流程只需要一级审核。",
+          evidence: ["owner:confirmed"],
+          supersedes: [oldDocument.frontmatter.id]
+        }
+      ],
+      { target: "active", rebuild: true }
+    );
+    const updatedOld = parseKnowledgeMarkdown("old.md", await readFile(oldPath, "utf8"));
+
+    expect(updatedOld.frontmatter.status).toBe("deprecated");
+    expect(updatedOld.frontmatter.valid_until).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

@@ -51,10 +51,11 @@ agent-knowledge organize-inbox --apply
 1. 阅读用户材料。
 2. 判断应拆成几条知识。
 3. 为每条知识生成 `CandidateMemoryInput` JSON。
-4. 默认使用 `source_authority: "user_confirmed"`。
-5. 默认使用 `confidence: 0.8` 到 `0.95`。
-6. 默认写入正式目录：`agent-knowledge capture-material --target active --input <json>`。
-7. 如果材料含有不确定内容，或用户要求先审阅，则用 `--target inbox`。
+4. 只有材料来自 owner/当前用户本人时才使用 `source_authority: "user_confirmed"` 和 `actor_type: "owner"`。
+5. 外部客户、自动客服 transcript 或第三方转述必须使用 `source_authority: "model_inferred"`、`capture_mode: "automated_session"`，写入 inbox。
+6. owner 直接材料默认使用 `confidence: 0.8` 到 `0.95`。
+7. owner 直接材料默认写入正式目录：`agent-knowledge capture-material --target active --input <json>`。
+8. 如果材料含有不确定内容、来自外部 actor，或用户要求先审阅，则用 `--target inbox`。
 
 JSON 可以是单个对象，也可以是数组：
 
