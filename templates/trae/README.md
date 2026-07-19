@@ -124,6 +124,8 @@ Hook 自动路径不加载 embedding 或 reranker。
 - `related_knowledge`
 - `supersedes`
 - `conflicts_with`
+- `id`（可选稳定外部文档映射）
+- `content`（仅完整 `source` 证据）
 
 外部客户和 automatic session 只能生成 proposed observation，不能直接成为 active 事实。
 

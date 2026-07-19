@@ -80,6 +80,7 @@ agent-knowledge organize-inbox --approve "$MEMORY_ID" --apply
 8. 如果材料含有不确定内容、来自外部 actor，或用户要求先审阅，则用 `--target inbox`。
 9. 不要把可由 Agent 当场搜索到的普通代码结构、目录树、函数签名或已有 `AGENTS.md` 内容重复保存。
 10. 适合项目知识库的是稳定架构决策、跨模块隐含约束、项目特有业务语义、事故教训和验证 SOP。
+11. 用户明确提供/指定拉取的正式文档可使用 `source_authority: "documented"`、`actor_type: "owner"`、`capture_mode: "direct_material"`；confidence 至少 `0.8` 时可按用户要求直接 active。后台自动发现或客户转述不能使用这条放行路径。
 
 JSON 可以是单个对象，也可以是数组：
 

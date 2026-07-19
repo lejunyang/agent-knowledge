@@ -52,6 +52,9 @@ describe("managed integrations", () => {
     await expect(readFile(writerTarget, "utf8")).resolves.toContain(
       "organize-inbox --approve"
     );
+    await expect(readFile(writerTarget, "utf8")).resolves.toContain(
+      "type=source"
+    );
     await expect(readFile(maintainerTarget, "utf8")).resolves.toContain(
       "maintenance install-skill"
     );

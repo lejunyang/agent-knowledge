@@ -50,6 +50,9 @@ function idSlugify(input: string): string {
 
 /** 根据日期、domain 和标题生成可跨文件引用的稳定候选 ID。 */
 function idFromCandidate(input: CandidateMemoryInput): string {
+  if (input.id) {
+    return input.id;
+  }
   const date = today().replaceAll("-", "");
   return `k_${date}_${idSlugify(input.domain)}_${idSlugify(input.title)}`;
 }
@@ -101,7 +104,9 @@ export async function writeCandidateMemory(rootDir: string, input: CandidateMemo
       valid_from: date,
       valid_until: null
     },
-    body: `# ${input.title}
+    body:
+      input.content ??
+      `# ${input.title}
 
 ## 结论
 
@@ -118,7 +123,12 @@ ${input.summary}
   try {
     await access(absolutePath);
     const existing = parseKnowledgeMarkdown(relativePath, await readFile(absolutePath, "utf8"));
-    if (existing.frontmatter.id === id && existing.body.includes(input.summary)) {
+    if (
+      existing.frontmatter.id === id &&
+      (input.content
+        ? existing.body === input.content.trimStart()
+        : existing.body.includes(input.summary))
+    ) {
       return {
         id,
         status: existing.frontmatter.status,

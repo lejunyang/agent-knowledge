@@ -69,6 +69,7 @@ tools: ""
 
 ```json
 {
+  "id": "可选稳定知识ID，仅外部文档映射等需要稳定引用时填写",
   "title": "Lint 迁移验证流程",
   "memory_type": "procedural",
   "domain": "frontend/lint",
@@ -79,6 +80,7 @@ tools: ""
   "confidence": 0.72,
   "source_authority": "model_inferred",
   "summary": "迁移 lint 配置后应按 Oxlint -> ESLint fallback -> Oxfmt 顺序验证。",
+  "content": "可选完整正文；仅 type=source 的原始证据使用，普通知识不要复制长文",
   "evidence": ["conversation:current-session"],
   "capture_mode": "verified_task",
   "actor_type": "agent",
@@ -114,6 +116,12 @@ tools: ""
 ```
 
 不要输出 Markdown、解释、前后缀或代码块。
+
+`id` 和 `content` 规则：
+
+- 普通知识省略 `id`，由 CLI 根据 domain/title 生成。
+- 外部文档需要稳定映射时，可使用满足 `k_[a-zA-Z0-9_]+` 的显式 ID。
+- `content` 只用于 `type: source` 保存完整原始证据；semantic/procedural/profile/episodic 应使用精炼 summary 和正文结构，不要复制整份长文。
 
 以下情况必须输出 `should_store: false`：
 

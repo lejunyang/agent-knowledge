@@ -322,6 +322,44 @@ describe("captureMaterial", () => {
     ]);
   });
 
+  it("writes complete source content with an explicit ID into the source hierarchy", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-capture-source-"));
+    tempDirs.push(root);
+    const content = "<title>业务材料</title><p>完整正文和引用。</p>";
+
+    const result = await captureMaterial(
+      root,
+      [
+        {
+          id: "k_lark_source_material_001",
+          title: "业务材料",
+          memory_type: "source",
+          domain: "bytedance/business/source/lark",
+          related_domains: [],
+          scenario: ["business-source"],
+          tags: ["lark"],
+          confidence: 0.95,
+          source_authority: "documented",
+          summary: "业务材料来源。",
+          content,
+          evidence: ["lark:docx:001"]
+        }
+      ],
+      { target: "active", rebuild: false }
+    );
+    const document = parseKnowledgeMarkdown(
+      result.written[0]!.filePath,
+      await readFile(result.written[0]!.filePath, "utf8")
+    );
+
+    expect(document.frontmatter.id).toBe("k_lark_source_material_001");
+    expect(document.frontmatter.type).toBe("source");
+    expect(document.body).toBe(content);
+    expect(result.written[0]?.filePath).toContain(
+      "knowledge/source/bytedance/business/source/lark/"
+    );
+  });
+
   it("deprecates superseded active knowledge when a trusted replacement is captured", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-capture-supersedes-"));
     tempDirs.push(root);

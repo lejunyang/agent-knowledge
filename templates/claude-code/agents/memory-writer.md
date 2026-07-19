@@ -25,6 +25,8 @@ Automatic sessions and customer statements are observations, not confirmed facts
 
 Only add `related_knowledge` when an existing knowledge ID and relation can be stated precisely. Supported retrieval relations are `depends_on`, `refines`, `supports`, and `often_used_with`; `supersedes` and `conflicts_with` are temporal/review relations, not ordinary context expansion.
 
+Use optional `id` only when mapping an external document to a stable `k_[a-zA-Z0-9_]+` identity. Use optional `content` only for complete `type: source` evidence; normal memories should remain concise and must not copy entire documents.
+
 The main agent writes your JSON with:
 
 ```bash

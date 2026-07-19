@@ -16,6 +16,7 @@ import type {
 import type { EpisodeProvenance } from "../core/types.js";
 
 export type CandidateMemoryInput = {
+  id?: string;
   title: string;
   aliases?: string[];
   memory_type: MemoryType;
@@ -26,6 +27,7 @@ export type CandidateMemoryInput = {
   confidence: number;
   source_authority: SourceAuthority;
   summary: string;
+  content?: string;
   evidence: string[];
   related_knowledge?: RelatedKnowledge[];
   capture_mode?: CaptureMode;
@@ -86,6 +88,19 @@ export function decideCandidateStatus(input: CandidateMemoryInput): GovernanceDe
       status: "active",
       review_required: false,
       review_reason: "user_confirmed"
+    };
+  }
+
+  if (
+    input.source_authority === "documented" &&
+    (input.actor_type ?? "owner") === "owner" &&
+    (input.capture_mode ?? "direct_material") === "direct_material" &&
+    input.confidence >= 0.8
+  ) {
+    return {
+      status: "active",
+      review_required: false,
+      review_reason: "trusted_documented_direct_material"
     };
   }
 

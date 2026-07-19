@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { writeCandidateMemory } from "../src/memory/inbox.js";
+import { parseKnowledgeMarkdown } from "../src/storage/markdown.js";
 
 let tempDirs: string[] = [];
 
@@ -198,5 +199,60 @@ describe("writeCandidateMemory", () => {
     await expect(
       writeCandidateMemory(root, { ...base, summary: "不同的第二版内容。" })
     ).rejects.toThrow("Consolidate or retitle");
+  });
+
+  it("preserves an explicit stable ID and complete source content", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-inbox-source-"));
+    tempDirs.push(root);
+    const content = `<title>完整飞书来源</title>
+<p>第一段完整原文。</p>
+<p>第二段完整原文。</p>`;
+    const candidate = {
+      id: "k_lark_doc_source_abc123",
+      title: "完整飞书来源",
+      memory_type: "source" as const,
+      domain: "bytedance/business/source/lark",
+      related_domains: [],
+      scenario: ["business-source"],
+      tags: ["lark", "source"],
+      confidence: 0.95,
+      source_authority: "documented" as const,
+      summary: "飞书文档完整来源证据。",
+      content,
+      evidence: ["lark:wiki:abc123"]
+    };
+
+    const result = await writeCandidateMemory(root, candidate);
+    const raw = await readFile(result.filePath, "utf8");
+    const document = parseKnowledgeMarkdown(result.filePath, raw);
+
+    expect(result.id).toBe("k_lark_doc_source_abc123");
+    expect(document.frontmatter.id).toBe("k_lark_doc_source_abc123");
+    expect(document.body).toBe(content);
+
+    const duplicate = await writeCandidateMemory(root, candidate);
+    expect(duplicate.deduplicated).toBe(true);
+  });
+
+  it("keeps documented automated material proposed despite high confidence", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-inbox-documented-auto-"));
+    tempDirs.push(root);
+
+    const result = await writeCandidateMemory(root, {
+      title: "自动抓取的外部文档",
+      memory_type: "source",
+      domain: "bytedance/business/source/lark",
+      related_domains: [],
+      scenario: ["business-source"],
+      tags: ["lark"],
+      confidence: 0.99,
+      source_authority: "documented",
+      summary: "尚未由 owner 确认的自动材料。",
+      evidence: ["lark:auto"],
+      capture_mode: "automated_session",
+      actor_type: "agent"
+    });
+
+    expect(result.status).toBe("proposed");
   });
 });

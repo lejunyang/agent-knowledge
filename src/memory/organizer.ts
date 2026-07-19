@@ -102,6 +102,9 @@ function idSlugify(input: string): string {
 
 /** 根据日期、domain 和标题生成直接材料的知识 ID。 */
 function idFromInput(input: CandidateMemoryInput): string {
+  if (input.id) {
+    return input.id;
+  }
   return `k_${today().replaceAll("-", "")}_${idSlugify(input.domain)}_${idSlugify(input.title)}`;
 }
 
@@ -367,7 +370,9 @@ function documentFromMaterialInput(input: CandidateMemoryInput): KnowledgeDocume
       valid_from: date,
       valid_until: null
     },
-    body: `# ${input.title}
+    body:
+      input.content ??
+      `# ${input.title}
 
 ## 结论
 
