@@ -757,12 +757,19 @@ program
   .command("organize-inbox")
   .description(t("预览或应用 inbox 知识晋升", "Plan or apply promotion of inbox Markdown into active directories"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--approve <id...>", t("只处理并明确批准指定知识 ID；可晋升已人工核验的自动/客户候选", "only process and explicitly approve selected knowledge IDs; permits reviewed automatic/customer candidates"))
   .option("--apply", t("移动并激活文件；默认 dry-run", "move and activate files; defaults to dry-run"), false)
   .option("--no-rebuild", t("应用后不重建索引", "skip index rebuild after applying changes"))
-  .action(async (options: { root?: string; apply: boolean; rebuild: boolean }) => {
+  .action(async (options: {
+    root?: string;
+    approve?: string[];
+    apply: boolean;
+    rebuild: boolean;
+  }) => {
     const result = await organizeInbox(resolveCliRoot(options.root), {
       apply: options.apply,
-      rebuild: options.rebuild
+      rebuild: options.rebuild,
+      approvedIds: options.approve
     });
     console.log(JSON.stringify(result, null, 2));
   });

@@ -233,19 +233,37 @@ export async function listKnowledge(rootDir: string): Promise<KnowledgeListSumma
 
 export async function organizeInbox(
   rootDir: string,
-  options: { apply: boolean; rebuild: boolean }
+  options: { apply: boolean; rebuild: boolean; approvedIds?: string[] }
 ): Promise<OrganizeInboxResult> {
   await initKnowledgeWorkspace(rootDir);
   const documents = (await readAllKnowledgeDocuments(rootDir)).filter((document) =>
     document.filePath.startsWith("knowledge/_inbox/")
   );
+  const approvedIds =
+    options.approvedIds === undefined ? undefined : new Set(options.approvedIds);
+  if (approvedIds) {
+    const existingIds = new Set(
+      documents.map((document) => document.frontmatter.id)
+    );
+    const missingIds = [...approvedIds].filter((id) => !existingIds.has(id));
+    if (missingIds.length > 0) {
+      throw new Error(
+        `Inbox knowledge IDs not found: ${missingIds.sort().join(", ")}`
+      );
+    }
+  }
   const allDocuments = await readAllKnowledgeDocuments(rootDir);
   const moved: OrganizeInboxItem[] = [];
   const blocked: OrganizeInboxResult["blocked"] = [];
 
   for (const document of documents) {
+    // Providing explicit IDs changes the operation from bulk organization to a human-reviewed
+    // allowlist. Unlisted candidates must remain untouched even when they are otherwise promotable.
+    if (approvedIds && !approvedIds.has(document.frontmatter.id)) {
+      continue;
+    }
     const blockedReason = promotionBlockedReason(document);
-    if (blockedReason) {
+    if (blockedReason && !approvedIds?.has(document.frontmatter.id)) {
       blocked.push({
         id: document.frontmatter.id,
         title: document.frontmatter.title,

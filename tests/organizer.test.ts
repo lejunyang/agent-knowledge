@@ -138,6 +138,83 @@ describe("organizeInbox", () => {
     expect(summary.inbox.map((item) => item.title)).toContain("客户声称的通用退款规则");
     expect(result.indexed).toBe(0);
   });
+
+  it("promotes an automated-session candidate only when its ID is explicitly approved", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-organize-approved-"));
+    tempDirs.push(root);
+    const captured = await captureMaterial(
+      root,
+      [
+        {
+          title: "已由人工核验的退款规则",
+          memory_type: "semantic",
+          domain: "support/refund",
+          related_domains: [],
+          scenario: ["customer-support"],
+          tags: ["reviewed"],
+          confidence: 0.8,
+          source_authority: "documented",
+          summary: "退款规则已经由人工对照受信文档完成核验。",
+          evidence: ["document:refund-policy"],
+          capture_mode: "automated_session",
+          actor_type: "agent"
+        }
+      ],
+      { target: "inbox", rebuild: false }
+    );
+    const approvedId = captured.written[0]!.id;
+
+    const result = await organizeInbox(root, {
+      apply: true,
+      rebuild: true,
+      approvedIds: [approvedId]
+    });
+    const promoted = result.moved[0]!;
+    const document = parseKnowledgeMarkdown(
+      promoted.to,
+      await readFile(path.join(root, promoted.to), "utf8")
+    );
+
+    expect(result.blocked).toEqual([]);
+    expect(result.moved.map((item) => item.id)).toEqual([approvedId]);
+    expect(document.frontmatter.status).toBe("active");
+  });
+
+  it("rejects an unknown approval ID before changing any inbox candidate", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-organize-unknown-"));
+    tempDirs.push(root);
+    const captured = await captureMaterial(
+      root,
+      [
+        {
+          title: "待人工核验的客服观察",
+          memory_type: "semantic",
+          domain: "support/refund",
+          related_domains: [],
+          scenario: ["customer-support"],
+          tags: ["observation"],
+          confidence: 0.6,
+          source_authority: "model_inferred",
+          summary: "该观察尚未完成受信来源核验。",
+          evidence: ["conversation:customer"],
+          capture_mode: "automated_session",
+          actor_type: "customer"
+        }
+      ],
+      { target: "inbox", rebuild: false }
+    );
+
+    await expect(
+      organizeInbox(root, {
+        apply: true,
+        rebuild: true,
+        approvedIds: ["k_missing"]
+      })
+    ).rejects.toThrow("Inbox knowledge IDs not found: k_missing");
+    await expect(readFile(captured.written[0]!.filePath, "utf8")).resolves.toContain(
+      "待人工核验的客服观察"
+    );
+  });
 });
 
 describe("captureMaterial", () => {
