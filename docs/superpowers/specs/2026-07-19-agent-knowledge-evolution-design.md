@@ -7,7 +7,7 @@
 在保留“Markdown 是唯一事实源、自动内容先隔离、索引可重建”的前提下，完成以下演进：
 
 1. 修复 Hivemind 对比评测发现的检索、embedding、治理和 token budget 正确性问题。
-2. 把固定的 `link-trae-templates` 改造成多产品、可选组件、可卸载、结构化合并的 integration installer。
+2. 用多产品、可选组件、可卸载、结构化合并的 integration installer 替代固定模板安装。
 3. 自动识别 Git 项目身份，让项目知识可以精确绑定项目，同时避免复制 `AGENTS.md` 或建设低收益 code graph。
 4. 为 WebDAV 和 S3 提供双向 Markdown 同步，并对并发修改显式产出冲突，不静默覆盖。
 5. 增强主动记忆、Subagent 日志和后台整理链路，同时防止客服场景中的低质量记录与知识投毒。
@@ -125,7 +125,7 @@ agent-knowledge integration doctor --product <product>
 - Agent/Skill 只管理自有命名文件；首次遇到不同内容的同名非托管文件时报告 conflict，不覆盖。
 - 写本地 integration manifest，支持幂等升级和卸载。
 
-旧 `link-trae-templates` 保留一个版本作为兼容别名，但内部转到 installer，并输出 deprecation。
+旧模板链接命令不再保留；产品接入统一使用 `agent-knowledge integration`。
 
 ### 4. 项目身份
 

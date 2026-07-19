@@ -9,7 +9,7 @@
 1. 将 `ActorType` 的 `system` 迁移为语义更准确的 `agent`，兼容读取旧数据。
 2. 为 CLI 普通输出、帮助信息、交互向导和 Hook 提示提供 `zh-CN` / `en` 多语言。
 3. 让 `UserPromptSubmit` 默认静默，只在可靠相关或用户明确查看知识菜单时注入最小上下文。
-4. 删除 `link-trae-templates` CLI 和 TypeScript 兼容 API。
+4. 删除旧模板链接 CLI 和 TypeScript 兼容 API。
 5. 新增 embedding/reranker 模型缓存状态与显式下载命令。
 6. 完成 `2026-07-18-hivemind-memory-and-embeddings-evaluation.md` 四阶段中尚未实现的任务。
 
@@ -173,9 +173,9 @@ Catalog 输出：
 
 完全删除：
 
-- `agent-knowledge link-trae-templates`
-- `linkTraeTemplates`
-- `getDefaultTraeConfigDir`
+- 旧的 TRAE 模板链接 CLI
+- 旧模板链接函数
+- 旧 TRAE 配置目录辅助函数
 - `src/integration/templates.ts`
 - 所有 deprecated 文档说明。
 

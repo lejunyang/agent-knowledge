@@ -912,32 +912,6 @@ program
     console.log(`Installed global command from ${packageDir}`);
   });
 
-program
-  .command("link-trae-templates")
-  .description("Deprecated compatibility wrapper for integration install --product trae")
-  .option("--target-dir <dir>", "TRAE config directory override")
-  .option("--force", "deprecated and ignored; managed resources are merged safely", false)
-  .action(async (options: { targetDir?: string; force: boolean }) => {
-    const result = await installIntegration({
-      packageRoot: findPackageRoot(),
-      product: "trae",
-      scope: "user",
-      targetDir: options.targetDir,
-      components: ["hooks", "agents", "skills"]
-    });
-    console.log(
-      JSON.stringify(
-        {
-          deprecated: "Use `agent-knowledge integration install --product trae --scope user`.",
-          forceIgnored: options.force,
-          ...result
-        },
-        null,
-        2
-      )
-    );
-  });
-
 const hook = program.command("hook").description("Commands intended to be called from TRAE hooks.json templates");
 
 async function stageCurrentHook(root: string): Promise<void> {

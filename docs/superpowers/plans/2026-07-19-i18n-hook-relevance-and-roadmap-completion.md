@@ -79,9 +79,9 @@
 - Modify: `docs/superpowers/specs/2026-07-19-agent-knowledge-evolution-design.md`
 - Modify: `docs/superpowers/plans/2026-07-19-agent-knowledge-evolution.md`
 
-- [ ] Add a CLI smoke assertion that `link-trae-templates` is absent from help.
+- [ ] Add a CLI smoke assertion that the legacy template-link command is absent from help.
 - [ ] Delete CLI registration, TypeScript exports, implementation, and compatibility documentation.
-- [ ] Run `rg "link-trae-templates|linkTraeTemplates|getDefaultTraeConfigDir" . -g '!node_modules' -g '!dist'`; expect no live code/docs references.
+- [ ] Search the repository for the removed CLI/API identifiers; expect no live code or documentation references.
 - [ ] Run typecheck/build.
 - [ ] Commit with `refactor: remove legacy template link command`.
 

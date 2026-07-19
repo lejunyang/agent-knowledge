@@ -253,7 +253,7 @@ agent-knowledge write-candidate \
 
 候选知识被人类审阅并激活后，重新运行 `agent-knowledge index`；如果使用 embedding 缓存，也重新运行 `agent-knowledge embed-index`。
 
-使用 `agent-knowledge integration install --product trae|claude-code --scope user|project` 安装产品接入。安装器不使用 symlink；hooks 结构化 merge 且只管理 `agent-knowledge hook` handler，agents/skills/plugin bundle 由本地 manifest 记录所有权。旧 `link-trae-templates` 仅保留为 deprecated 包装。
+使用 `agent-knowledge integration install --product trae|trae-cn|claude-code --scope user|project` 安装产品接入。安装器不使用 symlink；hooks 结构化 merge 且只管理 `agent-knowledge hook` handler，agents/skills/plugin bundle 由本地 manifest 记录所有权。
 `knowledge-organizer` 和 `memory-maintainer` Skills 位于 `.trae/skills/`。前者整理 inbox/直接材料，后者审阅 staging/log 并提出保守候选。
 
 Hook 主动记忆边界：

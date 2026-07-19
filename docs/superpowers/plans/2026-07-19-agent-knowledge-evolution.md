@@ -148,7 +148,7 @@ Define adapter metadata for TRAE and Claude Code, copy managed resources atomica
 
 - [ ] **Step 3: Implement CLI**
 
-Add `integration list/install/uninstall/doctor`; keep `link-trae-templates` as a deprecated wrapper.
+Add `integration list/install/uninstall/doctor` as the only product installation command surface.
 
 - [ ] **Step 4: Verify**
 
