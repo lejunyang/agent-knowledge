@@ -52,6 +52,8 @@ agent-knowledge write-candidate --input candidate.json
 
 Use `agent-knowledge maintenance run` to extract observations from detailed Subagent logs and generate deterministic duplicate, consolidation, update, conflict, and Skill proposals under `.memory/proposals/`. `--input` is only for advanced external observation imports. Proposals are review artifacts and never activate knowledge or install Skills.
 
+Review with `maintenance list/show`. Accept knowledge proposals into `_inbox`; accept Skill proposals without a target into `_inbox-skills`. Only install a Skill when the user explicitly requests `--skill-target project|user`.
+
 ## Safety
 
 - Never recover or infer raw prompts from hashes or lengths.

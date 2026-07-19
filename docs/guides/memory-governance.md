@@ -47,6 +47,20 @@ Worker 使用 watermark 和 lock，生成 `.memory/proposals/*.json`：
 
 Proposal 不会修改 active Markdown。Skill proposal 只在 procedural 流程有至少 3 个独立 session、可信来源、正反馈且无冲突时生成，输出候选 `SKILL.md` 草稿但不写入 `.trae/skills`。
 
+人工审阅：
+
+```bash
+agent-knowledge maintenance list --status pending
+agent-knowledge maintenance show <proposal-id>
+agent-knowledge maintenance accept <proposal-id>
+agent-knowledge maintenance reject <proposal-id> --reason "..."
+```
+
+- duplicate：只标记已接受。
+- consolidation/update/conflict：接受后写入 `knowledge/_inbox`，仍需知识审核。
+- skill：默认写入 `knowledge/_inbox-skills/<proposal-id>/SKILL.md`。
+- 只有显式传 `--skill-target project|user` 才写项目或用户 Skill 目录；已有文件不会被覆盖。
+
 知识 frontmatter 可选保存结构化 `episodes`，包含 session/turn/project hash、观察时间和 evidence refs，用于时间更新和独立证据判断。
 
 正常流程不需要手写 `observations.json`：`maintenance extract/run/watch` 会从 `.memory/subagents` 的 SubagentStop 详细日志自动生成 `.memory/observations/events.jsonl`。`--input` 只用于导入外部 observation。

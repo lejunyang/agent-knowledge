@@ -21,17 +21,23 @@ export const MaintenanceProposalSchema = z.object({
   version: z.literal(1),
   id: z.string().min(1),
   type: MaintenanceProposalTypeSchema,
+  status: z.enum(["pending", "accepted", "rejected"]).default("pending"),
   createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
   domain: z.string().min(1),
   title: z.string().min(1),
   observationIds: z.array(z.string()).min(1),
   targetMemoryIds: z.array(z.string()).default([]),
   reason: z.string().min(1),
   proposedSummary: z.string().min(1),
-  skillDraft: z.string().optional()
+  skillDraft: z.string().optional(),
+  resolution: z.string().optional(),
+  candidatePath: z.string().optional(),
+  skillPath: z.string().optional()
 });
 
 export type MaintenanceProposal = z.output<typeof MaintenanceProposalSchema>;
+export type MaintenanceProposalInput = z.input<typeof MaintenanceProposalSchema>;
 
 export function maintenanceProposalId(input: {
   type: string;
@@ -54,7 +60,7 @@ export function maintenanceProposalId(input: {
 
 export async function writeMaintenanceProposal(
   rootDir: string,
-  rawProposal: MaintenanceProposal
+  rawProposal: MaintenanceProposalInput
 ): Promise<string> {
   const proposal = MaintenanceProposalSchema.parse(rawProposal);
   const directory = resolveWorkspacePath(rootDir, ".memory", "proposals");

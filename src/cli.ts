@@ -17,6 +17,7 @@ import path from "node:path";
 import { Command } from "commander";
 import {
   MemoryQueryRequestSchema,
+  acceptMaintenanceProposal,
   appendJsonlLog,
   appendSubagentEvent,
   buildContextPacket,
@@ -49,8 +50,11 @@ import {
   runEvalSuite,
   runScheduledSync,
   readSubagentLogs,
+  readMaintenanceProposals,
   resolveRetrievalModelDescriptor,
+  rejectMaintenanceProposal,
   readMaintenanceObservations,
+  showMaintenanceProposal,
   S3HttpObjectClient,
   S3SyncBackend,
   TransformersBatchReranker,
@@ -1004,6 +1008,90 @@ maintenance
   .action(async (options: { root?: string }) => {
     console.log(
       JSON.stringify(await getObservationStatus(resolveCliRoot(options.root)), null, 2)
+    );
+  });
+
+maintenance
+  .command("list")
+  .description(t("列出 maintenance proposals", "List maintenance proposals"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--status <status>", t("按 pending、accepted、rejected 过滤", "filter by pending, accepted, or rejected"))
+  .action(async (options: { root?: string; status?: string }) => {
+    const proposals = await readMaintenanceProposals(resolveCliRoot(options.root));
+    console.log(
+      JSON.stringify(
+        options.status
+          ? proposals.filter((proposal) => proposal.status === options.status)
+          : proposals,
+        null,
+        2
+      )
+    );
+  });
+
+maintenance
+  .command("show")
+  .argument("<proposal-id>", t("Proposal ID", "Proposal ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (proposalId: string, options: { root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await showMaintenanceProposal(resolveCliRoot(options.root), proposalId),
+        null,
+        2
+      )
+    );
+  });
+
+maintenance
+  .command("accept")
+  .argument("<proposal-id>", t("Proposal ID", "Proposal ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--skill-target <target>", t("Skill 目标：project 或 user；不传则进入 inbox", "Skill target: project or user; omit for inbox"))
+  .option("--project-root <dir>", t("项目根目录覆盖", "project root override"))
+  .action(async (
+    proposalId: string,
+    options: { root?: string; skillTarget?: string; projectRoot?: string }
+  ) => {
+    if (
+      options.skillTarget !== undefined &&
+      options.skillTarget !== "project" &&
+      options.skillTarget !== "user"
+    ) {
+      throw new Error(t("未知 Skill 目标", "Unknown Skill target"));
+    }
+    console.log(
+      JSON.stringify(
+        await acceptMaintenanceProposal(resolveCliRoot(options.root), proposalId, {
+          skillTarget: options.skillTarget as "project" | "user" | undefined,
+          projectRoot: options.projectRoot,
+          traeHome: process.env.TRAE_HOME
+        }),
+        null,
+        2
+      )
+    );
+  });
+
+maintenance
+  .command("reject")
+  .argument("<proposal-id>", t("Proposal ID", "Proposal ID"))
+  .requiredOption("--reason <reason>", t("拒绝原因", "rejection reason"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (
+    proposalId: string,
+    options: { root?: string; reason: string }
+  ) => {
+    console.log(
+      JSON.stringify(
+        await rejectMaintenanceProposal(
+          resolveCliRoot(options.root),
+          proposalId,
+          options.reason
+        ),
+        null,
+        2
+      )
     );
   });
 
