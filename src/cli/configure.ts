@@ -4,81 +4,27 @@
  * 它不立即安装 integration、下载 embedding 模型或连接远端同步服务；这样一次配置操作
  * 不会产生难以撤销的外部副作用。对应命令会在实际执行时消费这些持久默认值。
  */
-import { createInterface } from "node:readline/promises";
-import { stdin, stdout } from "node:process";
 import {
   resolveUserConfig,
   writeUserConfig,
   type UserConfig
 } from "../core/config.js";
+import {
+  InquirerPrompter,
+  promptCheckbox,
+  promptConfirm,
+  promptInput,
+  promptNumber,
+  promptSelect,
+  type InteractivePrompter
+} from "./prompts.js";
 
-export type ConfigurationPrompter = {
-  ask(question: string): Promise<string>;
-};
-
-export class TerminalConfigurationPrompter implements ConfigurationPrompter {
-  private readonly readline = createInterface({ input: stdin, output: stdout });
-
-  async ask(question: string): Promise<string> {
-    return this.readline.question(question);
-  }
-
-  close(): void {
-    this.readline.close();
-  }
-}
+export type ConfigurationPrompter = InteractivePrompter;
+export class TerminalConfigurationPrompter extends InquirerPrompter {}
 
 function withDefault(answer: string, defaultValue: string): string {
   const trimmed = answer.trim();
   return trimmed.length > 0 ? trimmed : defaultValue;
-}
-
-function parseBoolean(answer: string, defaultValue: boolean): boolean {
-  const normalized = answer.trim().toLowerCase();
-  if (normalized.length === 0) {
-    return defaultValue;
-  }
-  if (["y", "yes", "true", "1"].includes(normalized)) {
-    return true;
-  }
-  if (["n", "no", "false", "0"].includes(normalized)) {
-    return false;
-  }
-  throw new Error(`Expected yes/no, received: ${answer}`);
-}
-
-function parsePositiveInteger(answer: string, defaultValue: number): number {
-  const normalized = answer.trim();
-  if (normalized.length === 0) {
-    return defaultValue;
-  }
-  const value = Number.parseInt(normalized, 10);
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`Expected a positive integer, received: ${answer}`);
-  }
-  return value;
-}
-
-function parseNonNegativeInteger(answer: string, defaultValue: number): number {
-  const normalized = answer.trim();
-  if (normalized.length === 0) {
-    return defaultValue;
-  }
-  const value = Number.parseInt(normalized, 10);
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error(`Expected a non-negative integer, received: ${answer}`);
-  }
-  return value;
-}
-
-function parseList(answer: string, defaults: string[]): string[] {
-  const normalized = answer.trim();
-  return normalized.length === 0
-    ? defaults
-    : normalized
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean);
 }
 
 export async function runConfigurationWizard(options: {
@@ -87,105 +33,162 @@ export async function runConfigurationWizard(options: {
   current: UserConfig;
 }): Promise<UserConfig> {
   const { prompter, current } = options;
-  const knowledgeRoot = withDefault(
-    await prompter.ask(
-      `Knowledge root — Markdown facts and .memory caches live here [${current.knowledgeRoot}]: `
-    ),
+  const knowledgeRoot = await promptInput(
+    prompter,
+    "Knowledge root — Markdown facts and .memory caches live here",
     current.knowledgeRoot
   );
-  const actorType = withDefault(
-    await prompter.ask(
-      `Actor type — owner/teammate/customer/system controls write authority [${current.identity.actorType}]: `
-    ),
+  const actorType = await promptSelect(
+    prompter,
+    "Actor type — controls write authority",
+    [
+      { name: "Owner", value: "owner", description: "Trusted personal input" },
+      { name: "Teammate", value: "teammate", description: "Known collaborator input" },
+      { name: "Customer", value: "customer", description: "Untrusted observation; always reviewed" },
+      { name: "System", value: "system", description: "Automated agent or service" }
+    ],
     current.identity.actorType
   );
-  const captureMode = withDefault(
-    await prompter.ask(
-      `Capture mode — explicit_remember/verified_task/automated_session/direct_material controls review policy [${current.identity.captureMode}]: `
-    ),
+  const captureMode = await promptSelect(
+    prompter,
+    "Capture mode — controls review policy",
+    [
+      { name: "Direct material", value: "direct_material", description: "Owner-provided source material" },
+      { name: "Explicit remember", value: "explicit_remember", description: "User explicitly requested memory" },
+      { name: "Verified task", value: "verified_task", description: "Reusable result verified by execution" },
+      { name: "Automated session", value: "automated_session", description: "Always enters review inbox" }
+    ],
     current.identity.captureMode
   );
-  const identityVisibility = parseList(
-    await prompter.ask(
-      `Query visibility scopes — comma separated private,project,team [${current.identity.visibilityScopes.join(",")}]: `
-    ),
+  const identityVisibility = await promptCheckbox(
+    prompter,
+    "Query visibility scopes",
+    [
+      { name: "Private", value: "private" },
+      { name: "Project", value: "project" },
+      { name: "Team", value: "team" }
+    ],
     current.identity.visibilityScopes
   );
-  const identitySensitivity = withDefault(
-    await prompter.ask(
-      `Query sensitivity clearance — public/internal/confidential/secret [${current.identity.sensitivityClearance}]: `
-    ),
+  const identitySensitivity = await promptSelect(
+    prompter,
+    "Query sensitivity clearance",
+    [
+      { name: "Public", value: "public" },
+      { name: "Internal", value: "internal" },
+      { name: "Confidential", value: "confidential" },
+      { name: "Secret", value: "secret" }
+    ],
     current.identity.sensitivityClearance
   );
 
-  const embeddingProvider = withDefault(
-    await prompter.ask(
-      `Embedding provider — transformers for semantic models, local for deterministic tests [${current.embeddings.provider}]: `
-    ),
+  const embeddingProvider = await promptSelect(
+    prompter,
+    "Embedding provider",
+    [
+      { name: "Transformers.js", value: "transformers", description: "Semantic local model" },
+      { name: "Deterministic local", value: "local", description: "Offline tests and protocol checks" }
+    ],
     current.embeddings.provider
   );
-  const embeddingProfile = withDefault(
-    await prompter.ask(
-      `Embedding profile — multilingual-e5-small or bge-small-zh-v1.5 [${current.embeddings.profile}]: `
-    ),
+  const embeddingProfile = await promptSelect(
+    prompter,
+    "Embedding profile",
+    [
+      {
+        name: "Multilingual E5 small",
+        value: "multilingual-e5-small",
+        description: "Default for mixed Chinese/English knowledge"
+      },
+      {
+        name: "BGE small zh v1.5",
+        value: "bge-small-zh-v1.5",
+        description: "Resource-efficient Chinese retrieval"
+      }
+    ],
     current.embeddings.profile
   );
-  const embeddingModelAnswer = await prompter.ask(
-    `Embedding model/path — blank uses the selected profile [${current.embeddings.model ?? ""}]: `
+  const embeddingModelAnswer = await promptInput(
+    prompter,
+    "Embedding model/path — blank uses the selected profile",
+    current.embeddings.model ?? ""
   );
   const embeddingModel = withDefault(embeddingModelAnswer, current.embeddings.model ?? "");
-  const allowRemoteModels = parseBoolean(
-    await prompter.ask(
-      `Allow Transformers.js remote model downloads? yes/no [${current.embeddings.allowRemoteModels ? "yes" : "no"}]: `
-    ),
+  const allowRemoteModels = await promptConfirm(
+    prompter,
+    "Allow Transformers.js remote model downloads?",
     current.embeddings.allowRemoteModels
   );
-  const retrieval = withDefault(
-    await prompter.ask(
-      `Retrieval mode — lexical is lightweight; hybrid also uses embeddings [${current.embeddings.retrieval}]: `
-    ),
+  const retrieval = await promptSelect(
+    prompter,
+    "Retrieval mode",
+    [
+      { name: "Lexical", value: "lexical", description: "Lightweight FTS/BM25 retrieval" },
+      { name: "Hybrid", value: "hybrid", description: "Fuse lexical and embedding retrieval" }
+    ],
     current.embeddings.retrieval
   );
-  const embeddingTopK = parsePositiveInteger(
-    await prompter.ask(
-      `Embedding candidate count before reranking [${current.embeddings.embeddingTopK}]: `
-    ),
-    current.embeddings.embeddingTopK
+  const embeddingTopK = await promptNumber(
+    prompter,
+    "Embedding candidate count before reranking",
+    current.embeddings.embeddingTopK,
+    1
   );
 
-  const integrationProduct = withDefault(
-    await prompter.ask(
-      `Integration product — trae, trae-cn, or claude-code [${current.integration.product}]: `
-    ),
+  const integrationProduct = await promptSelect(
+    prompter,
+    "Integration product",
+    [
+      { name: "TRAE", value: "trae", description: ".trae and .trae/cli hooks" },
+      { name: "TRAE CN", value: "trae-cn", description: ".trae-cn resources" },
+      { name: "Claude Code", value: "claude-code", description: ".claude resources" }
+    ],
     current.integration.product
   );
-  const integrationScope = withDefault(
-    await prompter.ask(
-      `Integration scope — user or project [${current.integration.scope}]: `
-    ),
+  const integrationScope = await promptSelect(
+    prompter,
+    "Integration scope",
+    [
+      { name: "User", value: "user" },
+      { name: "Project", value: "project" }
+    ],
     current.integration.scope
   );
-  const integrationComponents = parseList(
-    await prompter.ask(
-      `Integration components — comma separated hooks,agents,skills,plugin-bundle [${current.integration.components.join(",")}]: `
-    ),
+  const integrationComponents = await promptCheckbox(
+    prompter,
+    "Integration components",
+    [
+      { name: "Hooks", value: "hooks" },
+      { name: "Agents", value: "agents" },
+      { name: "Skills", value: "skills" },
+      { name: "Plugin bundle", value: "plugin-bundle" }
+    ],
     current.integration.components
   );
-  const integrationTargetAnswer = await prompter.ask(
-    `Integration target override — blank uses the product default [${current.integration.targetDir ?? ""}]: `
+  const integrationTargetAnswer = await promptInput(
+    prompter,
+    "Integration target override — blank uses the product default",
+    current.integration.targetDir ?? ""
   );
   const integrationTarget = withDefault(integrationTargetAnswer, current.integration.targetDir ?? "");
-  const integrationMode = withDefault(
-    await prompter.ask(
-      `Integration write mode — merge preserves foreign config; overwrite replaces targets [${current.integration.mode}]: `
-    ),
+  const integrationMode = await promptSelect(
+    prompter,
+    "Integration write mode",
+    [
+      { name: "Merge (recommended)", value: "merge", description: "Preserve foreign configuration" },
+      { name: "Overwrite", value: "overwrite", description: "Replace target files and symlinks" }
+    ],
     current.integration.mode
   );
 
-  const syncProvider = withDefault(
-    await prompter.ask(
-      `Sync provider — none, webdav, or s3 [${current.sync.provider}]: `
-    ),
+  const syncProvider = await promptSelect(
+    prompter,
+    "Sync provider",
+    [
+      { name: "None", value: "none" },
+      { name: "WebDAV", value: "webdav" },
+      { name: "S3 / S3-compatible", value: "s3" }
+    ],
     current.sync.provider
   );
 
@@ -193,82 +196,93 @@ export async function runConfigurationWizard(options: {
   let s3 = current.sync.s3;
   if (syncProvider === "webdav") {
     webdav = {
-      url: withDefault(
-        await prompter.ask(`WebDAV base URL [${current.sync.webdav.url}]: `),
+      url: await promptInput(
+        prompter,
+        "WebDAV base URL",
         current.sync.webdav.url
       ),
-      username: withDefault(
-        await prompter.ask(`WebDAV username [${current.sync.webdav.username}]: `),
+      username: await promptInput(
+        prompter,
+        "WebDAV username",
         current.sync.webdav.username
       ),
-      passwordEnv: withDefault(
-        await prompter.ask(
-          `Environment variable containing the WebDAV password [${current.sync.webdav.passwordEnv}]: `
-        ),
+      passwordEnv: await promptInput(
+        prompter,
+        "Environment variable containing the WebDAV password",
         current.sync.webdav.passwordEnv
       )
     };
   } else if (syncProvider === "s3") {
-    const endpointAnswer = await prompter.ask(
-      `S3-compatible endpoint — blank uses AWS [${current.sync.s3.endpoint ?? ""}]: `
+    const endpointAnswer = await promptInput(
+      prompter,
+      "S3-compatible endpoint — blank uses AWS",
+      current.sync.s3.endpoint ?? ""
     );
     s3 = {
-      bucket: withDefault(
-        await prompter.ask(`S3 bucket [${current.sync.s3.bucket}]: `),
+      bucket: await promptInput(
+        prompter,
+        "S3 bucket",
         current.sync.s3.bucket
       ),
-      region: withDefault(
-        await prompter.ask(`S3 region [${current.sync.s3.region}]: `),
+      region: await promptInput(
+        prompter,
+        "S3 region",
         current.sync.s3.region
       ),
-      prefix: withDefault(
-        await prompter.ask(`S3 object prefix [${current.sync.s3.prefix}]: `),
+      prefix: await promptInput(
+        prompter,
+        "S3 object prefix",
         current.sync.s3.prefix
       ),
       endpoint: withDefault(endpointAnswer, current.sync.s3.endpoint ?? "") || null,
-      forcePathStyle: parseBoolean(
-        await prompter.ask(
-          `Force path-style S3 addressing? yes/no [${current.sync.s3.forcePathStyle ? "yes" : "no"}]: `
-        ),
+      forcePathStyle: await promptConfirm(
+        prompter,
+        "Force path-style S3 addressing?",
         current.sync.s3.forcePathStyle
       ),
-      accessKeyIdEnv: withDefault(
-        await prompter.ask(
-          `Environment variable containing the S3 access key ID [${current.sync.s3.accessKeyIdEnv}]: `
-        ),
+      accessKeyIdEnv: await promptInput(
+        prompter,
+        "Environment variable containing the S3 access key ID",
         current.sync.s3.accessKeyIdEnv
       ),
-      secretAccessKeyEnv: withDefault(
-        await prompter.ask(
-          `Environment variable containing the S3 secret key [${current.sync.s3.secretAccessKeyEnv}]: `
-        ),
+      secretAccessKeyEnv: await promptInput(
+        prompter,
+        "Environment variable containing the S3 secret key",
         current.sync.s3.secretAccessKeyEnv
       ),
-      sessionTokenEnv: withDefault(
-        await prompter.ask(
-          `Environment variable containing the optional S3 session token [${current.sync.s3.sessionTokenEnv}]: `
-        ),
+      sessionTokenEnv: await promptInput(
+        prompter,
+        "Environment variable containing the optional S3 session token",
         current.sync.s3.sessionTokenEnv
       )
     };
   }
 
-  const intervalMinutes = parseNonNegativeInteger(
-    await prompter.ask(
-      `Sync interval in minutes — 0 disables scheduled sync [${current.sync.intervalMinutes}]: `
-    ),
-    current.sync.intervalMinutes
+  const intervalMinutes = await promptNumber(
+    prompter,
+    "Sync interval in minutes — 0 disables scheduled sync",
+    current.sync.intervalMinutes,
+    0
   );
-  const syncVisibility = parseList(
-    await prompter.ask(
-      `Sync visibility scopes [${current.sync.visibilityScopes.join(",")}]: `
-    ),
+  const syncVisibility = await promptCheckbox(
+    prompter,
+    "Sync visibility scopes",
+    [
+      { name: "Private", value: "private" },
+      { name: "Project", value: "project" },
+      { name: "Team", value: "team" }
+    ],
     current.sync.visibilityScopes
   );
-  const syncSensitivity = withDefault(
-    await prompter.ask(
-      `Maximum sensitivity allowed in sync [${current.sync.sensitivityClearance}]: `
-    ),
+  const syncSensitivity = await promptSelect(
+    prompter,
+    "Maximum sensitivity allowed in sync",
+    [
+      { name: "Public", value: "public" },
+      { name: "Internal", value: "internal" },
+      { name: "Confidential", value: "confidential" },
+      { name: "Secret", value: "secret" }
+    ],
     current.sync.sensitivityClearance
   );
 
