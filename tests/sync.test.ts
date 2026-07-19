@@ -111,6 +111,18 @@ describe("syncKnowledge", () => {
       knowledgeMarkdown("candidate", { id: "k_20260719_sync_candidate" }),
       "utf8"
     );
+    const skillDir = path.join(
+      root,
+      "knowledge",
+      "_inbox-skills",
+      "release-validation"
+    );
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: release-validation\ndescription: Review draft\n---\n",
+      "utf8"
+    );
 
     const result = await syncKnowledge(root, backend);
 
@@ -119,6 +131,9 @@ describe("syncKnowledge", () => {
     expect([...backend.files.keys()]).not.toContain(".memory/index.sqlite");
     expect([...backend.files.keys()]).not.toContain("knowledge/_catalog.md");
     expect([...backend.files.keys()]).not.toContain("knowledge/_inbox/candidate.md");
+    expect([...backend.files.keys()]).not.toContain(
+      "knowledge/_inbox-skills/release-validation/SKILL.md"
+    );
     expect(backend.manifest?.entries["knowledge/semantic/test/fact.md"]?.deleted).toBe(false);
   });
 

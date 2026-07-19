@@ -127,6 +127,8 @@ Hook 自动路径不加载 embedding 或 reranker。
 
 Writer 应主动处理显式记忆、已验证可复用结果和 `AGENTS.md` 未覆盖的稳定项目/业务约束；不应记录一次性命令、普通源码结构或未验证推断。
 
+`knowledge/_inbox-skills` 中的 `SKILL.md` 使用 Skill frontmatter，不是 KnowledgeDocument；不会进入 index、embedding、catalog、graph 或同步。
+
 ## memory-maintainer
 
 `.trae/skills/memory-maintainer` 用于：

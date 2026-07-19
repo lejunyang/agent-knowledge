@@ -205,7 +205,7 @@ agent-knowledge integration install
 
 `intervalMinutes` 只由 `sync watch` 消费。`0` 不会创建后台任务；正数也不会自动安装 cron/systemd/launchd，必须显式运行并托管 `sync watch`。
 
-同步策略同时检查知识 frontmatter 的 visibility 和 sensitivity。默认不上传 `private` 或高于 `internal` 的知识；`.memory`、`_inbox`、`_archive` 和凭据不参与同步。
+同步策略同时检查知识 frontmatter 的 visibility 和 sensitivity。默认不上传 `private` 或高于 `internal` 的知识；`.memory`、`_inbox`、`_archive`、`_inbox-skills` 和凭据不参与同步。
 
 ## Hook
 

@@ -13,6 +13,7 @@ import { extractSummary, parseKnowledgeMarkdown } from "./markdown.js";
 import { resolveWorkspacePath } from "../core/paths.js";
 import type { KnowledgeDocument } from "../core/types.js";
 import { cjkNgrams } from "../retrieval/cjk.js";
+import { isDiscoverableKnowledgeFile } from "./knowledgePaths.js";
 
 const require = createRequire(import.meta.url);
 // 当前运行环境可用 Node 内置 `node:sqlite`，避免 native binding 依赖带来的安装失败。
@@ -23,13 +24,6 @@ export type RebuildIndexResult = {
   dbPath: string;
   indexed: number;
 };
-
-const GENERATED_KNOWLEDGE_FILES = new Set([
-  "knowledge/README.md",
-  "knowledge/_catalog.md",
-  "knowledge/_conflicts.md",
-  "knowledge/_review_queue.md"
-]);
 
 /** 统一索引中的相对路径分隔符，保证跨平台缓存可比较。 */
 function toPosixPath(filePath: string): string {
@@ -59,11 +53,7 @@ function discoverKnowledgeFilesSync(rootDir: string): string[] {
       }
 
       const relativePath = toPosixPath(path.relative(rootDir, absolutePath));
-      if (
-        !GENERATED_KNOWLEDGE_FILES.has(relativePath) &&
-        !relativePath.startsWith("knowledge/_archive/") &&
-        !relativePath.startsWith("knowledge/_inbox/")
-      ) {
+      if (isDiscoverableKnowledgeFile(relativePath)) {
         files.push(relativePath);
       }
     }

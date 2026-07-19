@@ -6,7 +6,7 @@
 
 本项目实现一个本地 agent 知识持久化工具：
 
-- `knowledge/**/*.md` 是人类可读事实源。
+- `knowledge/` 中排除 generated、`_inbox`、`_archive`、`_inbox-skills` 后的 KnowledgeDocument Markdown 是人类可读事实源。
 - `.memory/index.sqlite` 是可重建索引。
 - `.memory/embeddings/index.jsonl` 是可重建本地 embedding 缓存，不是事实源。
 - `.memory/embeddings/manifest.json` 保存 embedding profile/generation，不是事实源。
@@ -163,6 +163,7 @@ src/cli.ts            命令行入口和各模块编排
 - `query` 不应在缺少 domain/scenario 且 FTS 无命中时回退全表；如修改 fallback 策略，必须更新 debug 输出和测试。
 - direct result 和 related expansion 必须执行相同的 validity、visibility、sensitivity、project 和 type 过滤。
 - `_inbox` / `_archive` 必须按路径硬排除，不能只依赖 status。
+- `_inbox-skills` 保存 Skill proposal 草稿，使用 Skill frontmatter 而不是 KnowledgeDocument schema；index、embedding、catalog、graph、list 和同步必须在解析前按路径硬排除。
 - embedding query 必须校验 manifest/profile，不能对不同模型、维度、pooling 或 prefix 的向量静默 cosine。
 - Batch reranker 默认只在显式 `query --rerank` 或 reranked eval 中启用；Hook 热路径不得加载 cross-encoder。默认 pipeline 是融合 top 30 -> batch rerank -> threshold -> top 8。
 - Calibration 只能输出 dry-run 参数建议，不得自动改用户配置；目标函数必须优先惩罚 forbidden injection、abstention failure 和 not_useful feedback。

@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -60,6 +60,30 @@ describe("embedding index", () => {
       recordCount: 2
     });
     await expect(readFile(getEmbeddingsManifestPath(root), "utf8")).resolves.toContain('"version": 1');
+  });
+
+  it("ignores Skill review drafts when building embeddings", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-embed-skill-draft-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    const skillDir = path.join(
+      root,
+      "knowledge",
+      "_inbox-skills",
+      "release-validation"
+    );
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: release-validation\ndescription: Review draft\n---\n",
+      "utf8"
+    );
+
+    const result = await embedKnowledgeIndex(root, {
+      provider: new DeterministicLocalEmbeddingProvider(16)
+    });
+
+    expect(result.indexed).toBe(2);
   });
 
   it("reuses unchanged embeddings and only regenerates changed documents", async () => {

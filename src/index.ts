@@ -12,6 +12,7 @@ export * from "./core/config.js";
 export * from "./i18n/locale.js";
 export * from "./storage/markdown.js";
 export * from "./storage/workspace.js";
+export * from "./storage/knowledgePaths.js";
 export * from "./storage/indexer.js";
 export * from "./storage/catalog.js";
 export * from "./retrieval/query.js";

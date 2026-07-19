@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -132,5 +132,46 @@ describe("knowledge graph", () => {
 
     await expect(readFile(jsonPath, "utf8")).resolves.toContain('"type": "knowledge"');
     await expect(readFile(mermaidPath, "utf8")).resolves.toContain("flowchart LR");
+  });
+
+  it("ignores Skill review drafts when building the knowledge graph", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-graph-skill-draft-"));
+    tempDirs.push(root);
+    await captureMaterial(
+      root,
+      [
+        {
+          title: "Release process",
+          memory_type: "procedural",
+          domain: "delivery/release",
+          related_domains: [],
+          scenario: ["release"],
+          tags: ["delivery"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "Run tests before release.",
+          evidence: ["doc:release"]
+        }
+      ],
+      { target: "active", rebuild: false }
+    );
+    const skillDir = path.join(
+      root,
+      "knowledge",
+      "_inbox-skills",
+      "release-validation"
+    );
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: release-validation\ndescription: Review draft\n---\n",
+      "utf8"
+    );
+
+    const graph = await buildKnowledgeGraph(root);
+
+    expect(
+      graph.nodes.filter((node) => node.type === "knowledge")
+    ).toHaveLength(1);
   });
 });

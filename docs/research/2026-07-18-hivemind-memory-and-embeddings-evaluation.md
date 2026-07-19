@@ -173,9 +173,9 @@ JSONL 记录虽保存 provider、model、dimensions 和 content hash，查询时
 - caller 可见性和 sensitivity clearance
 - related expansion 也必须应用同一安全过滤
 
-6. **inbox 隔离不够硬**
+6. **审阅目录隔离不够硬**
 
-indexer 和 embedding loader 应按路径明确排除 `knowledge/_inbox/**`，不能只依赖 status。候选文件误标 active 时仍不能进入正式检索。
+indexer、embedding、catalog、graph 和同步应按路径明确排除 `knowledge/_inbox/**`、`knowledge/_archive/**` 和 `knowledge/_inbox-skills/**`，不能只依赖 status 或 `.md` 后缀。候选文件误标 active、Skill 草稿使用不同 frontmatter 时都不能进入正式事实链。
 
 7. **token budget 未执行**
 

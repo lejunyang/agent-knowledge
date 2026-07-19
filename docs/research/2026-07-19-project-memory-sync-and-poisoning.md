@@ -90,12 +90,15 @@ Staging 只保存：
 
 ## 同步边界
 
-WebDAV/S3 只同步 `knowledge/**/*.md` 事实源，排除：
+WebDAV/S3 只同步正式 KnowledgeDocument Markdown，排除：
 
 - `.memory/index.sqlite`
 - embedding 缓存
 - staging/log
 - 凭据
 - 生成型 catalog/review 文件
+- `knowledge/_inbox/**`
+- `knowledge/_archive/**`
+- `knowledge/_inbox-skills/**`
 
 同步使用本地 base manifest、当前本地和当前远端做三方比较。双端同时修改同一知识时写 `.memory/sync/conflicts/*.json`，保留双方内容供人工处理。

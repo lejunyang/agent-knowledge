@@ -1,6 +1,6 @@
 # Agent Knowledge
 
-Agent Knowledge 是一个本地、可审计的 Agent 知识持久化工具。Markdown 是唯一事实源；SQLite、embedding、日志和 staging 都是可重建的机器产物。
+Agent Knowledge 是一个本地、可审计的 Agent 知识持久化工具。正式 KnowledgeDocument Markdown 是唯一事实源；SQLite、embedding、日志和 staging 都是可重建的机器产物。`_inbox`、`_archive` 和 `_inbox-skills` 是审阅产物，不属于正式事实。
 
 ## 功能目录
 
@@ -199,8 +199,9 @@ agent-knowledge query --task "当前任务" --retrieval hybrid-graph
 
 ## 核心原则
 
-- `knowledge/**/*.md` 是唯一事实源。
+- `knowledge/` 中排除 generated、`_inbox`、`_archive`、`_inbox-skills` 后的 KnowledgeDocument Markdown 是唯一事实源。
 - `_inbox` 和 `_archive` 永远不会进入正式检索。
+- `_inbox-skills` 使用 Skill frontmatter，只供人工审阅/安装；不会进入 index、embedding、catalog、graph 或同步。
 - 自动会话和客户陈述只能生成 proposed observation，不能直接激活。
 - 查询和关系扩展都执行 validity、visibility、sensitivity 和 project 过滤。
 - 同步只处理正式 Markdown；冲突必须人工解决，不能静默覆盖。

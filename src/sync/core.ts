@@ -15,6 +15,7 @@ import { rebuildIndex } from "../storage/indexer.js";
 import { parseKnowledgeMarkdown } from "../storage/markdown.js";
 import { resolveWorkspacePath } from "../core/paths.js";
 import type { Sensitivity, Visibility } from "../core/types.js";
+import { isDiscoverableKnowledgeFile } from "../storage/knowledgePaths.js";
 
 export type SyncManifestEntry = {
   hash: string;
@@ -55,13 +56,6 @@ export type SyncPolicy = {
   visibilityScopes?: Visibility[];
   sensitivityClearance?: Sensitivity;
 };
-
-const GENERATED_FILES = new Set([
-  "knowledge/README.md",
-  "knowledge/_catalog.md",
-  "knowledge/_conflicts.md",
-  "knowledge/_review_queue.md"
-]);
 
 const SENSITIVITY_LEVEL: Record<Sensitivity, number> = {
   public: 0,
@@ -141,11 +135,7 @@ async function readLocalFiles(
   >();
   for (const filePath of paths.sort()) {
     const normalized = filePath.split(path.sep).join("/");
-    if (
-      GENERATED_FILES.has(normalized) ||
-      normalized.startsWith("knowledge/_inbox/") ||
-      normalized.startsWith("knowledge/_archive/")
-    ) {
+    if (!isDiscoverableKnowledgeFile(normalized)) {
       continue;
     }
     const content = await readFile(resolveWorkspacePath(rootDir, normalized), "utf8");

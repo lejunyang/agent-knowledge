@@ -1,6 +1,6 @@
 # WebDAV、S3 与定时同步
 
-同步只处理正式 Markdown，不上传 `_inbox`、`_archive`、索引、embedding、日志、staging 或凭据。
+同步只处理正式 KnowledgeDocument Markdown，不上传 `_inbox`、`_archive`、`_inbox-skills`、索引、embedding、日志、staging 或凭据。
 
 先运行：
 
@@ -43,7 +43,7 @@ agent-knowledge configure
 
 - `visibilityScopes`：只同步 frontmatter visibility 位于该集合的知识。默认 `project,team`，不上传 `private`。
 - `sensitivityClearance`：允许同步的最高敏感级别。默认 `internal`，不会上传 `confidential` / `secret`。
-- `_inbox`、`_archive`、`.memory`、proposals、Skill 草稿和凭据始终排除，即使 visibility/sensitivity 匹配。
+- `_inbox`、`_archive`、`_inbox-skills`、`.memory`、proposals、Skill 草稿和凭据始终排除，即使 visibility/sensitivity 匹配。
 
 这是上传边界，不改变本地 query 的权限配置。
 

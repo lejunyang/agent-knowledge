@@ -17,6 +17,10 @@ import type { KnowledgeDocument, KnowledgeFrontmatter, MemoryStatus, MemoryType 
 import { initKnowledgeWorkspace } from "../storage/workspace.js";
 import { rebuildIndex } from "../storage/indexer.js";
 import { writeCandidateMemory } from "./inbox.js";
+import {
+  isGeneratedKnowledgeFile,
+  isSkillReviewDraft
+} from "../storage/knowledgePaths.js";
 
 export type KnowledgeListSummary = {
   rootDir: string;
@@ -149,17 +153,16 @@ async function readAllKnowledgeDocuments(rootDir: string): Promise<KnowledgeDocu
   const fg = (await import("fast-glob")).default;
   const files = await fg("knowledge/**/*.md", {
     cwd: rootDir,
-    absolute: false,
-    ignore: [
-      "knowledge/README.md",
-      "knowledge/_catalog.md",
-      "knowledge/_conflicts.md",
-      "knowledge/_review_queue.md"
-    ]
+    absolute: false
   });
 
   const documents: KnowledgeDocument[] = [];
-  for (const filePath of files.sort()) {
+  for (const filePath of files
+    .filter(
+      (filePath) =>
+        !isGeneratedKnowledgeFile(filePath) && !isSkillReviewDraft(filePath)
+    )
+    .sort()) {
     const absolutePath = resolveWorkspacePath(rootDir, filePath);
     documents.push(parseKnowledgeMarkdown(filePath, await readFile(absolutePath, "utf8")));
   }

@@ -1,4 +1,4 @@
-import { mkdtemp, cp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -73,6 +73,28 @@ describe("rebuildIndex", () => {
     } finally {
       db.close();
     }
+  });
+
+  it("ignores Skill review drafts that do not use knowledge frontmatter", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-index-skill-draft-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    const skillDir = path.join(
+      root,
+      "knowledge",
+      "_inbox-skills",
+      "release-validation"
+    );
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: release-validation\ndescription: Review draft\n---\n",
+      "utf8"
+    );
+
+    const result = rebuildIndex(root);
+
+    expect(result.indexed).toBe(2);
   });
 
   it("adds CJK n-grams to the lexical index", async () => {

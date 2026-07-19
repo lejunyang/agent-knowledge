@@ -37,20 +37,38 @@ describe("discoverKnowledgeFiles", () => {
     expect(files.some((file) => file.endsWith("_catalog.md"))).toBe(false);
   });
 
-  it("hard-excludes inbox and archive files even when they contain Markdown", async () => {
+  it("hard-excludes knowledge and Skill review artifacts even when they contain Markdown", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-isolation-"));
     tempDirs.push(root);
 
     await initKnowledgeWorkspace(root);
     await mkdir(path.join(root, "knowledge", "_inbox"), { recursive: true });
     await mkdir(path.join(root, "knowledge", "_archive"), { recursive: true });
+    await mkdir(
+      path.join(root, "knowledge", "_inbox-skills", "proposal-skill"),
+      { recursive: true }
+    );
     await writeFile(path.join(root, "knowledge", "_inbox", "candidate.md"), "# candidate\n", "utf8");
     await writeFile(path.join(root, "knowledge", "_archive", "old.md"), "# old\n", "utf8");
+    await writeFile(
+      path.join(
+        root,
+        "knowledge",
+        "_inbox-skills",
+        "proposal-skill",
+        "SKILL.md"
+      ),
+      "---\nname: proposal-skill\ndescription: Review draft\n---\n",
+      "utf8"
+    );
 
     const files = await discoverKnowledgeFiles(root);
 
     expect(files).not.toContain("knowledge/_inbox/candidate.md");
     expect(files).not.toContain("knowledge/_archive/old.md");
+    expect(files).not.toContain(
+      "knowledge/_inbox-skills/proposal-skill/SKILL.md"
+    );
   });
 });
 

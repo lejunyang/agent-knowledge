@@ -7,6 +7,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import fg from "fast-glob";
 import { KNOWLEDGE_DIRS, resolveWorkspacePath, toPosixRelativePath } from "../core/paths.js";
+import { isDiscoverableKnowledgeFile } from "./knowledgePaths.js";
 
 const README = `# Knowledge Base
 
@@ -19,6 +20,7 @@ This directory is the human-readable fact source for agent memory.
 - \`sources/\`: source summaries and provenance.
 - \`_inbox/\`: proposed memories awaiting review.
 - \`_archive/\`: deprecated or rejected memories.
+- \`_inbox-skills/\`: reviewed Skill drafts; not knowledge facts.
 `;
 
 /** 只创建缺失的 workspace 模板文件，绝不覆盖用户已有 Markdown。 */
@@ -57,16 +59,11 @@ export async function initKnowledgeWorkspace(rootDir: string): Promise<void> {
 export async function discoverKnowledgeFiles(rootDir: string): Promise<string[]> {
   const entries = await fg("knowledge/**/*.md", {
     cwd: rootDir,
-    absolute: true,
-    ignore: [
-      "knowledge/README.md",
-      "knowledge/_catalog.md",
-      "knowledge/_conflicts.md",
-      "knowledge/_review_queue.md",
-      "knowledge/_inbox/**",
-      "knowledge/_archive/**"
-    ]
+    absolute: true
   });
 
-  return entries.sort().map((file) => toPosixRelativePath(rootDir, file));
+  return entries
+    .map((file) => toPosixRelativePath(rootDir, file))
+    .filter(isDiscoverableKnowledgeFile)
+    .sort();
 }

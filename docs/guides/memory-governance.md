@@ -13,6 +13,7 @@ Hook / Subagent 原始信号
 
 - `.memory/subagents`、`.memory/staging`、`.memory/observations` 和 `.memory/proposals` 是调试/审阅产物，不是正式知识。
 - `knowledge/_inbox` 是候选 Markdown，索引器和 embedding 明确排除它。
+- `knowledge/_inbox-skills` 是 Skill 草稿，使用 Skill frontmatter；index、embedding、catalog、graph、list 和同步都会在解析前排除。
 - `knowledge/<type>/<domain>/**/*.md` 中的 active Markdown 才是可检索事实源。
 
 任何自动流程都不能跨过 proposal、inbox 和人工审阅边界直接激活知识。

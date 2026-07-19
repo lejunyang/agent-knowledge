@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -46,5 +46,27 @@ describe("catalogKnowledge", () => {
     expect(log.event).toBe("catalog");
     expect(log.written).toBe(false);
     expect(log.total).toBeGreaterThanOrEqual(2);
+  });
+
+  it("ignores Skill review drafts with non-knowledge frontmatter", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-catalog-skill-draft-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    const skillDir = path.join(
+      root,
+      "knowledge",
+      "_inbox-skills",
+      "release-validation"
+    );
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: release-validation\ndescription: Review draft\n---\n",
+      "utf8"
+    );
+
+    const catalog = await catalogKnowledge(root, { write: false });
+
+    expect(catalog.total).toBe(2);
   });
 });

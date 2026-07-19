@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -25,6 +25,28 @@ describe("listKnowledge", () => {
     expect(summary.byStatus.active).toBe(2);
     expect(summary.byType.semantic).toBe(1);
     expect(summary.byType.procedural).toBe(1);
+  });
+
+  it("does not parse Skill review drafts as knowledge while listing", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-list-skill-draft-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    const skillDir = path.join(
+      root,
+      "knowledge",
+      "_inbox-skills",
+      "release-validation"
+    );
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: release-validation\ndescription: Review draft\n---\n",
+      "utf8"
+    );
+
+    const summary = await listKnowledge(root);
+
+    expect(summary.total).toBe(2);
   });
 });
 
