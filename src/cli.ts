@@ -1215,11 +1215,15 @@ graph
 
 graph
   .command("export")
-  .requiredOption("--format <format>", t("json 或 mermaid", "json or mermaid"))
+  .requiredOption("--format <format>", t("json、mermaid 或 html", "json, mermaid, or html"))
   .requiredOption("--output <file>", t("输出文件", "output file"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { format: string; output: string; root?: string }) => {
-    if (options.format !== "json" && options.format !== "mermaid") {
+    if (
+      options.format !== "json" &&
+      options.format !== "mermaid" &&
+      options.format !== "html"
+    ) {
       throw new Error(t("未知 graph 导出格式", "Unknown graph export format"));
     }
     const root = resolveCliRoot(options.root);

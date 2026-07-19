@@ -2,16 +2,19 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { KnowledgeGraph } from "./types.js";
+import { renderKnowledgeGraphHtml } from "./html.js";
 
 /** Exports JSON or Mermaid to a caller-selected path. */
 export async function exportKnowledgeGraph(
   graph: KnowledgeGraph,
-  options: { format: "json" | "mermaid"; output: string }
+  options: { format: "json" | "mermaid" | "html"; output: string }
 ): Promise<void> {
   const content =
     options.format === "json"
       ? `${JSON.stringify(graph, null, 2)}\n`
-      : renderMermaid(graph);
+      : options.format === "mermaid"
+        ? renderMermaid(graph)
+        : renderKnowledgeGraphHtml(graph);
   await mkdir(path.dirname(path.resolve(options.output)), { recursive: true });
   await writeFile(path.resolve(options.output), content, "utf8");
 }
