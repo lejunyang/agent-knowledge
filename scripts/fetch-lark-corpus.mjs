@@ -40,7 +40,22 @@ function parseAttributes(source) {
 
 /** 从 URL 提取支持的飞书 Wiki/Doc token。 */
 function referenceFromUrl(url) {
-  const match = url.match(/\/(wiki|docx|docs?)\/([A-Za-z0-9_-]+)/i);
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (
+    !/(?:^|\.)(?:feishu\.cn|larksuite\.com|larkoffice\.com|doubao\.com)$/i.test(
+      parsed.hostname
+    )
+  ) {
+    return null;
+  }
+  const match = parsed.pathname.match(
+    /^\/(wiki|docx|docs?)\/([A-Za-z0-9_-]+)/i
+  );
   if (!match) {
     return null;
   }
@@ -229,6 +244,7 @@ function parseArguments(argv) {
   let output = DEFAULT_OUTPUT;
   let identity = "user";
   let maxDocuments = 500;
+  let retryFailures = false;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--root-url") {
@@ -239,8 +255,17 @@ function parseArguments(argv) {
       identity = argv[++index];
     } else if (argument === "--max-documents") {
       maxDocuments = Number.parseInt(argv[++index], 10);
+    } else if (argument === "--retry-failures") {
+      retryFailures = true;
     } else if (argument === "--help") {
-      return { help: true, roots, output, identity, maxDocuments };
+      return {
+        help: true,
+        roots,
+        output,
+        identity,
+        maxDocuments,
+        retryFailures
+      };
     } else {
       throw new Error(`Unknown argument: ${argument}`);
     }
@@ -254,7 +279,14 @@ function parseArguments(argv) {
   if (!Number.isInteger(maxDocuments) || maxDocuments <= 0) {
     throw new Error("--max-documents must be a positive integer");
   }
-  return { help: false, roots, output, identity, maxDocuments };
+  return {
+    help: false,
+    roots,
+    output,
+    identity,
+    maxDocuments,
+    retryFailures
+  };
 }
 
 /** 打印脚本用法。 */
@@ -262,7 +294,8 @@ function printHelp() {
   console.log(`Usage:
   node scripts/fetch-lark-corpus.mjs \\
     --root-url <wiki-or-doc-url> [--root-url <url> ...] \\
-    [--output local_exports/lark] [--as user] [--max-documents 500]`);
+    [--output local_exports/lark] [--as user] [--max-documents 500] \\
+    [--retry-failures]`);
 }
 
 /**
@@ -287,7 +320,51 @@ export async function fetchLarkCorpus(options) {
   manifest.roots = [
     ...new Set([...manifest.roots, ...options.roots])
   ];
+  // Parser 升级后从已保存 XML 重建引用图，避免旧误判永久污染恢复队列。
+  manifest.resources = {};
+  for (const document of Object.values(manifest.documents)) {
+    const contentPath = path.join(
+      output,
+      document.directory,
+      "content.xml"
+    );
+    if (!existsSync(contentPath)) {
+      continue;
+    }
+    const references = extractLarkReferences(
+      await readFile(contentPath, "utf8")
+    );
+    document.documentReferences = references.documents;
+    document.resourceReferences = references.resources;
+    for (const resource of references.resources) {
+      manifest.resources[`${resource.fileType}:${resource.token}`] = {
+        ...resource,
+        parent: document.key
+      };
+    }
+  }
+  const stillReferenced = new Set(
+    options.roots.map((root) => {
+      const reference = rootReference(root);
+      return `${reference.fileType}:${reference.token}`;
+    })
+  );
+  for (const document of Object.values(manifest.documents)) {
+    for (const child of document.documentReferences ?? []) {
+      stillReferenced.add(`${child.fileType}:${child.token}`);
+    }
+  }
+  for (const key of Object.keys(manifest.failures)) {
+    if (!stillReferenced.has(key)) {
+      delete manifest.failures[key];
+    }
+  }
   const visited = new Set(Object.keys(manifest.documents));
+  if (!options.retryFailures) {
+    for (const key of Object.keys(manifest.failures)) {
+      visited.add(key);
+    }
+  }
   const queue = [];
   const queued = new Set();
   /** 只把尚未成功导出且本轮未排队的引用加入 queue。 */

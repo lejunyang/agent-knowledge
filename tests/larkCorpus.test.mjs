@@ -30,6 +30,18 @@ test("extracts and deduplicates embedded Lark document references", () => {
   );
 });
 
+test("ignores non-Lark URLs that happen to contain a docs path", () => {
+  const result = extractLarkReferences(`
+    <a href="https://developer.example.com/docs/resource/guide">外部文档</a>
+    <a href="https://example.feishu.cn/docx/doc123">飞书文档</a>
+  `);
+
+  assert.deepEqual(
+    result.documents.map((item) => `${item.fileType}:${item.token}`),
+    ["docx:doc123"]
+  );
+});
+
 test("separates sheet, bitable, and whiteboard resources from recursive docs", () => {
   const content = `
     <cite doc-id="sheet123" file-type="sheets" title="数据表" type="doc"></cite>
