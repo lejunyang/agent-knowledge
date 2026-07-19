@@ -1,0 +1,220 @@
+documents:
+  - id: k_eval_portal_microfrontend
+    title: 业务门户微前端动态装载
+    type: semantic
+    domain: product/portal/frontend
+    scenarios: [microfrontend, route-debugging]
+    aliases: [Garfish routing, Goofy 微前端]
+    tags: [garfish, routing, module-config]
+    project_ids: [project_eval_portal]
+    body: 门户主应用从模块配置动态注册子应用。页面没有被正确装载时，先检查模块配置和主应用路由，再检查子应用页面。
+
+  - id: k_eval_portal_shared_state
+    title: 业务门户微前端共享状态
+    type: semantic
+    domain: product/portal/frontend
+    scenarios: [microfrontend, shared-state]
+    aliases: [sharedState, Pinia 共享]
+    tags: [garfish, pinia, reactivity]
+    project_ids: [project_eval_portal]
+    body: 主应用通过函数形式的 sharedState 传递 Pinia 和公共 Store，函数避免深拷贝；主子应用复用同一 Vue 和 Pinia 实例才能保持响应式。
+
+  - id: k_eval_portal_login_boundary
+    title: 业务门户登录身份边界
+    type: procedural
+    domain: product/portal/identity
+    scenarios: [login-troubleshooting, oauth]
+    aliases: [SSO 与 OAuth, 两类 UID]
+    tags: [identity, sso, oauth]
+    project_ids: [project_eval_portal]
+    body: 排查登录态时先区分端内身份与业务平台身份，再确认页面需要哪类 UID。SSO 复用登录态，OAuth 建立不同账号体系间的授权绑定，两者不能混用。
+
+  - id: k_eval_portal_mobile_request
+    title: 移动端 WebView 请求方式边界
+    type: semantic
+    domain: product/portal/mobile
+    scenarios: [mobile-development, request-selection]
+    aliases: [JSB 与 Axios, AnnieX]
+    tags: [mobile, jsb, axios]
+    project_ids: [project_eval_portal]
+    body: 普通 Web 请求使用 Axios；需要宿主登录态、设备通参或端能力时使用 JSB 或 AnnieX。每个 WebView 页面应独立初始化并真机验证。
+
+  - id: k_eval_portal_mobile_debug
+    title: 移动端本地联调 SOP
+    type: procedural
+    domain: product/portal/mobile
+    scenarios: [mobile-development, local-debugging]
+    aliases: [BOE 泳道调试, Bifrost]
+    tags: [mobile, proxy, boe]
+    project_ids: [project_eval_portal]
+    body: 本地联调需要内测宿主、代理证书、同一局域网和目标泳道。测试环境可临时绕过 JSB 鉴权，修改环境后必须重启并真机复验。
+
+  - id: k_eval_portal_onboarding_stuck
+    title: 认证通过但开户未完成排查
+    type: procedural
+    domain: product/portal/troubleshooting
+    scenarios: [onboarding, account-opening]
+    aliases: [applyId, 开户卡住]
+    tags: [onboarding, pending, risk-control]
+    project_ids: [project_eval_portal]
+    body: 认证通过不代表账户已创建。先查申请单 pending 状态和时间，再用 applyId 定位开户日志与风控拦截。
+
+  - id: k_eval_portal_qualification_reuse
+    title: 资质复用列表缺失排查
+    type: procedural
+    domain: product/portal/troubleshooting
+    scenarios: [qualification-reuse, troubleshooting]
+    aliases: [复用资质过滤, 免验过滤]
+    tags: [qualification, reuse, filter]
+    project_ids: [project_eval_portal]
+    body: 资质复用页面缺少预期资质时，先枚举可访问账户，再按账户 ID 查复用过滤日志，最后核验对公验证方式和资质条件。
+
+  - id: k_eval_portal_result_event
+    title: 门户统一结果事件排障
+    type: procedural
+    domain: product/portal/observability
+    scenarios: [observability, frontend-error]
+    aliases: [portal_result, log_id]
+    tags: [event, log-id, troubleshooting]
+    project_ids: [project_eval_portal]
+    body: 前端统一结果事件记录 code、message、log_id、URL 和状态。先定位失败请求，再用 log_id 串联后端日志。
+
+  - id: k_eval_portal_account_quota
+    title: 业务账号关系与额度预占查询
+    type: procedural
+    domain: product/portal/troubleshooting
+    scenarios: [account-lookup, quota]
+    aliases: [账号额度查询, 额度预占用]
+    tags: [account, uid, quota]
+    project_ids: [project_eval_portal]
+    body: 不知道业务账号 UID 时，先按主体查询账号列表，再使用业务域账户查询额度。主体变更期间需要同时检查正式占用和新主体预占。
+
+  - id: k_eval_portal_overview
+    title: 业务门户通用介绍
+    type: semantic
+    domain: product/portal
+    scenarios: [business-knowledge]
+    aliases: [业务门户, uid]
+    tags: [overview]
+    body: 业务门户聚合账号、资质、成员和经营数据，是面向组织用户的通用工作台。
+
+cases:
+  - task: 认证都通过了但业务门户为什么还没有开户成功，怎么查 applyId
+    domains: []
+    scenarios: []
+    project_ids: [project_eval_portal]
+    max_tokens: 1200
+    expected_memories: [k_eval_portal_onboarding_stuck]
+    expected_ranks: { k_eval_portal_onboarding_stuck: 1 }
+    forbidden_memories: [k_eval_portal_mobile_debug]
+    language: zh-CN
+
+  - task: 资质复用页面没有预期资质，免验为什么被过滤
+    domains: []
+    scenarios: []
+    project_ids: [project_eval_portal]
+    max_tokens: 1200
+    expected_memories: [k_eval_portal_qualification_reuse]
+    expected_ranks: { k_eval_portal_qualification_reuse: 1 }
+    forbidden_memories: [k_eval_portal_account_quota]
+    language: zh-CN
+
+  - task: Garfish 子应用拿到 Pinia 但状态不响应，sharedState 为什么必须是函数
+    domains: []
+    scenarios: []
+    project_ids: [project_eval_portal]
+    max_tokens: 1200
+    expected_memories: [k_eval_portal_shared_state]
+    expected_ranks: { k_eval_portal_shared_state: 1 }
+    forbidden_memories: [k_eval_portal_onboarding_stuck]
+    language: zh-CN
+
+  - task: 业务门户页面没有被正确的子应用装载，应该检查 Goofy 还是页面
+    domains: []
+    scenarios: []
+    project_ids: [project_eval_portal]
+    max_tokens: 1200
+    expected_memories: [k_eval_portal_microfrontend]
+    expected_ranks: { k_eval_portal_microfrontend: 1 }
+    forbidden_memories: [k_eval_portal_qualification_reuse]
+    language: zh-CN
+
+  - task: 移动端本地联调如何配置 BOE 泳道、Bifrost 和绕过 JSB 鉴权
+    domains: []
+    scenarios: []
+    project_ids: [project_eval_portal]
+    max_tokens: 1200
+    expected_memories: [k_eval_portal_mobile_debug]
+    expected_ranks: { k_eval_portal_mobile_debug: 1 }
+    forbidden_memories: [k_eval_portal_qualification_reuse]
+    language: zh-CN
+
+  - task: 移动端页面什么时候用 JSB AnnieX，什么时候用 Axios
+    domains: []
+    scenarios: []
+    project_ids: [project_eval_portal]
+    max_tokens: 1200
+    expected_memories: [k_eval_portal_mobile_request]
+    expected_ranks: { k_eval_portal_mobile_request: 1 }
+    forbidden_memories: [k_eval_portal_account_quota]
+    language: zh-CN
+
+  - task: 登录态问题如何区分两类 UID、SSO 和 OAuth
+    domains: []
+    scenarios: []
+    project_ids: [project_eval_portal]
+    max_tokens: 1200
+    expected_memories: [k_eval_portal_login_boundary]
+    expected_ranks: { k_eval_portal_login_boundary: 1 }
+    forbidden_memories: [k_eval_portal_qualification_reuse]
+    language: zh-CN
+
+  - task: 如何通过 portal_result 的 log_id 排查认证失败
+    domains: []
+    scenarios: []
+    project_ids: [project_eval_portal]
+    max_tokens: 1200
+    expected_memories: [k_eval_portal_result_event]
+    expected_ranks: { k_eval_portal_result_event: 1 }
+    forbidden_memories: [k_eval_portal_account_quota]
+    language: zh-CN
+
+  - task: 不知道业务账号 UID 时怎么查主体下账号以及新主体额度预占
+    domains: []
+    scenarios: []
+    project_ids: [project_eval_portal]
+    max_tokens: 1200
+    expected_memories: [k_eval_portal_account_quota]
+    expected_ranks: { k_eval_portal_account_quota: 1 }
+    forbidden_memories: [k_eval_portal_mobile_debug]
+    language: zh-CN
+
+  - task: project-specific Garfish sharedState troubleshooting
+    domains: []
+    scenarios: []
+    project_ids: [project_other]
+    max_tokens: 1200
+    expected_memories: []
+    forbidden_memories: [k_eval_portal_shared_state, k_eval_portal_microfrontend]
+    abstain: true
+    language: en
+
+  - task: 火星餐厅库存机器人如何处理海鲜保鲜
+    domains: []
+    scenarios: []
+    project_ids: [project_eval_portal]
+    max_tokens: 1200
+    expected_memories: []
+    forbidden_memories: [k_eval_portal_mobile_debug, k_eval_portal_onboarding_stuck]
+    abstain: true
+    language: zh-CN
+
+  - task: underwater telescope warranty registration
+    domains: []
+    scenarios: []
+    project_ids: [project_eval_portal]
+    max_tokens: 1200
+    expected_memories: []
+    forbidden_memories: [k_eval_portal_login_boundary]
+    abstain: true
+    language: en

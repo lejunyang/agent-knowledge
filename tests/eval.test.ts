@@ -258,6 +258,35 @@ describe("runEvalCase", () => {
     expect(suite.metrics.abstentionPrecision).toBe(1);
   });
 
+  it("passes the project-scoped business hard-negative corpus", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-eval-project-business-")
+    );
+    tempDirs.push(root);
+    const corpus = await loadEvalCorpus(
+      "eval/cases/project-business-retrieval.yaml"
+    );
+    await materializeEvalCorpus(root, corpus);
+    rebuildIndex(root);
+
+    const suite = await runEvalSuite(root, { cases: corpus.cases });
+
+    expect(corpus.documents).toHaveLength(10);
+    expect(corpus.cases).toHaveLength(12);
+    expect(suite).toMatchObject({
+      total: 12,
+      passed: 12,
+      failed: 0,
+      metrics: {
+        recallAt: { 1: 1, 3: 1, 5: 1 },
+        mrr: 1,
+        ndcg: 1,
+        falseInjectionRate: 0,
+        abstentionPrecision: 1
+      }
+    });
+  });
+
   it("supports lexical, hybrid, and reranked eval pipelines", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-eval-pipelines-"));
     tempDirs.push(root);
