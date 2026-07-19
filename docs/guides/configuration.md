@@ -1,0 +1,48 @@
+# 用户配置
+
+## 配置向导
+
+```bash
+agent-knowledge configure
+```
+
+向导使用方向键单选、空格多选、回车确认；路径和自定义模型使用文本输入。
+
+默认写入：
+
+```text
+~/.config/agent-knowledge/config.json
+```
+
+可用 `XDG_CONFIG_HOME`、`AGENT_KNOWLEDGE_CONFIG` 或全局 `--config <file>` 指定其他位置。
+
+优先级：
+
+1. 命令行显式参数。
+2. 用户配置。
+3. 兼容环境变量。
+4. 内置默认值。
+
+## 配置项
+
+| 配置 | 默认值 | 用途 |
+| --- | --- | --- |
+| `knowledgeRoot` | `~/.agent_knowledge` | Markdown、索引、缓存和日志的 workspace root |
+| `identity.actorType` | `owner` | 控制写入来源权威性 |
+| `identity.captureMode` | `direct_material` | 控制自动内容是否必须审阅 |
+| `identity.visibilityScopes` | `private,project,team` | 查询允许读取的可见范围 |
+| `identity.sensitivityClearance` | `internal` | 查询允许读取的最高敏感级别 |
+| `embeddings.provider` | `transformers` | `transformers` 使用语义模型；`local` 用于确定性测试 |
+| `embeddings.profile` | `multilingual-e5-small` | 默认 multilingual embedding profile |
+| `embeddings.retrieval` | `lexical` | `hybrid` 会合并 lexical 与 dense retrieval |
+| `integration.product` | `trae` | 默认安装产品 |
+| `integration.mode` | `merge` | `merge` 保留外部配置；`overwrite` 替换目标 |
+| `sync.provider` | `none` | `webdav` 或 `s3` 启用远端同步 |
+| `sync.intervalMinutes` | `0` | `0` 禁用定时同步；正数用于 `sync watch` |
+
+配置只保存凭据环境变量名，不保存 secret 值。
+
+```bash
+agent-knowledge config show
+agent-knowledge config path
+```

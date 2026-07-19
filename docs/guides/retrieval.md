@@ -1,0 +1,33 @@
+# 检索与 Embedding
+
+## 基础查询
+
+```bash
+agent-knowledge index
+agent-knowledge query \
+  --task "审查 Vue SFC lint 迁移方案" \
+  --domain frontend/lint \
+  --scenario lint-migration
+```
+
+检索支持 aliases、层级 domain、CJK 2/3-gram、validity、visibility、sensitivity 和 project 过滤。没有 domain/scenario 且 lexical 无可靠命中时，不会回退全表。
+
+## Hybrid
+
+```bash
+agent-knowledge embed-index
+agent-knowledge query --task "自然语言问题" --retrieval hybrid --debug
+```
+
+默认 profile 是 `multilingual-e5-small` q8；中文资源优先可选 `bge-small-zh-v1.5`。自动化测试使用 `--provider local`。
+
+Embedding manifest 会校验 model、revision、dtype、dimensions、pooling 和 prefix，避免不兼容向量静默混用。
+
+## 调试与评测
+
+```bash
+agent-knowledge query --task "当前任务" --debug
+agent-knowledge eval --input eval/cases/retrieval-baseline.yaml
+```
+
+评测输出 Recall@1/3/5、MRR、nDCG、false injection、abstention precision、latency 和 packet tokens。

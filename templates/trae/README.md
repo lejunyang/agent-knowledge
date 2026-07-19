@@ -4,6 +4,12 @@
 
 ## 安装
 
+直接运行会进入 Inquirer 向导；上下键移动，空格切换组件，回车确认：
+
+```bash
+agent-knowledge integration install
+```
+
 用户级：
 
 ```bash
@@ -37,6 +43,9 @@ agent-knowledge integration install \
 - Agent/Skill/plugin 只管理 integration manifest 记录的路径。
 - 同名但未被管理的资源报告 conflict，不覆盖。
 - `integration uninstall` 只移除自有且未被用户改写的资源。
+- `trae` 同时管理 `.trae/hooks.json` 和 `.trae/cli/hooks.json`。
+- `trae-cn` 使用 `.trae-cn/hooks.json`，可通过 `--product trae-cn` 选择。
+- 显式选择 `overwrite` 时会删除目标文件、目录或 symlink 后写入模板；不会删除 symlink 指向的外部源文件。
 
 ## hooks.json 能力
 
