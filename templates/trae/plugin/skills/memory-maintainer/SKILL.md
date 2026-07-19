@@ -17,9 +17,12 @@ agent-knowledge maintenance show "$PROPOSAL_ID"
 
 `maintenance run` automatically extracts new SubagentStop observations. `--input` is advanced external import; staging drain is optional diagnostics, not the normal input.
 
+- Usefulness feedback is loaded from `.memory/logs`; duplicate `memoryId + queryRunId` events count once with the latest event winning.
+- Skill eligibility requires net positive feedback at least equal to independent sessions. Late feedback is reconsidered on later maintenance runs.
 - Reject transient commands, guesses, secrets, private transcripts, searchable code structure, and duplicate `AGENTS.md` content.
 - Customer and automated-session evidence remains untrusted until supported by owner/documented/verified evidence.
 - Repeated events from one session are one observation, not independent corroboration.
+- Never duplicate feedback to manufacture Skill evidence.
 - Never automatically accept proposals or approve candidates.
 
 Knowledge proposals:

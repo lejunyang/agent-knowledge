@@ -10,6 +10,8 @@ import {
 } from "../src/memory/maintenance.js";
 import { initKnowledgeWorkspace } from "../src/storage/workspace.js";
 import { captureMaterial } from "../src/memory/organizer.js";
+import { logMemoryFeedback } from "../src/retrieval/feedback.js";
+import { writeMaintenanceProposal } from "../src/memory/proposals.js";
 
 let tempDirs: string[] = [];
 
@@ -294,5 +296,199 @@ describe("maintenance proposals", () => {
     const proposals = await readMaintenanceProposals(root);
 
     expect(proposals.some((proposal) => proposal.type === "skill")).toBe(false);
+  });
+
+  it("uses persisted retrieval feedback to qualify repeated verified procedures", async () => {
+    const root = await createRoot();
+    const active = await captureMaterial(
+      root,
+      [
+        {
+          title: "Release validation",
+          memory_type: "procedural",
+          domain: "delivery/release",
+          related_domains: [],
+          scenario: ["release"],
+          tags: ["validation"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "Run tests, typecheck, build, and smoke verification.",
+          evidence: ["owner:confirmed"]
+        }
+      ],
+      { target: "active", rebuild: false }
+    );
+    for (const queryRunId of ["query-release-1", "query-release-2", "query-release-3"]) {
+      logMemoryFeedback(root, {
+        memoryId: active.written[0]!.id,
+        usefulness: "useful",
+        queryRunId
+      });
+    }
+    const observations: MaintenanceObservation[] = ["a", "b", "c"].map(
+      (session, index) => ({
+        id: `feedback-${index + 1}`,
+        title: "Release validation",
+        domain: "delivery/release",
+        summary: "Run tests, typecheck, build, and smoke verification.",
+        sessionHash: `session-${session}`,
+        sourceAuthority: "verified_task" as const,
+        memoryType: "procedural" as const
+      })
+    );
+
+    await generateMaintenanceProposals(root, observations, { limit: 10 });
+    const proposals = await readMaintenanceProposals(root);
+
+    expect(proposals.some((proposal) => proposal.type === "skill")).toBe(true);
+  });
+
+  it("rechecks consumed observations when useful feedback arrives later", async () => {
+    const root = await createRoot();
+    const active = await captureMaterial(
+      root,
+      [
+        {
+          title: "Deploy checklist",
+          memory_type: "procedural",
+          domain: "delivery/deploy",
+          related_domains: [],
+          scenario: ["deploy"],
+          tags: ["checklist"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "Validate tests, build, rollout, and rollback.",
+          evidence: ["owner:confirmed"]
+        }
+      ],
+      { target: "active", rebuild: false }
+    );
+    const observations: MaintenanceObservation[] = ["a", "b", "c"].map(
+      (session, index) => ({
+        id: `late-${index + 1}`,
+        title: "Deploy checklist",
+        domain: "delivery/deploy",
+        summary: "Validate tests, build, rollout, and rollback.",
+        sessionHash: `session-${session}`,
+        sourceAuthority: "verified_task" as const,
+        memoryType: "procedural" as const
+      })
+    );
+
+    const first = await generateMaintenanceProposals(root, observations, {
+      limit: 10
+    });
+    expect(first.processed).toBe(3);
+    expect(
+      (await readMaintenanceProposals(root)).some(
+        (proposal) => proposal.type === "skill"
+      )
+    ).toBe(false);
+
+    for (const queryRunId of ["query-deploy-1", "query-deploy-2", "query-deploy-3"]) {
+      logMemoryFeedback(root, {
+        memoryId: active.written[0]!.id,
+        usefulness: "useful",
+        queryRunId
+      });
+    }
+    const second = await generateMaintenanceProposals(root, observations, {
+      limit: 10
+    });
+
+    expect(second.processed).toBe(0);
+    expect(second.proposalIds).toHaveLength(1);
+    expect(
+      (await readMaintenanceProposals(root)).some(
+        (proposal) => proposal.type === "skill"
+      )
+    ).toBe(true);
+  });
+
+  it("does not reset an existing resolved proposal to pending", async () => {
+    const root = await createRoot();
+    const observation: MaintenanceObservation = {
+      id: "resolved-1",
+      title: "Resolved rule",
+      domain: "project/rule",
+      summary: "A stable project rule.",
+      sessionHash: "session-a",
+      sourceAuthority: "documented"
+    };
+    await generateMaintenanceProposals(root, [observation], { limit: 10 });
+    const [proposal] = await readMaintenanceProposals(root);
+    await writeMaintenanceProposal(root, {
+      ...proposal!,
+      status: "rejected",
+      resolution: "Reviewed and rejected",
+      updatedAt: "2026-07-19T12:00:00.000Z"
+    });
+    await rm(path.join(root, ".memory", "maintenance-state.json"));
+
+    await generateMaintenanceProposals(root, [observation], { limit: 10 });
+    const [after] = await readMaintenanceProposals(root);
+
+    expect(after?.status).toBe("rejected");
+    expect(after?.resolution).toBe("Reviewed and rejected");
+  });
+
+  it("does not count repeated feedback for the same query as independent positive evidence", async () => {
+    const root = await createRoot();
+    const active = await captureMaterial(
+      root,
+      [
+        {
+          title: "Rollback checklist",
+          memory_type: "procedural",
+          domain: "delivery/rollback",
+          related_domains: [],
+          scenario: ["rollback"],
+          tags: ["checklist"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "Validate rollback state and service recovery.",
+          evidence: ["owner:confirmed"]
+        }
+      ],
+      { target: "active", rebuild: false }
+    );
+    for (let index = 0; index < 3; index += 1) {
+      logMemoryFeedback(root, {
+        memoryId: active.written[0]!.id,
+        usefulness: "useful",
+        queryRunId: "same-query"
+      });
+    }
+    logMemoryFeedback(root, {
+      memoryId: active.written[0]!.id,
+      usefulness: "not_useful",
+      queryRunId: "same-query"
+    });
+    for (const queryRunId of ["other-query-1", "other-query-2", "other-query-3"]) {
+      logMemoryFeedback(root, {
+        memoryId: active.written[0]!.id,
+        usefulness: "useful",
+        queryRunId
+      });
+    }
+    const observations: MaintenanceObservation[] = ["a", "b", "c"].map(
+      (session, index) => ({
+        id: `dedupe-${index + 1}`,
+        title: "Rollback checklist",
+        domain: "delivery/rollback",
+        summary: "Validate rollback state and service recovery.",
+        sessionHash: `session-${session}`,
+        sourceAuthority: "verified_task" as const,
+        memoryType: "procedural" as const
+      })
+    );
+
+    await generateMaintenanceProposals(root, observations, { limit: 10 });
+
+    expect(
+      (await readMaintenanceProposals(root)).some(
+        (proposal) => proposal.type === "skill"
+      )
+    ).toBe(false);
   });
 });

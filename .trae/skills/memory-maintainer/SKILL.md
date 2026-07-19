@@ -33,6 +33,8 @@ agent-knowledge maintenance list --status pending
 
 Use `maintenance watch --interval-minutes N` only for a continuously running bot and only under an external process manager. `--input` is an advanced import path for already structured external observations.
 
+`maintenance` also reads `.memory/logs` usefulness feedback. The same `memoryId + queryRunId` is deduplicated with the latest event winning; `useful=+1`, `not_useful=-1`, and `neutral=0`. A Skill requires net positive feedback at least equal to the number of independent sessions. Late feedback is re-evaluated on later runs even when the observation watermark has no new events.
+
 3. Inspect active knowledge and retrieval evidence:
 
 ```bash
@@ -62,6 +64,7 @@ Proposal meanings:
 - Prefer stable project architecture, hidden cross-module constraints, business semantics, and verified procedures not already covered by `AGENTS.md`.
 - Do not create a code graph or copy `AGENTS.md`.
 - Do not count repeated messages from one actor/session as independent corroboration.
+- Do not duplicate feedback events to satisfy the Skill threshold. Feedback is attached only to an exact active title/alias in the same domain.
 
 6. For semantic review beyond deterministic proposals, ask `memory-writer` to structure only supported conclusions. Include:
 

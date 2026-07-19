@@ -185,10 +185,21 @@ Skill proposal 只有同时满足以下条件才生成：
 - `memoryType=procedural`
 - 至少 3 个**独立 session**
 - 每个 observation 都是 `verified_task` 或 `user_confirmed`
-- 每个 observation 都有正向 usefulness feedback
+- 与同 domain、同标题/alias 的 active procedural knowledge 存在足够的净正向 usefulness feedback
 - 没有 conflict
 
 这比普通 procedural candidate 更严格，因为 Skill 会改变 Agent 的执行方式。
+
+Feedback 计算规则：
+
+- `agent-knowledge feedback` 写入 `.memory/logs`，maintenance 会自动读取。
+- 同一 `memoryId + queryRunId` 只采用时间最新的一条，重复上报不增加票数。
+- `useful=+1`、`not_useful=-1`、`neutral=0`；净正反馈数量必须至少等于独立 session 数。
+- 自动关联只在 observation 与 active knowledge 的 domain 相同，且标题或 alias 精确匹配时发生，避免把近主题反馈误转给另一条流程。
+- feedback 晚于 observation 到达时，后续 `maintenance run/watch` 仍会重新评估已消费 observation；无需删除 watermarks 或重复导入 observation。
+- 外部 observation 已显式携带 `usefulFeedback` 时保留该值，不用本地日志覆盖。
+
+这意味着主 Agent 实际使用或拒绝检索结果后，应尽量记录带 `queryRunId` 的 feedback；但不要为了满足 Skill 门槛批量伪造正反馈。
 
 ### 第一步：接受到审阅 inbox
 

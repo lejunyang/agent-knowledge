@@ -5,7 +5,7 @@
  * 进入本模块后，每个动作都必须落为可审计 JSON。
  */
 import { existsSync } from "node:fs";
-import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { resolveWorkspacePath } from "../core/paths.js";
 import type { EpisodeProvenance } from "../core/types.js";
 import { catalogKnowledge } from "../storage/catalog.js";
@@ -30,6 +30,10 @@ export type MaintenanceObservation = {
   episode?: EpisodeProvenance;
 };
 
+type FeedbackEnrichedObservation = MaintenanceObservation & {
+  feedbackMemoryId?: string;
+};
+
 export type MaintenanceResult = {
   processed: number;
   watermarkBefore: number;
@@ -40,6 +44,14 @@ export type MaintenanceResult = {
 type MaintenanceState = {
   watermark: number;
   updatedAt: string;
+};
+
+type FeedbackLogEvent = {
+  timestamp?: string;
+  event?: string;
+  memoryId?: string;
+  usefulness?: "useful" | "not_useful" | "neutral";
+  queryRunId?: string;
 };
 
 /**
@@ -64,42 +76,58 @@ export async function generateMaintenanceProposals(
       watermarkBefore,
       watermarkBefore + Math.max(0, options.limit)
     );
-    if (selected.length === 0) {
-      return {
-        processed: 0,
-        watermarkBefore,
-        watermarkAfter: watermarkBefore,
-        proposalIds: []
-      };
-    }
-
     const catalog = await catalogKnowledge(rootDir, { write: false });
-    const proposals: MaintenanceProposal[] = [];
+    const feedbackScores = await readUsefulFeedbackScores(rootDir);
+    const existingById = new Map(
+      (await readMaintenanceProposals(rootDir)).map((proposal) => [
+        proposal.id,
+        proposal
+      ])
+    );
+    const proposalIds: string[] = [];
+
+    /** 只写新 proposal，人工已接受/拒绝或仍待审的同 ID proposal 都保持原样。 */
+    const writeIfNew = async (
+      proposal: MaintenanceProposal
+    ): Promise<void> => {
+      if (existingById.has(proposal.id)) {
+        return;
+      }
+      await writeMaintenanceProposal(rootDir, proposal);
+      existingById.set(proposal.id, proposal);
+      proposalIds.push(proposal.id);
+    };
+
     for (const observation of selected) {
       const target = findRelatedMemory(catalog.items, observation);
       const proposal = proposalForObservation(observation, target);
-      proposals.push(proposal);
-      await writeMaintenanceProposal(rootDir, proposal);
+      await writeIfNew(proposal);
     }
 
     const watermarkAfter = watermarkBefore + selected.length;
-    // Skill 需要跨历史 observation 判断独立 session，不能只检查本批新增事件。
+    const historicalObservations = attachUsefulFeedback(
+      observations.slice(0, watermarkAfter),
+      catalog.items,
+      feedbackScores
+    );
+    // Skill 需要跨历史 observation 判断独立 session；即使本批无新事件，也要重查后来到达的 feedback。
     for (const skillProposal of skillProposalsForObservations(
-      observations.slice(0, watermarkAfter)
+      historicalObservations
     )) {
-      proposals.push(skillProposal);
-      await writeMaintenanceProposal(rootDir, skillProposal);
+      await writeIfNew(skillProposal);
     }
 
-    await writeState(rootDir, {
-      watermark: watermarkAfter,
-      updatedAt: new Date().toISOString()
-    });
+    if (watermarkAfter !== watermarkBefore) {
+      await writeState(rootDir, {
+        watermark: watermarkAfter,
+        updatedAt: new Date().toISOString()
+      });
+    }
     return {
       processed: selected.length,
       watermarkBefore,
       watermarkAfter,
-      proposalIds: proposals.map((proposal) => proposal.id)
+      proposalIds
     };
   } finally {
     await release();
@@ -189,6 +217,35 @@ function findRelatedMemory(
   );
 }
 
+/**
+ * 把 observation 关联到 active memory 的净 usefulness score。
+ *
+ * 外部导入显式提供的 usefulFeedback 优先；自动日志只在同 domain 且标题/alias 精确匹配时附加，
+ * 避免把近主题知识的反馈错误转移到另一条流程。
+ */
+function attachUsefulFeedback(
+  observations: MaintenanceObservation[],
+  items: Awaited<ReturnType<typeof catalogKnowledge>>["items"],
+  scores: Map<string, number>
+): FeedbackEnrichedObservation[] {
+  return observations.map((observation) => {
+    if (observation.usefulFeedback !== undefined) {
+      return observation;
+    }
+    const target = findRelatedMemory(items, observation);
+    const usefulFeedback = target
+      ? scores.get(target.id)
+      : undefined;
+    return usefulFeedback === undefined
+      ? observation
+      : {
+          ...observation,
+          usefulFeedback,
+          feedbackMemoryId: target?.id
+        };
+  });
+}
+
 /** 为标题和摘要比较生成稳定的小写空白归一化文本。 */
 function normalize(input: string): string {
   return input.toLowerCase().replace(/\s+/g, " ").trim();
@@ -200,9 +257,9 @@ function normalize(input: string): string {
  * 三个独立 session、受信来源、全部正反馈且无冲突是硬门槛；事件数量本身不能替代独立证据。
  */
 function skillProposalsForObservations(
-  observations: MaintenanceObservation[]
+  observations: FeedbackEnrichedObservation[]
 ): MaintenanceProposal[] {
-  const groups = new Map<string, MaintenanceObservation[]>();
+  const groups = new Map<string, FeedbackEnrichedObservation[]>();
   for (const observation of observations) {
     if (observation.memoryType !== "procedural") {
       continue;
@@ -225,9 +282,26 @@ function skillProposalsForObservations(
         observation.sourceAuthority === "verified_task" ||
         observation.sourceAuthority === "user_confirmed"
     );
-    const positiveFeedback = group.every(
-      (observation) => (observation.usefulFeedback ?? 0) > 0
-    );
+    // 同一 active memory 的净反馈即使关联多个 observation，也只在 Skill 分组中累计一次。
+    const logFeedback = new Map<string, number>();
+    let importedFeedback = 0;
+    for (const observation of group) {
+      if (
+        observation.feedbackMemoryId &&
+        observation.usefulFeedback !== undefined
+      ) {
+        logFeedback.set(
+          observation.feedbackMemoryId,
+          observation.usefulFeedback
+        );
+      } else {
+        importedFeedback += observation.usefulFeedback ?? 0;
+      }
+    }
+    const positiveFeedback =
+      importedFeedback +
+        [...logFeedback.values()].reduce((sum, score) => sum + score, 0) >=
+      sessions.size;
     const hasConflict = group.some((observation) => Boolean(observation.conflictsWith));
     // 任一门槛失败都宁可不提案，避免一次错误流程被自动固化为 Agent 能力。
     if (sessions.size < 3 || !trusted || !positiveFeedback || hasConflict) {
@@ -259,6 +333,81 @@ function skillProposalsForObservations(
     });
   }
   return proposals;
+}
+
+/**
+ * 从运行日志读取并汇总每条知识的净 usefulness。
+ *
+ * 同一 `memoryId + queryRunId` 只采用时间最新的一条，避免重试或重复上报放大票数；没有
+ * queryRunId 的事件按日志位置视为独立人工反馈。损坏 JSONL 行会跳过，不能阻断维护 worker。
+ */
+async function readUsefulFeedbackScores(
+  rootDir: string
+): Promise<Map<string, number>> {
+  const directory = resolveWorkspacePath(rootDir, ".memory", "logs");
+  if (!existsSync(directory)) {
+    return new Map();
+  }
+  const latestByKey = new Map<
+    string,
+    { timestamp: string; memoryId: string; score: number }
+  >();
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries.sort((left, right) =>
+    left.name.localeCompare(right.name)
+  )) {
+    if (!entry.isFile() || !entry.name.endsWith(".jsonl")) {
+      continue;
+    }
+    const lines = (await readFile(
+      resolveWorkspacePath(rootDir, ".memory", "logs", entry.name),
+      "utf8"
+    )).split("\n");
+    for (const [lineIndex, line] of lines.entries()) {
+      if (!line.trim()) {
+        continue;
+      }
+      let event: FeedbackLogEvent;
+      try {
+        event = JSON.parse(line) as FeedbackLogEvent;
+      } catch {
+        continue;
+      }
+      if (
+        event.event !== "feedback.memory_usefulness" ||
+        !event.memoryId ||
+        !event.usefulness
+      ) {
+        continue;
+      }
+      const timestamp = event.timestamp ?? `${entry.name}:${lineIndex}`;
+      const key = `${event.memoryId}\0${
+        event.queryRunId ?? `${entry.name}:${lineIndex}`
+      }`;
+      const previous = latestByKey.get(key);
+      if (previous && previous.timestamp > timestamp) {
+        continue;
+      }
+      latestByKey.set(key, {
+        timestamp,
+        memoryId: event.memoryId,
+        score:
+          event.usefulness === "useful"
+            ? 1
+            : event.usefulness === "not_useful"
+              ? -1
+              : 0
+      });
+    }
+  }
+  const scores = new Map<string, number>();
+  for (const feedback of latestByKey.values()) {
+    scores.set(
+      feedback.memoryId,
+      (scores.get(feedback.memoryId) ?? 0) + feedback.score
+    );
+  }
+  return scores;
 }
 
 /** 生成最小可审阅 Skill 草稿；丰富工具流程应在人工审阅阶段完成。 */

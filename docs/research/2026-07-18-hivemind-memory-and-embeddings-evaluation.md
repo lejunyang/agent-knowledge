@@ -295,7 +295,7 @@ Nomic v1.5 官方语言为英文。它比 MiniLM 有更长上下文、Matryoshka
 1. [x] 引入 watermark/lock/bounded run/watch worker，只写 staging/proposal。证据：`maintenance run/watch`、`tests/maintenance.test.ts`。
 2. [x] 生成 duplicate、consolidation、update、conflict proposal。
 3. [x] 支持结构化 episode provenance；`supersedes` 激活时设置旧知识 deprecated/valid_until。
-4. [x] 至少 3 个独立 episode、可信来源、正反馈且无冲突时生成 Skill proposal；只输出草稿，不自动写入或安装 Skill。
+4. [x] 至少 3 个独立 episode、可信来源、足够净正反馈且无冲突时生成 Skill proposal；只输出草稿，不自动写入或安装 Skill。真实 maintenance 会读取 `.memory/logs`，按 `memoryId + queryRunId` 去重 usefulness，并在 feedback 晚到时重新评估已消费 observation。证据：`src/memory/maintenance.ts`、`tests/maintenance.test.ts`。
 
 ## 参考
 

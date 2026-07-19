@@ -139,6 +139,8 @@ Writer 应主动处理显式记忆、已验证可复用结果和 `AGENTS.md` 未
 
 普通用户不需要手写 `observations.json` 或先 drain staging；`--input` 只用于外部 observation 导入。
 
+Skill proposal 的 positive feedback 来自 `.memory/logs`：同一 `memoryId + queryRunId` 只采用最新一条，净正反馈数量必须至少覆盖独立 session 数。Feedback 晚于 observation 到达时，后续 maintenance 会重新评估已消费 observation；不会要求重置 watermark。
+
 自动/客户候选只能在人工检查后运行：
 
 ```bash

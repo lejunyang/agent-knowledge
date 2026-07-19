@@ -81,7 +81,8 @@ agent-knowledge index
 2. Hook 内容不足、任务依赖历史决策或业务规则时，主 Agent 主动调用 `memory-reader`。
 3. 用户明确要求记忆，或任务产生了已验证且可复用的结果时，主 Agent 调用 `memory-writer` 生成 candidate JSON。
 4. candidate 通过 `write-candidate` 进入 `_inbox`；不会因为 Subagent 输出就直接修改 active 知识。
-5. 每周或知识积累较多时运行一次 maintenance 和 inbox 审阅。
+5. 主 Agent 实际使用或拒绝某条知识时记录 `feedback`，为阈值校准和 Skill 沉淀提供证据。
+6. 每周或知识积累较多时运行一次 maintenance 和 inbox 审阅。
 
 推荐的每周维护：
 
@@ -91,6 +92,8 @@ agent-knowledge maintenance list --status pending
 agent-knowledge list
 agent-knowledge organize-inbox
 ```
+
+`maintenance` 会读取 `.memory/logs` 中的 usefulness feedback。同一 `memoryId + queryRunId` 的重复上报只采用最新一条，不能通过重复日志放大票数；Skill proposal 的净正反馈数量必须至少覆盖独立 session 数。如果 feedback 晚于 observation 到达，下次 `maintenance run/watch` 会重新检查已消费 observation，不需要重置 watermark。
 
 逐条查看并处理自动提案：
 
