@@ -40,3 +40,7 @@ export * from "./sync/scheduler.js";
 export * from "./hooks/staging.js";
 export * from "./hooks/relevance.js";
 export * from "./hooks/subagentLogs.js";
+export * from "./graph/types.js";
+export * from "./graph/build.js";
+export * from "./graph/query.js";
+export * from "./graph/export.js";

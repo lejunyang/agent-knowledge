@@ -20,6 +20,7 @@ import {
   acceptMaintenanceProposal,
   appendJsonlLog,
   appendSubagentEvent,
+  buildKnowledgeGraph,
   buildContextPacket,
   calibrateRetrieval,
   catalogKnowledge,
@@ -42,6 +43,7 @@ import {
   listKnowledge,
   logMemoryFeedback,
   organizeInbox,
+  queryKnowledgeGraph,
   queryMemories,
   queryMemoriesHybridWithDebug,
   queryMemoriesRerankedWithDebug,
@@ -51,10 +53,12 @@ import {
   runScheduledSync,
   readSubagentLogs,
   readMaintenanceProposals,
+  readKnowledgeGraph,
   resolveRetrievalModelDescriptor,
   rejectMaintenanceProposal,
   readMaintenanceObservations,
   showMaintenanceProposal,
+  exportKnowledgeGraph,
   S3HttpObjectClient,
   S3SyncBackend,
   TransformersBatchReranker,
@@ -1162,6 +1166,79 @@ project
   .option("--cwd <dir>", t("要检查的目录", "directory to inspect"), process.cwd())
   .action(async (options: { root?: string; cwd: string }) => {
     console.log(JSON.stringify(await detectProject(resolveCliRoot(options.root), options.cwd), null, 2));
+  });
+
+const graph = program
+  .command("graph")
+  .description(t("构建、查询和导出知识关系图", "Build, query, and export the knowledge graph"));
+
+graph
+  .command("build")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { root?: string }) => {
+    const built = await buildKnowledgeGraph(resolveCliRoot(options.root));
+    console.log(
+      JSON.stringify(
+        {
+          generatedAt: built.generatedAt,
+          nodes: built.nodes.length,
+          edges: built.edges.length
+        },
+        null,
+        2
+      )
+    );
+  });
+
+graph
+  .command("query")
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--text <text>", t("节点文本搜索", "node text search"))
+  .option("--id <id>", t("节点或知识 ID", "node or knowledge ID"))
+  .option("--depth <depth>", t("遍历深度，最大 2", "traversal depth, max 2"), "1")
+  .action(async (options: { root?: string; text?: string; id?: string; depth: string }) => {
+    if (!options.text && !options.id) {
+      throw new Error(t("必须提供 --text 或 --id", "Provide --text or --id"));
+    }
+    console.log(
+      JSON.stringify(
+        await queryKnowledgeGraph(resolveCliRoot(options.root), {
+          text: options.text,
+          id: options.id,
+          depth: Number.parseInt(options.depth, 10)
+        }),
+        null,
+        2
+      )
+    );
+  });
+
+graph
+  .command("export")
+  .requiredOption("--format <format>", t("json 或 mermaid", "json or mermaid"))
+  .requiredOption("--output <file>", t("输出文件", "output file"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { format: string; output: string; root?: string }) => {
+    if (options.format !== "json" && options.format !== "mermaid") {
+      throw new Error(t("未知 graph 导出格式", "Unknown graph export format"));
+    }
+    const root = resolveCliRoot(options.root);
+    let current;
+    try {
+      current = readKnowledgeGraph(root);
+    } catch {
+      current = await buildKnowledgeGraph(root);
+    }
+    await exportKnowledgeGraph(current, {
+      format: options.format,
+      output: options.output
+    });
+    console.log(
+      t(
+        `已导出：${path.resolve(options.output)}`,
+        `Exported: ${path.resolve(options.output)}`
+      )
+    );
   });
 
 program
