@@ -685,4 +685,65 @@ describe("buildContextPacket", () => {
         packet.examples.length
     ).toBeLessThan(2);
   });
+
+  it("filters weak direct tails while preserving explicit related knowledge", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-packet-relevance-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+    const request: MemoryQueryRequest = {
+      task: "审查 Vue SFC lint 迁移方案",
+      agentRole: "main",
+      domains: ["frontend/lint"],
+      scenarios: ["lint-migration"],
+      paths: [],
+      maxTokens: 4500,
+      includeTypes: ["semantic", "procedural", "profile", "episodic"],
+      now: "2026-07-19",
+      visibilityScopes: ["private", "project", "team"],
+      sensitivityClearance: "internal",
+      projectIds: []
+    };
+    const ranked = queryMemories(root, request);
+    const strongest = ranked[0]!;
+    const second = ranked[1]!;
+    const weakDirect = {
+      ...second,
+      document: {
+        ...second.document,
+        frontmatter: {
+          ...second.document.frontmatter,
+          id: "k_eval_weak_direct_tail",
+          type: "semantic" as const
+        }
+      },
+      finalScore: strongest.finalScore * 0.5,
+      relationScore: 0
+    };
+    const explicitRelated = {
+      ...second,
+      document: {
+        ...second.document,
+        frontmatter: {
+          ...second.document.frontmatter,
+          id: "k_eval_explicit_related_tail"
+        }
+      },
+      finalScore: strongest.finalScore * 0.5,
+      relationScore: 1
+    };
+
+    const packet = buildContextPacket({
+      request,
+      ranked: [strongest, weakDirect, explicitRelated]
+    });
+    const injectedIds = [
+      ...packet.relevant_facts,
+      ...packet.procedures
+    ].map((item) => item.id);
+
+    expect(injectedIds).toContain(strongest.document.frontmatter.id);
+    expect(injectedIds).not.toContain("k_eval_weak_direct_tail");
+    expect(injectedIds).toContain("k_eval_explicit_related_tail");
+  });
 });

@@ -12,6 +12,25 @@ type BuildContextPacketInput = {
   ranked: RankedMemory[];
 };
 
+const MIN_DIRECT_SCORE = 0.35;
+const MIN_RELATIVE_DIRECT_SCORE = 0.65;
+
+/**
+ * 过滤只因偶然词项进入候选池的直接长尾。
+ *
+ * 明确关系扩展代表人类声明的依赖，不受相对门槛影响；普通 direct candidate 必须同时达到绝对
+ * 分数和首条分数比例，避免 token 预算宽裕时把低相关知识塞满 packet。
+ */
+function relevantForPacket(memory: RankedMemory, topScore: number): boolean {
+  if (memory.relationScore > 0) {
+    return true;
+  }
+  return (
+    memory.finalScore >= MIN_DIRECT_SCORE &&
+    memory.finalScore >= topScore * MIN_RELATIVE_DIRECT_SCORE
+  );
+}
+
 /** 把排序结果裁剪为可注入 context packet 的稳定字段集合。 */
 function toItem(memory: RankedMemory): ContextPacketItem {
   const document = memory.document;
@@ -96,7 +115,10 @@ export function buildContextPacket(input: BuildContextPacketInput): ContextPacke
     sources: []
   };
 
-  for (const ranked of input.ranked) {
+  const topScore = input.ranked[0]?.finalScore ?? 0;
+  for (const ranked of input.ranked.filter((memory) =>
+    relevantForPacket(memory, topScore)
+  )) {
     const type = ranked.document.frontmatter.type;
     const item = toItem(ranked);
 

@@ -171,6 +171,7 @@ src/cli.ts            命令行入口和各模块编排
 - FTS5 BM25 必须按单次查询内相关度归一化并显式排序，不能使用固定绝对值缩放或依赖无 `ORDER BY` 的 SQLite 返回顺序；dense/graph/related-only 候选不得获得 lexical 分。
 - Alias 排序加分必须考虑其对完整任务的覆盖率；短通用 alias 只能作为弱证据，不能在长查询中自动获得满分并压过具体知识。
 - direct result 和 related expansion 必须执行相同的 validity、visibility、sensitivity、project 和 type 过滤。
+- Context packet 必须过滤低相关 direct 长尾，同时保留 query debug 候选；显式关系扩展可越过相对分数门槛，但不能越过安全过滤。
 - 普通 `query` 未传 `--project-id` 时必须自动发现当前 Git 项目的稳定 ID；显式参数完全优先，非 Git 或探测失败回退空项目作用域。
 - `_inbox` / `_archive` 必须按路径硬排除，不能只依赖 status。
 - `_inbox-skills` 保存 Skill proposal 草稿，使用 Skill frontmatter 而不是 KnowledgeDocument schema；index、embedding、catalog、graph、list 和同步必须在解析前按路径硬排除。
