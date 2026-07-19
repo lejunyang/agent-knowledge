@@ -729,7 +729,7 @@ describe("buildContextPacket", () => {
           id: "k_eval_explicit_related_tail"
         }
       },
-      finalScore: strongest.finalScore * 0.5,
+      finalScore: 0.36,
       relationScore: 1
     };
 

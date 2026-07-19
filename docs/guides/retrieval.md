@@ -43,7 +43,7 @@ agent-knowledge query \
 
 Alias 的强排序加分按其对当前任务有效词项的覆盖比例计算。`uid`、`商家中心` 等短通用 alias 仍可帮助召回，但不能在长问题中仅凭一次出现获得满分；完整术语或多个 alias 共同覆盖查询时才获得强 boost，避免宽泛概览压过具体 SOP。
 
-构建 context packet 时还会过滤低相关 direct 长尾：普通直接候选至少需要 `finalScore >= 0.35`，且达到首条结果分数的 65%；明确 `related_knowledge` 扩展暂不受这条相对门槛影响。该门控只减少最终注入，不删除 `query --debug` 中的候选和分项分数，便于人工继续诊断召回。
+构建 context packet 时还会过滤低相关长尾：所有候选至少需要 `finalScore >= 0.35`；普通直接候选还需达到首条结果分数的 65%，明确 `related_knowledge` 扩展只豁免这条相对门槛。该门控只减少最终注入，不删除 `query --debug` 中的候选和分项分数，便于人工继续诊断召回。
 
 ## Hybrid
 

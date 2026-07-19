@@ -23,7 +23,7 @@ const MIN_RELATIVE_DIRECT_SCORE = 0.65;
  */
 function relevantForPacket(memory: RankedMemory, topScore: number): boolean {
   if (memory.relationScore > 0) {
-    return true;
+    return memory.finalScore >= MIN_DIRECT_SCORE;
   }
   return (
     memory.finalScore >= MIN_DIRECT_SCORE &&
