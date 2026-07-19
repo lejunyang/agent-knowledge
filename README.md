@@ -32,6 +32,16 @@ npm install -g .
 agent-knowledge configure
 ```
 
+项目可选配置：
+
+```bash
+agent-knowledge configure --scope project
+agent-knowledge configure --scope project-local
+agent-knowledge config sources
+```
+
+项目共享配置是 `.agent-knowledge.json`；项目本地配置是 `.agent-knowledge.local.json`，默认被 Git 忽略。生效优先级为用户全局 < 项目共享 < 项目 local < CLI 显式参数。
+
 向导会解释并保存：
 
 - 知识库位置。
@@ -265,6 +275,13 @@ agent-knowledge maintenance list --status pending
 ~/.config/agent-knowledge/config.json
 ```
 
+项目配置：
+
+```text
+<git-root>/.agent-knowledge.json
+<git-root>/.agent-knowledge.local.json
+```
+
 默认 workspace root：
 
 ```text
@@ -285,7 +302,7 @@ knowledge/                         Markdown 事实源
 .memory/graph.json                可重建知识关系图
 ```
 
-命令行显式参数优先于用户配置；用户配置优先于兼容环境变量。完整规则见[配置指南](docs/guides/configuration.md)。
+命令行显式参数优先于项目 local，项目 local 优先于项目共享，项目共享优先于用户配置，用户配置优先于兼容环境变量。完整规则见[配置指南](docs/guides/configuration.md)。
 
 ## 开发
 

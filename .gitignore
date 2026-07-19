@@ -4,4 +4,5 @@ dist/
 .memory/
 knowledge/
 local_exports/
+.agent-knowledge.local.json
 .DS_Store

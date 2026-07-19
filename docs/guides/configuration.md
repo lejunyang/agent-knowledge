@@ -16,19 +16,50 @@ agent-knowledge configure
 
 可用 `XDG_CONFIG_HOME`、`AGENT_KNOWLEDGE_CONFIG` 或全局 `--config <file>` 指定其他位置。
 
-优先级：
+项目配置：
 
-1. 命令行显式参数。
-2. 用户配置。
-3. 兼容环境变量。
-4. 内置默认值。
+```text
+<git-root>/.agent-knowledge.json
+<git-root>/.agent-knowledge.local.json
+```
+
+- `.agent-knowledge.json`：项目共享配置，可提交 Git。
+- `.agent-knowledge.local.json`：项目本地覆盖，默认在本项目 `.gitignore` 中排除。
+- Git 项目从任意子目录向上发现 root；非 Git 目录使用当前工作目录。
+- 配置对象递归合并；数组整体替换，不与低优先级数组拼接。
+
+优先级从高到低：
+
+1. 命令行显式功能参数，如 `--root`、`--locale`、`--retrieval`。
+2. 项目本地 `.agent-knowledge.local.json`。
+3. 项目共享 `.agent-knowledge.json`。
+4. 用户配置。
+5. 兼容环境变量。
+6. 内置默认值。
+
+`--config <file>` 只替换用户配置层的位置，不关闭项目配置发现。需要测试或故障诊断时，可临时设置 `AGENT_KNOWLEDGE_DISABLE_PROJECT_CONFIG=1`。
+
+交互写入不同层：
+
+```bash
+agent-knowledge configure --scope user
+agent-knowledge configure --scope project
+agent-knowledge configure --scope project-local
+```
+
+编辑 project 层时不会把 project-local 覆盖值反写进共享文件。
 
 查看生效配置和配置路径：
 
 ```bash
 agent-knowledge config show
 agent-knowledge config path
+agent-knowledge config sources
 ```
+
+- `config show`：输出所有层合并后的生效配置。
+- `config path`：输出用户配置层路径，兼容已有脚本。
+- `config sources`：输出用户、项目共享、项目 local 路径和存在状态。
 
 配置只保存行为参数和**凭据环境变量名**，不保存密码、access key、session token 或其他 secret 值。
 
@@ -39,7 +70,7 @@ agent-knowledge config path
 | `locale` | `auto` | `auto` 检测系统语言；支持 `zh-CN` 和 `en`，其他语言回退中文 |
 | `knowledgeRoot` | `~/.agent_knowledge` | Markdown、索引、缓存和日志的 workspace root |
 
-语言优先级是全局 `--locale` > 用户配置 > `LC_ALL` / `LC_MESSAGES` / `LANG` > 系统 locale。默认和未知系统语言都使用中文说明。
+语言优先级是全局 `--locale` > 项目 local > 项目共享 > 用户配置 > `LC_ALL` / `LC_MESSAGES` / `LANG` > 系统 locale。默认和未知系统语言都使用中文说明。
 
 ## 身份与治理
 

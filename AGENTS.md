@@ -31,9 +31,11 @@
 CLI 的 workspace root 解析优先级：
 
 1. 命令参数 `--root <dir>`。
-2. 用户配置文件中的 `knowledgeRoot`。
-3. 环境变量 `AGENT_KNOWLEDGE_ROOT`（兼容旧部署）。
-4. 默认路径 `~/.agent_knowledge`。
+2. 项目 local 配置 `.agent-knowledge.local.json`。
+3. 项目共享配置 `.agent-knowledge.json`。
+4. 用户配置文件中的 `knowledgeRoot`。
+5. 环境变量 `AGENT_KNOWLEDGE_ROOT`（兼容旧部署）。
+6. 默认路径 `~/.agent_knowledge`。
 
 用户配置默认位于：
 
@@ -41,7 +43,9 @@ CLI 的 workspace root 解析优先级：
 ~/.config/agent-knowledge/config.json
 ```
 
-`XDG_CONFIG_HOME` 会替换 `~/.config`；`AGENT_KNOWLEDGE_CONFIG` 或全局 `--config <file>` 可指定其他配置文件。其他设置同样遵循“命令行显式参数 > 用户配置 > 兼容环境变量 > 内置默认值”。
+`XDG_CONFIG_HOME` 会替换 `~/.config`；`AGENT_KNOWLEDGE_CONFIG` 或全局 `--config <file>` 可指定用户配置层。项目共享配置位于 Git root `.agent-knowledge.json`，项目 local 位于 `.agent-knowledge.local.json` 并应忽略。其他设置遵循“命令行显式参数 > 项目 local > 项目共享 > 用户配置 > 兼容环境变量 > 内置默认值”。
+
+项目配置对象递归合并，数组整体替换。`AGENT_KNOWLEDGE_DISABLE_PROJECT_CONFIG=1` 仅供测试和故障诊断临时关闭自动发现。
 
 配置文件可以保存 root、actor/capture policy、检索与 embedding、integration、同步 provider 和定时间隔，但只能保存凭据所在的环境变量名，禁止写入密码、access key、secret key 或 session token。
 
@@ -70,7 +74,7 @@ embedding 缓存固定在：
 <workspace root>/.memory/embeddings/manifest.json
 ```
 
-如果需要项目级或租户级隔离知识库，必须设置 `--root`、用户配置中的 `knowledgeRoot` 或兼容环境变量 `AGENT_KNOWLEDGE_ROOT`。否则多个项目会共享 `~/.agent_knowledge`。
+如果需要项目级或租户级隔离知识库，优先在 `.agent-knowledge.local.json` 设置 `knowledgeRoot`；也可使用共享项目配置、`--root`、用户配置或兼容环境变量。否则多个项目会共享 `~/.agent_knowledge`。
 
 ## 常用命令
 
@@ -83,6 +87,7 @@ npm uninstall -g agent-knowledge
 node dist/cli.js --help
 node dist/cli.js configure --help
 node dist/cli.js config show
+node dist/cli.js config sources
 node dist/cli.js catalog --root tests/fixtures/basic-knowledge --no-write
 node dist/cli.js embed-index --root tests/fixtures/basic-knowledge --provider local
 node dist/cli.js suggest-aliases --root tests/fixtures/basic-knowledge --provider local
@@ -150,6 +155,7 @@ src/cli.ts            命令行入口和各模块编排
 - 修改代码时必须同步补充解释“设计意图、兼容性原因、安全边界、失败策略和非显然算法”的注释；详细要求见文末“注释约定”。
 - 新增对外 CLI 命令、配置项、同步策略或治理规则时，入口模块应说明优先级、默认值和为什么不能绕过对应边界；复杂模块的文件头注释应说明职责和明确非职责。
 - 用户配置 schema 变化时同步更新 `src/core/config.ts`、配置向导、README、AGENTS 和配置测试；配置不得持久化 secret 值。
+- 项目配置行为变化时同步更新 `src/core/projectConfig.ts`、CLI source/scope 测试、`.gitignore` 和配置指南；`.agent-knowledge.local.json` 不得提交。
 - CLI/Hook 人类文案统一通过 `src/i18n/`；首发支持 `zh-CN` 和 `en`，默认 `auto`，未知系统语言回退中文。JSON 字段、frontmatter key 和知识 ID 不翻译。
 - 四阶段路线的完成证据维护在 `docs/research/2026-07-18-hivemind-memory-and-embeddings-evaluation.md`；新增检索、reranker 或 maintenance 行为时同步更新对应勾选项和证据。
 - 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。`related_knowledge` 只有能指向明确已有或同批可生成的知识 ID 时才填写。`project_ids`、`capture_mode`、`actor_type`、`corroboration_count` 用于适用范围和来源治理，旧 Markdown 依赖 schema 默认值保持兼容。

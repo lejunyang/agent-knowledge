@@ -2,6 +2,8 @@
 
 本目录存放 TRAE 产品 adapter 的源模板和可选 plugin bundle。安装统一由 integration installer 管理。
 
+CLI 会自动合并用户配置、项目 `.agent-knowledge.json` 和项目 `.agent-knowledge.local.json`。Hook 命令无需传配置路径；其 cwd 位于项目内时会应用项目层。项目 local 文件应忽略，不由 integration installer 管理。
+
 ## 安装
 
 直接运行会进入 Inquirer 向导；上下键移动，空格切换组件，回车确认：
