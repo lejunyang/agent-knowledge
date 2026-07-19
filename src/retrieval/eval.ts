@@ -13,7 +13,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
 import { z } from "zod";
-import { KnowledgeDocumentSchema } from "../core/schema.js";
+import {
+  KnowledgeDocumentSchema,
+  MemoryQueryRequestSchema
+} from "../core/schema.js";
 import { serializeKnowledgeMarkdown } from "../storage/markdown.js";
 import { resolveWorkspacePath } from "../core/paths.js";
 import { buildContextPacket, estimateContextPacketTokens } from "./contextPacket.js";
@@ -29,6 +32,7 @@ export type EvalCase = {
   task: string;
   domains: string[];
   scenarios: string[];
+  project_ids?: string[];
   expected_memories: string[];
   expected_ranks?: Record<string, number>;
   relevance_grades?: Record<string, number>;
@@ -98,6 +102,7 @@ const EvalCaseSchema = z.object({
   task: z.string().min(1),
   domains: z.array(z.string()).default([]),
   scenarios: z.array(z.string()).default([]),
+  project_ids: z.array(z.string().min(1)).default([]),
   expected_memories: z.array(z.string()).default([]),
   expected_ranks: z.record(z.number().int().positive()).optional(),
   relevance_grades: z.record(z.number().int().min(0).max(3)).optional(),
@@ -120,6 +125,7 @@ const EvalFixtureDocumentSchema = z.object({
   scenarios: z.array(z.string().min(1)).min(1),
   aliases: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
+  project_ids: z.array(z.string().min(1)).default([]),
   body: z.string().min(1),
   status: z.enum(["active", "deprecated"]).default("active"),
   valid_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default("2026-01-01"),
@@ -187,7 +193,7 @@ export async function materializeEvalCorpus(rootDir: string, corpus: EvalCorpus)
         conflicts_with: [],
         visibility: "project",
         sensitivity: "internal",
-        project_ids: [],
+        project_ids: item.project_ids,
         capture_mode: "direct_material",
         actor_type: "owner",
         corroboration_count: 1,
@@ -267,7 +273,7 @@ export async function runEvalCase(
   const evalCase = EvalCaseSchema.parse(rawEvalCase);
   const startedAt = performance.now();
   const now = evalCase.now ?? new Date().toISOString().slice(0, 10);
-  const request = {
+  const request = MemoryQueryRequestSchema.parse({
     task: evalCase.task,
     agentRole: "main",
     domains: evalCase.domains,
@@ -275,8 +281,11 @@ export async function runEvalCase(
     paths: [],
     maxTokens: 4500,
     includeTypes: ["profile", "semantic", "episodic", "procedural"],
-    now
-  };
+    now,
+    visibilityScopes: ["private", "project", "team"],
+    sensitivityClearance: "internal",
+    projectIds: evalCase.project_ids
+  });
   let ranked;
   if (pipelineOptions.pipeline === "hybrid") {
     ranked = (
@@ -302,22 +311,7 @@ export async function runEvalCase(
   } else {
     ranked = queryMemories(rootDir, request);
   }
-  const packet = buildContextPacket({
-    request: {
-      task: evalCase.task,
-      agentRole: "main",
-      domains: evalCase.domains,
-      scenarios: evalCase.scenarios,
-      paths: [],
-      maxTokens: 4500,
-      includeTypes: ["profile", "semantic", "episodic", "procedural"],
-      now,
-      visibilityScopes: ["private", "project", "team"],
-      sensitivityClearance: "internal",
-      projectIds: []
-    },
-    ranked
-  });
+  const packet = buildContextPacket({ request, ranked });
   const matchedIds = ranked.map((item) => item.document.frontmatter.id);
   const missingExpected = evalCase.expected_memories.filter((id) => !matchedIds.includes(id));
   const presentForbidden = evalCase.forbidden_memories.filter((id) => matchedIds.includes(id));

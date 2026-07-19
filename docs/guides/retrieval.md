@@ -197,6 +197,8 @@ agent-knowledge eval-calibrate --input calibration-observations.json
 
 `eval-calibrate` 对候选 base/reranker score、forbidden/abstain case 和 usefulness feedback 做有限 grid search。它只输出 dry-run 参数建议，不自动修改配置。
 
+评测 case 可用 `project_ids` 声明调用方项目作用域；完整 fixture 的 document 也可用同名字段绑定项目。这样同一套 harness 可以同时验证“当前项目命中”和“其他项目 abstain”，不会为了评测而移除生产中的项目隔离。
+
 如果主 Agent 实际使用或拒绝了某条结果，建议记录反馈：
 
 ```bash

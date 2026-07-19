@@ -10,6 +10,7 @@ import {
   runEvalCase,
   runEvalSuite
 } from "../src/retrieval/eval.js";
+import { captureMaterial } from "../src/memory/organizer.js";
 import { DeterministicLocalEmbeddingProvider, embedKnowledgeIndex } from "../src/retrieval/embeddings.js";
 import { DeterministicBatchReranker } from "../src/retrieval/reranker.js";
 
@@ -96,6 +97,55 @@ describe("runEvalCase", () => {
     expect(result.abstained).toBe(true);
     expect(result.falseInjection).toBe(false);
     expect(result.matchedIds).toEqual([]);
+  });
+
+  it("evaluates project-scoped knowledge only in the declared project context", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-eval-project-"));
+    tempDirs.push(root);
+    await captureMaterial(
+      root,
+      [
+        {
+          id: "k_eval_project_scoped",
+          title: "项目专用发布流程",
+          aliases: ["project release marker"],
+          memory_type: "procedural",
+          domain: "project/release",
+          related_domains: [],
+          scenario: ["release"],
+          tags: ["project"],
+          confidence: 0.95,
+          source_authority: "user_confirmed",
+          summary: "该发布流程只适用于 project_alpha。",
+          evidence: ["test:project"],
+          project_ids: ["project_alpha"]
+        }
+      ],
+      { target: "active", rebuild: true }
+    );
+
+    const matched = await runEvalCase(root, {
+      task: "project release marker",
+      domains: [],
+      scenarios: [],
+      project_ids: ["project_alpha"],
+      expected_memories: ["k_eval_project_scoped"],
+      forbidden_memories: []
+    });
+    const isolated = await runEvalCase(root, {
+      task: "project release marker",
+      domains: [],
+      scenarios: [],
+      project_ids: ["project_beta"],
+      expected_memories: [],
+      forbidden_memories: ["k_eval_project_scoped"],
+      abstain: true
+    });
+
+    expect(matched.passed).toBe(true);
+    expect(matched.matchedIds).toContain("k_eval_project_scoped");
+    expect(isolated.passed).toBe(true);
+    expect(isolated.matchedIds).toEqual([]);
   });
 
   it("aggregates suite metrics and validates YAML input", async () => {
