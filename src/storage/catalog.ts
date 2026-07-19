@@ -5,10 +5,10 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { extractSummary, parseKnowledgeMarkdown } from "./markdown.js";
-import { resolveWorkspacePath } from "./paths.js";
-import type { KnowledgeDocument, MemoryStatus, MemoryType } from "./types.js";
+import { resolveWorkspacePath } from "../core/paths.js";
+import type { KnowledgeDocument, MemoryStatus, MemoryType } from "../core/types.js";
 import { discoverKnowledgeFiles, initKnowledgeWorkspace } from "./workspace.js";
-import { appendJsonlLog } from "./logging.js";
+import { appendJsonlLog } from "../core/logging.js";
 
 export type CatalogItem = {
   id: string;

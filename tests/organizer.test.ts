@@ -2,9 +2,9 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseKnowledgeMarkdown } from "../src/markdown.js";
-import { captureMaterial, listKnowledge, organizeInbox } from "../src/organizer.js";
-import { queryMemories } from "../src/query.js";
+import { parseKnowledgeMarkdown } from "../src/storage/markdown.js";
+import { captureMaterial, listKnowledge, organizeInbox } from "../src/memory/organizer.js";
+import { queryMemories } from "../src/retrieval/query.js";
 
 let tempDirs: string[] = [];
 

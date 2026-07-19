@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { getIndexDbPath, rebuildIndex } from "../src/indexer.js";
+import { getIndexDbPath, rebuildIndex } from "../src/storage/indexer.js";
 
 const require = createRequire(import.meta.url);
 const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");

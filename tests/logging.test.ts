@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { appendJsonlLog, getLogFilePath } from "../src/logging.js";
+import { appendJsonlLog, getLogFilePath } from "../src/core/logging.js";
 
 let tempDirs: string[] = [];
 

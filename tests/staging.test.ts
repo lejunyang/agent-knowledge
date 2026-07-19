@@ -7,7 +7,7 @@ import {
   getStagingLockPath,
   getStagingStatus,
   stageHookEvent
-} from "../src/staging.js";
+} from "../src/hooks/staging.js";
 
 let tempDirs: string[] = [];
 

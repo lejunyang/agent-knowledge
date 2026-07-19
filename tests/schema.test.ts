@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KnowledgeFrontmatterSchema, MemoryQueryRequestSchema } from "../src/schema.js";
+import { KnowledgeFrontmatterSchema, MemoryQueryRequestSchema } from "../src/core/schema.js";
 
 describe("KnowledgeFrontmatterSchema", () => {
   it("accepts a valid semantic memory frontmatter", () => {

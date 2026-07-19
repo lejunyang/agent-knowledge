@@ -9,12 +9,12 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { parseKnowledgeMarkdown } from "./markdown.js";
-import { resolveWorkspacePath } from "./paths.js";
-import { MemoryQueryRequestSchema } from "./schema.js";
-import type { KnowledgeDocument, MemoryQueryRequest, RankedMemory, SourceAuthority } from "./types.js";
-import { getIndexDbPath } from "./indexer.js";
-import { appendJsonlLog } from "./logging.js";
+import { parseKnowledgeMarkdown } from "../storage/markdown.js";
+import { resolveWorkspacePath } from "../core/paths.js";
+import { MemoryQueryRequestSchema } from "../core/schema.js";
+import type { KnowledgeDocument, MemoryQueryRequest, RankedMemory, SourceAuthority } from "../core/types.js";
+import { getIndexDbPath } from "../storage/indexer.js";
+import { appendJsonlLog } from "../core/logging.js";
 import {
   assertEmbeddingProviderCompatible,
   readEmbeddingRecords,

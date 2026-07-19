@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { appendFile, mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { resolveWorkspacePath } from "./paths.js";
+import { resolveWorkspacePath } from "../core/paths.js";
 
 export type StagedEvent = {
   sequence: number;

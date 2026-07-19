@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import type { RemoteSyncManifest, SyncBackend } from "./sync.js";
+import type { RemoteSyncManifest, SyncBackend } from "./core.js";
 
 export type S3ObjectClient = {
   getObject(key: string): Promise<string | null>;

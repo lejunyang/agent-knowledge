@@ -2,8 +2,8 @@ import { mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { discoverKnowledgeFiles, initKnowledgeWorkspace } from "../src/workspace.js";
-import { getDefaultKnowledgeRoot, resolveWorkspacePath } from "../src/paths.js";
+import { discoverKnowledgeFiles, initKnowledgeWorkspace } from "../src/storage/workspace.js";
+import { getDefaultKnowledgeRoot, resolveWorkspacePath } from "../src/core/paths.js";
 
 let tempDirs: string[] = [];
 

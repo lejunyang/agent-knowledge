@@ -7,7 +7,7 @@ import {
   installIntegration,
   listIntegrationProducts,
   uninstallIntegration
-} from "../src/integrations.js";
+} from "../src/integration/manager.js";
 
 let tempDirs: string[] = [];
 

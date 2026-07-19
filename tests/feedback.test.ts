@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { logMemoryFeedback } from "../src/feedback.js";
-import { getLogFilePath } from "../src/logging.js";
+import { logMemoryFeedback } from "../src/retrieval/feedback.js";
+import { getLogFilePath } from "../src/core/logging.js";
 
 let tempDirs: string[] = [];
 

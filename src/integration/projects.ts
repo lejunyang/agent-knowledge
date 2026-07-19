@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { resolveWorkspacePath } from "./paths.js";
+import { resolveWorkspacePath } from "../core/paths.js";
 
 export type ProjectInstructionFingerprint = {
   path: string;

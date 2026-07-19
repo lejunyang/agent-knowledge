@@ -49,9 +49,9 @@ import {
   writeCandidateMemory,
   type CandidateMemoryInput
 } from "./index.js";
-import { getDefaultKnowledgeRoot } from "./paths.js";
-import { getGitRuntimeContext, type GitRuntimeContext } from "./gitContext.js";
-import { coarseCatalogForHook, compactCatalogForHook } from "./hookOutput.js";
+import { getDefaultKnowledgeRoot } from "./core/paths.js";
+import { getGitRuntimeContext, type GitRuntimeContext } from "./hooks/gitContext.js";
+import { coarseCatalogForHook, compactCatalogForHook } from "./hooks/hookOutput.js";
 
 const program = new Command();
 

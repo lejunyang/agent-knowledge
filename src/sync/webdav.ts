@@ -1,4 +1,4 @@
-import type { RemoteSyncManifest, SyncBackend } from "./sync.js";
+import type { RemoteSyncManifest, SyncBackend } from "./core.js";
 
 export type WebDavSyncBackendOptions = {
   baseUrl: string;

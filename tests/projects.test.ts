@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { detectProject, getProjectRegistryPath, normalizeGitRemote } from "../src/projects.js";
+import { detectProject, getProjectRegistryPath, normalizeGitRemote } from "../src/integration/projects.js";
 
 const execFileAsync = promisify(execFile);
 let tempDirs: string[] = [];

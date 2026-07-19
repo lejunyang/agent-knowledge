@@ -6,7 +6,7 @@ import {
   syncKnowledge,
   type RemoteSyncManifest,
   type SyncBackend
-} from "../src/sync.js";
+} from "../src/sync/core.js";
 
 class MemorySyncBackend implements SyncBackend {
   readonly id = "memory";

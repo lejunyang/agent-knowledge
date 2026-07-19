@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { coarseCatalogForHook, compactCatalogForHook } from "../src/hookOutput.js";
-import type { KnowledgeCatalog } from "../src/catalog.js";
+import { coarseCatalogForHook, compactCatalogForHook } from "../src/hooks/hookOutput.js";
+import type { KnowledgeCatalog } from "../src/storage/catalog.js";
 
 function makeCatalog(): KnowledgeCatalog {
   return {

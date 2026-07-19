@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { S3HttpObjectClient, S3SyncBackend, type S3ObjectClient } from "../src/syncS3.js";
+import { S3HttpObjectClient, S3SyncBackend, type S3ObjectClient } from "../src/sync/s3.js";
 
 class FakeS3Client implements S3ObjectClient {
   objects = new Map<string, string>();

@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { writeCandidateMemory } from "../src/inbox.js";
+import { writeCandidateMemory } from "../src/memory/inbox.js";
 
 let tempDirs: string[] = [];
 

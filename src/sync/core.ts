@@ -11,10 +11,10 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
-import { rebuildIndex } from "./indexer.js";
-import { parseKnowledgeMarkdown } from "./markdown.js";
-import { resolveWorkspacePath } from "./paths.js";
-import type { Sensitivity, Visibility } from "./types.js";
+import { rebuildIndex } from "../storage/indexer.js";
+import { parseKnowledgeMarkdown } from "../storage/markdown.js";
+import { resolveWorkspacePath } from "../core/paths.js";
+import type { Sensitivity, Visibility } from "../core/types.js";
 
 export type SyncManifestEntry = {
   hash: string;

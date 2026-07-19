@@ -6,7 +6,7 @@
  */
 import { homedir } from "node:os";
 import path from "node:path";
-import { installIntegration } from "./integrations.js";
+import { installIntegration } from "./manager.js";
 
 export type LinkTraeTemplatesOptions = {
   packageRoot: string;

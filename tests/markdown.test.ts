@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseKnowledgeMarkdown, serializeKnowledgeMarkdown } from "../src/markdown.js";
+import { parseKnowledgeMarkdown, serializeKnowledgeMarkdown } from "../src/storage/markdown.js";
 
 describe("parseKnowledgeMarkdown", () => {
   it("parses frontmatter and body", () => {

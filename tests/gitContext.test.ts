@@ -3,7 +3,7 @@ import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { getGitRuntimeContext } from "../src/gitContext.js";
+import { getGitRuntimeContext } from "../src/hooks/gitContext.js";
 
 let tempDirs: string[] = [];
 

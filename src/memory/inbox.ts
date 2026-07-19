@@ -7,10 +7,10 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { decideCandidateStatus, type CandidateMemoryInput } from "./governance.js";
-import { parseKnowledgeMarkdown, serializeKnowledgeMarkdown } from "./markdown.js";
-import { resolveWorkspacePath } from "./paths.js";
-import { KnowledgeDocumentSchema } from "./schema.js";
-import type { KnowledgeDocument, MemoryStatus } from "./types.js";
+import { parseKnowledgeMarkdown, serializeKnowledgeMarkdown } from "../storage/markdown.js";
+import { resolveWorkspacePath } from "../core/paths.js";
+import { KnowledgeDocumentSchema } from "../core/schema.js";
+import type { KnowledgeDocument, MemoryStatus } from "../core/types.js";
 
 export type WriteCandidateResult = {
   id: string;

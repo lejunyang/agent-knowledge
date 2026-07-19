@@ -10,12 +10,12 @@
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { decideCandidateStatus, type CandidateMemoryInput } from "./governance.js";
-import { parseKnowledgeMarkdown, serializeKnowledgeMarkdown } from "./markdown.js";
-import { resolveWorkspacePath } from "./paths.js";
-import { KnowledgeDocumentSchema } from "./schema.js";
-import type { KnowledgeDocument, KnowledgeFrontmatter, MemoryStatus, MemoryType } from "./types.js";
-import { initKnowledgeWorkspace } from "./workspace.js";
-import { rebuildIndex } from "./indexer.js";
+import { parseKnowledgeMarkdown, serializeKnowledgeMarkdown } from "../storage/markdown.js";
+import { resolveWorkspacePath } from "../core/paths.js";
+import { KnowledgeDocumentSchema } from "../core/schema.js";
+import type { KnowledgeDocument, KnowledgeFrontmatter, MemoryStatus, MemoryType } from "../core/types.js";
+import { initKnowledgeWorkspace } from "../storage/workspace.js";
+import { rebuildIndex } from "../storage/indexer.js";
 import { writeCandidateMemory } from "./inbox.js";
 
 export type KnowledgeListSummary = {

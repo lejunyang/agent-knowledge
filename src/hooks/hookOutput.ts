@@ -1,4 +1,4 @@
-import type { KnowledgeCatalog } from "./catalog.js";
+import type { KnowledgeCatalog } from "../storage/catalog.js";
 
 export function coarseCatalogForHook(catalog: KnowledgeCatalog): Record<string, unknown> {
   return {

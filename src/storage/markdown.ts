@@ -8,8 +8,8 @@
  */
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import { KnowledgeDocumentSchema } from "./schema.js";
-import type { KnowledgeDocument } from "./types.js";
+import { KnowledgeDocumentSchema } from "../core/schema.js";
+import type { KnowledgeDocument } from "../core/types.js";
 
 function normalizeYamlDates(value: unknown): unknown {
   if (value instanceof Date) {

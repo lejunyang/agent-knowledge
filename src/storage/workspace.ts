@@ -6,7 +6,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import fg from "fast-glob";
-import { KNOWLEDGE_DIRS, resolveWorkspacePath, toPosixRelativePath } from "./paths.js";
+import { KNOWLEDGE_DIRS, resolveWorkspacePath, toPosixRelativePath } from "../core/paths.js";
 
 const README = `# Knowledge Base
 

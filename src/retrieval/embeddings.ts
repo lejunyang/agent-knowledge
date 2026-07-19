@@ -10,10 +10,10 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { extractSummary, parseKnowledgeMarkdown } from "./markdown.js";
-import { resolveWorkspacePath } from "./paths.js";
-import { discoverKnowledgeFiles } from "./workspace.js";
-import type { KnowledgeDocument } from "./types.js";
+import { extractSummary, parseKnowledgeMarkdown } from "../storage/markdown.js";
+import { resolveWorkspacePath } from "../core/paths.js";
+import { discoverKnowledgeFiles } from "../storage/workspace.js";
+import type { KnowledgeDocument } from "../core/types.js";
 
 export type EmbeddingProvider = {
   name: string;

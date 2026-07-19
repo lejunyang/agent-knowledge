@@ -10,9 +10,9 @@ import { mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { extractSummary, parseKnowledgeMarkdown } from "./markdown.js";
-import { resolveWorkspacePath } from "./paths.js";
-import type { KnowledgeDocument } from "./types.js";
-import { cjkNgrams } from "./cjk.js";
+import { resolveWorkspacePath } from "../core/paths.js";
+import type { KnowledgeDocument } from "../core/types.js";
+import { cjkNgrams } from "../retrieval/cjk.js";
 
 const require = createRequire(import.meta.url);
 // 当前运行环境可用 Node 内置 `node:sqlite`，避免 native binding 依赖带来的安装失败。

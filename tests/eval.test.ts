@@ -2,8 +2,8 @@ import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { rebuildIndex } from "../src/indexer.js";
-import { loadEvalSuite, runEvalCase, runEvalSuite } from "../src/eval.js";
+import { rebuildIndex } from "../src/storage/indexer.js";
+import { loadEvalSuite, runEvalCase, runEvalSuite } from "../src/retrieval/eval.js";
 
 let tempDirs: string[] = [];
 

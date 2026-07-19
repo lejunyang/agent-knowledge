@@ -4,8 +4,8 @@
  * 这样做的原因是：主 agent 不应该直接消费原始 Markdown 或排序结果。
  * 它需要的是按用途分区的上下文：稳定规则、相关事实、流程、案例、风险和来源。
  */
-import { extractSummary } from "./markdown.js";
-import type { ContextPacket, ContextPacketItem, MemoryQueryRequest, RankedMemory } from "./types.js";
+import { extractSummary } from "../storage/markdown.js";
+import type { ContextPacket, ContextPacketItem, MemoryQueryRequest, RankedMemory } from "../core/types.js";
 
 type BuildContextPacketInput = {
   request: MemoryQueryRequest;

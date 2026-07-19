@@ -5,7 +5,7 @@
  * 也不会直接修改 Markdown 知识，避免把一次性偏好误写入长期记忆。
  */
 import { z } from "zod";
-import { appendJsonlLog } from "./logging.js";
+import { appendJsonlLog } from "../core/logging.js";
 
 export const MemoryUsefulnessSchema = z.enum(["useful", "not_useful", "neutral"]);
 

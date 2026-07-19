@@ -2,13 +2,13 @@ import { mkdtemp, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildContextPacket } from "../src/contextPacket.js";
-import { rebuildIndex } from "../src/indexer.js";
-import { captureMaterial } from "../src/organizer.js";
-import { queryMemories, queryMemoriesWithDebug } from "../src/query.js";
-import { getLogFilePath } from "../src/logging.js";
-import type { MemoryQueryRequest } from "../src/types.js";
-import type { EmbeddingScorer, MemoryReranker } from "../src/scoring.js";
+import { buildContextPacket } from "../src/retrieval/contextPacket.js";
+import { rebuildIndex } from "../src/storage/indexer.js";
+import { captureMaterial } from "../src/memory/organizer.js";
+import { queryMemories, queryMemoriesWithDebug } from "../src/retrieval/query.js";
+import { getLogFilePath } from "../src/core/logging.js";
+import type { MemoryQueryRequest } from "../src/core/types.js";
+import type { EmbeddingScorer, MemoryReranker } from "../src/retrieval/scoring.js";
 
 let tempDirs: string[] = [];
 
@@ -481,7 +481,7 @@ describe("buildContextPacket", () => {
       projectIds: []
     };
     const packet = buildContextPacket({ request, ranked: queryMemories(root, request) });
-    const { estimateContextPacketTokens } = await import("../src/contextPacket.js");
+    const { estimateContextPacketTokens } = await import("../src/retrieval/contextPacket.js");
 
     expect(estimateContextPacketTokens(packet)).toBeLessThanOrEqual(request.maxTokens);
     expect(

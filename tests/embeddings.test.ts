@@ -11,10 +11,10 @@ import {
   readEmbeddingRecords,
   suggestAliases,
   type EmbeddingProvider
-} from "../src/embeddings.js";
-import { rebuildIndex } from "../src/indexer.js";
-import { appendJsonlLog } from "../src/logging.js";
-import { queryMemoriesHybridWithDebug } from "../src/query.js";
+} from "../src/retrieval/embeddings.js";
+import { rebuildIndex } from "../src/storage/indexer.js";
+import { appendJsonlLog } from "../src/core/logging.js";
+import { queryMemoriesHybridWithDebug } from "../src/retrieval/query.js";
 
 let tempDirs: string[] = [];
 

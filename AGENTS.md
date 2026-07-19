@@ -105,30 +105,15 @@ node dist/cli.js query \
 ## 目录职责
 
 ```text
-src/types.ts          共享类型
-src/schema.ts         Zod 运行时 schema
-src/markdown.ts       Markdown/frontmatter 解析和序列化
-src/workspace.ts      初始化 knowledge 目录和发现知识文件
-src/indexer.ts        从 Markdown 重建 SQLite/FTS5 索引
-src/query.ts          查询、过滤、排序和一跳关联扩展
-src/scoring.ts        可插拔 embedding scorer 和默认 reranker
-src/embeddings.ts     本地 embedding provider、JSONL store 和 aliases dry-run 建议
-src/cjk.ts            中文 2/3-gram lexical 辅助召回
-src/contextPacket.ts  将检索结果组装成 context packet
-src/catalog.ts        生成 catalog API 和 knowledge/_catalog.md
-src/logging.ts        写入 .memory/logs JSONL 运行摘要
-src/governance.ts     候选知识治理策略和 secret-like 扫描
-src/inbox.ts          写入 knowledge/_inbox
-src/feedback.ts       记录 memory usefulness 反馈到 JSONL 日志
-src/organizer.ts      主动整理 inbox 和用户直接提供的材料
-src/eval.ts           检索评估 harness
-src/integrations.ts   多产品托管安装、结构化 hook merge、uninstall 和 doctor
-src/projects.ts       Git project ID 和 AGENTS hash-only registry
-src/sync.ts           Markdown 三方同步、tombstone 和冲突
-src/syncWebdav.ts     WebDAV backend
-src/syncS3.ts         S3/S3-compatible SigV4 backend
-src/staging.ts        脱敏 hook staging、watermark 和 lock
-src/cli.ts            命令行入口
+src/core/             稳定共享契约：types、Zod schema、路径和日志
+src/storage/          Markdown 事实源、workspace、SQLite 索引和 catalog
+src/retrieval/        CJK 召回、query、scoring、embedding、context packet、eval 和 feedback
+src/memory/           候选治理、inbox 写入和主动整理
+src/integration/      产品安装、模板兼容入口和 Git project registry
+src/sync/             Markdown 三方同步及 WebDAV/S3 backend
+src/hooks/            Hook runtime context、输出裁剪和脱敏 staging
+src/index.ts          公共 TypeScript API re-export
+src/cli.ts            命令行入口和各模块编排
 ```
 
 ## 代码修改原则

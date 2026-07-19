@@ -5,7 +5,7 @@
  * 这样 query 模块可以先稳定暴露 scorer / reranker 接口，后续替换为真正 embedding
  * 或更复杂的重排器时，不需要改动 CLI 输出协议。
  */
-import type { KnowledgeDocument, MemoryQueryRequest, RankedMemory, SourceAuthority } from "./types.js";
+import type { KnowledgeDocument, MemoryQueryRequest, RankedMemory, SourceAuthority } from "../core/types.js";
 
 export type ScoreFeatures = Omit<RankedMemory, "document" | "finalScore">;
 

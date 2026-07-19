@@ -12,7 +12,7 @@ import type {
   MemoryType,
   RelatedKnowledge,
   SourceAuthority
-} from "./types.js";
+} from "../core/types.js";
 
 export type CandidateMemoryInput = {
   title: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { WebDavSyncBackend } from "../src/syncWebdav.js";
+import { WebDavSyncBackend } from "../src/sync/webdav.js";
 
 describe("WebDavSyncBackend", () => {
   it("uses bounded HTTP operations and basic auth without exposing credentials in URLs", async () => {
