@@ -2,6 +2,22 @@
 
 Agent Knowledge 是一个本地、可审计的 Agent 知识持久化工具。Markdown 是唯一事实源；SQLite、embedding、日志和 staging 都是可重建的机器产物。
 
+## 功能目录
+
+- [快速开始](#快速开始)
+- [推荐使用方式](#推荐使用方式)
+- [候选知识怎么整理](#候选知识怎么整理)
+- [主动记忆何时发生](#主动记忆何时发生)
+- [客服机器人怎么部署](#客服机器人怎么部署)
+- [知识图谱怎么使用](#知识图谱怎么使用)
+- [常用命令](#常用命令)
+- [用户配置与全部选项](docs/guides/configuration.md)
+- [检索、Embedding、Reranker、图检索与评测](docs/guides/retrieval.md)
+- [候选治理、自动维护和 Skill 生命周期](docs/guides/memory-governance.md)
+- [TRAE、TRAE CN 与 Claude Code 接入](docs/guides/integrations.md)
+- [WebDAV、S3 与定时同步](docs/guides/synchronization.md)
+- [研究与设计](#研究与设计)
+
 ## 快速开始
 
 ```bash
@@ -38,14 +54,145 @@ agent-knowledge index
 agent-knowledge query --task "审查 Vue SFC lint 迁移方案"
 ```
 
-## 功能目录
+默认 `lexical` 检索不需要下载模型。需要语义检索时再执行：
 
-- [用户配置与优先级](docs/guides/configuration.md)
-- [知识检索、Embedding 与评测](docs/guides/retrieval.md)
-- [候选写入、主动记忆与客服治理](docs/guides/memory-governance.md)
-- [TRAE、TRAE CN 与 Claude Code 接入](docs/guides/integrations.md)
-- [WebDAV、S3 与定时同步](docs/guides/synchronization.md)
-- [研究与设计文档](#研究与设计)
+```bash
+agent-knowledge embedding download   # 交互选择 embedding
+agent-knowledge embed-index
+agent-knowledge query --task "当前任务" --retrieval hybrid
+```
+
+## 推荐使用方式
+
+### 个人电脑
+
+首次配置：
+
+```bash
+agent-knowledge configure
+agent-knowledge integration install
+agent-knowledge init
+agent-knowledge index
+```
+
+日常不需要在每个任务前手工查询。推荐分工是：
+
+1. `UserPromptSubmit` Hook 只在高相关命中时注入精简 `context_packet`；无命中和低分命中完全静默。
+2. Hook 内容不足、任务依赖历史决策或业务规则时，主 Agent 主动调用 `memory-reader`。
+3. 用户明确要求记忆，或任务产生了已验证且可复用的结果时，主 Agent 调用 `memory-writer` 生成 candidate JSON。
+4. candidate 通过 `write-candidate` 进入 `_inbox`；不会因为 Subagent 输出就直接修改 active 知识。
+5. 每周或知识积累较多时运行一次 maintenance 和 inbox 审阅。
+
+推荐的每周维护：
+
+```bash
+agent-knowledge maintenance run
+agent-knowledge maintenance list --status pending
+agent-knowledge list
+agent-knowledge organize-inbox
+```
+
+逐条查看并处理自动提案：
+
+```bash
+agent-knowledge maintenance show <proposal-id>
+agent-knowledge maintenance accept <proposal-id>
+# accept 会返回 candidatePath；检查对应 Markdown 和 agent-knowledge list 中的知识 ID
+agent-knowledge organize-inbox --approve <knowledge-id> --apply
+```
+
+最后按启用功能刷新可重建索引：
+
+```bash
+agent-knowledge index
+agent-knowledge graph build        # 使用图浏览或 graph 检索时
+agent-knowledge embed-index        # 使用 hybrid / hybrid-graph 时
+```
+
+### 是否需要一直运行 maintenance watch
+
+- 个人电脑、低频使用：不需要。每周手工执行 `maintenance run` 即可。
+- 持续运行的机器人：建议由 systemd、launchd、容器或其他进程管理器托管 `maintenance watch`。
+- `maintenance run/watch` 默认直接读取 `.memory/subagents` 的新 `SubagentStop` 日志并生成 observation；普通用户不需要准备 input JSON。
+- `--input observations.json` 只用于导入外部系统已经结构化好的 observation，不是常规流程。
+- 即使运行 `watch`，proposal 和 `_inbox` 仍需人工审阅，不会自动激活。
+
+## 候选知识怎么整理
+
+候选分三种来源：
+
+| 来源 | 推荐入口 | 默认结果 |
+| --- | --- | --- |
+| 用户直接提供的受信材料 | `knowledge-organizer` Skill + `capture-material` | 可按用户意图写 active 或 inbox |
+| 显式记忆、验证成功的任务 | `memory-writer` + `write-candidate` | 写 `_inbox`，再审阅 |
+| 自动会话、客服观察、Subagent 日志 | `maintenance run/watch` | 只生成 proposal / `_inbox` |
+
+普通、受信 candidate 可先运行 `organize-inbox` dry-run，再用 `--apply` 批量整理。自动会话和客户来源默认永久阻止批量晋升；只有人工检查证据后，才能用显式白名单：
+
+```bash
+agent-knowledge organize-inbox --approve <knowledge-id> --apply
+```
+
+一旦传 `--approve`，该次命令只处理列出的 ID；未知 ID 会在写文件前报错。
+
+## 主动记忆何时发生
+
+主动记忆不是“所有对话自动写入”：
+
+- Hook 会记录生命周期信号和 Subagent 调试日志，但不会调用 LLM 总结，也不会写 active 知识。
+- `memory-writer` 的 description 会指导主 Agent 在“显式要求记忆、已验证可复用结果、重复且有证据的业务观察”这些边界主动调用它。
+- 普通闲聊、一次性命令、临时错误、可直接搜索到的代码表面结构不应触发长期记忆。
+- 是否实际调用 Subagent 取决于宿主 Agent 的调度；可用 `agent-knowledge subagents status/logs` 检查。
+- `maintenance` 从已记录的 `SubagentStop` 结果自动抽取 observation，但只形成可审阅 proposal。
+
+如果希望明确保存某件事，最可靠的方式仍是直接告诉 Agent“记住这条规则”，或主动运行 `knowledge-organizer`。
+
+## 客服机器人怎么部署
+
+建议为机器人使用独立 workspace/config，并在向导中设置：
+
+- `actorType = customer`
+- `captureMode = automated_session`
+- `visibilityScopes = project,team`
+- `sensitivityClearance = internal`
+
+运行原则：
+
+- 不保存完整客户隐私、凭据或未授权 transcript。
+- 客户陈述只是 observation，不能成为 `user_confirmed`。
+- 同一客户或同一 session 重复多次不算独立佐证。
+- 按租户或业务边界使用独立 root/project ID；不要让一个客户的候选进入另一个客户的检索范围。
+- `maintenance watch` 只负责生成提案；不要自动执行 `maintenance accept` 或 `organize-inbox --approve`。
+- 接受业务事实前，应对照受信文档、owner 确认或多个独立来源。
+
+这能降低无用对话和恶意知识投毒进入正式知识库的风险。完整治理规则见[候选知识与主动记忆](docs/guides/memory-governance.md)。
+
+## 知识图谱怎么使用
+
+本项目实现的是**知识关系图**，不是源码 AST/code graph。Agent 仍应按需搜索代码；图主要表达知识、领域、场景、项目、episode、来源和 proposal 之间的显式关系。
+
+构建并导出离线可视化：
+
+```bash
+agent-knowledge graph build
+agent-knowledge graph export --format html --output knowledge-graph.html
+```
+
+HTML 支持搜索、节点类型/状态/domain/project 筛选和详情查看，适合人类浏览与审阅。脚本也支持：
+
+```bash
+agent-knowledge graph query --text "退款审核"
+agent-knowledge graph query --id <knowledge-id> --depth 2
+```
+
+要让图真正参与 Agent 检索，使用：
+
+```bash
+agent-knowledge query --task "当前任务" --retrieval graph
+agent-knowledge query --task "当前任务" --retrieval hybrid-graph
+```
+
+图检索只沿 `depends_on`、`refines`、`supports`、`often_used_with` 做最多两跳扩展；`conflicts_with` 和 `supersedes` 不作为普通上下文扩展。图候选仍会重新执行有效期、可见性、敏感级别、项目和类型过滤。
 
 ## 核心原则
 
@@ -76,24 +223,34 @@ agent-knowledge index
 agent-knowledge list
 agent-knowledge catalog
 agent-knowledge organize-inbox
+agent-knowledge organize-inbox --approve <knowledge-id> --apply
 
 # 检索与 embedding
 agent-knowledge embed-index
 agent-knowledge embedding status
 agent-knowledge embedding download
 agent-knowledge query --task "当前任务" --debug
+agent-knowledge query --task "当前任务" --retrieval graph --graph-depth 2
 agent-knowledge eval --input eval/cases/retrieval-baseline.yaml
 agent-knowledge eval --fixture eval/cases/retrieval-complete.yaml --pipeline lexical
 agent-knowledge eval-calibrate --input calibration-observations.json
+
+# 知识图谱
+agent-knowledge graph build
+agent-knowledge graph query --text "关键词"
+agent-knowledge graph export --format html --output knowledge-graph.html
 
 # 同步
 agent-knowledge sync run
 agent-knowledge sync watch
 
-# 主动记忆 staging
+# Subagent 与主动维护
+agent-knowledge subagents status
+agent-knowledge subagents logs --agent-type memory-writer
 agent-knowledge staging status
 agent-knowledge staging drain --limit 100
-agent-knowledge maintenance run --input observations.json
+agent-knowledge maintenance run
+agent-knowledge maintenance list --status pending
 ```
 
 ## 默认位置
@@ -118,6 +275,10 @@ knowledge/                         Markdown 事实源
 .memory/embeddings/               可重建向量缓存
 .memory/logs/                     运行摘要
 .memory/staging/                  脱敏主动记忆事件
+.memory/subagents/                本地完整 Subagent 调试日志
+.memory/observations/             自动抽取的 maintenance observation
+.memory/proposals/                待人工审阅的维护提案
+.memory/graph.json                可重建知识关系图
 ```
 
 命令行显式参数优先于用户配置；用户配置优先于兼容环境变量。完整规则见[配置指南](docs/guides/configuration.md)。
