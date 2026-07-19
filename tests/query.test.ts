@@ -202,6 +202,81 @@ describe("queryMemories", () => {
     expect(ranked[0]?.document.frontmatter.title).toBe("字节业务术语：ocean");
   });
 
+  it("normalizes BM25 relevance and gives related-only candidates no lexical credit", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-bm25-normalization-"));
+    tempDirs.push(root);
+    await captureMaterial(
+      root,
+      [
+        {
+          id: "k_eval_broad_qualification",
+          title: "企业资质通用说明",
+          aliases: ["qualification overview"],
+          memory_type: "semantic",
+          domain: "support/qualification",
+          related_domains: [],
+          scenario: ["troubleshooting"],
+          tags: ["qualification"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "企业账号通常需要提交主体资质并完成审核。",
+          evidence: ["test:broad"]
+        },
+        {
+          id: "k_eval_specific_qualification",
+          title: "资质复用列表缺失排查",
+          aliases: ["qualification reuse filtering"],
+          memory_type: "procedural",
+          domain: "support/qualification",
+          related_domains: [],
+          scenario: ["troubleshooting"],
+          tags: ["qualification", "reuse", "filter"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary:
+            "资质复用页面没有预期企业号资质时，按账户枚举、复用过滤日志和对公免验规则排查。",
+          evidence: ["test:specific"],
+          related_knowledge: [
+            {
+              id: "k_eval_related_background",
+              relation: "supports",
+              reason: "配套背景用于解释开户链路。"
+            }
+          ]
+        },
+        {
+          id: "k_eval_related_background",
+          title: "配套开户背景",
+          aliases: ["onboarding background"],
+          memory_type: "semantic",
+          domain: "support/onboarding",
+          related_domains: [],
+          scenario: ["onboarding"],
+          tags: ["background"],
+          confidence: 0.9,
+          source_authority: "user_confirmed",
+          summary: "这是通过明确关系补充的开户背景。",
+          evidence: ["test:related"]
+        }
+      ],
+      { target: "active", rebuild: true }
+    );
+
+    const { ranked, debug } = queryMemoriesWithDebug(root, {
+      task: "资质复用页面没有预期中的企业号资质，免验为什么被过滤",
+      agentRole: "main"
+    });
+    const scoreById = new Map(debug.resultScores.map((item) => [item.id, item]));
+
+    expect(ranked[0]?.document.frontmatter.id).toBe("k_eval_specific_qualification");
+    expect(scoreById.get("k_eval_specific_qualification")?.lexicalScore).toBe(1);
+    expect(scoreById.get("k_eval_broad_qualification")?.lexicalScore).toBeLessThan(1);
+    expect(scoreById.get("k_eval_related_background")).toMatchObject({
+      lexicalScore: 0,
+      relationScore: 1
+    });
+  });
+
   it("suppresses full-table fallback when domain and scenario are missing", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-no-fallback-"));
     tempDirs.push(root);
@@ -312,7 +387,8 @@ describe("queryMemories", () => {
     await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
     rebuildIndex(root);
     const reranker = new DeterministicBatchReranker({
-      score: ({ document }) => (document.includes("ESLint fallback") ? 1 : 0.2)
+      score: ({ id }) =>
+        id === "k_20260705_frontend_lint_vue_sfc" ? 1 : 0.2
     });
 
     const result = await queryMemoriesRerankedWithDebug(

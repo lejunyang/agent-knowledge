@@ -167,6 +167,7 @@ src/cli.ts            命令行入口和各模块编排
 - Transformers.js provider 默认禁止远程模型下载；只有人工 CLI 调试时才显式传 `--allow-remote-models`。
 - 普通检索、Hook、`embed-index` 和 model status 禁止自动联网；`agent-knowledge embedding download` 是显式模型下载入口。模型缓存默认位于 `~/.cache/agent-knowledge/models`，可由用户配置覆盖。
 - `query` 不应在缺少 domain/scenario 且 FTS 无命中时回退全表；如修改 fallback 策略，必须更新 debug 输出和测试。
+- FTS5 BM25 必须按单次查询内相关度归一化并显式排序，不能使用固定绝对值缩放或依赖无 `ORDER BY` 的 SQLite 返回顺序；dense/graph/related-only 候选不得获得 lexical 分。
 - direct result 和 related expansion 必须执行相同的 validity、visibility、sensitivity、project 和 type 过滤。
 - 普通 `query` 未传 `--project-id` 时必须自动发现当前 Git 项目的稳定 ID；显式参数完全优先，非 Git 或探测失败回退空项目作用域。
 - `_inbox` / `_archive` 必须按路径硬排除，不能只依赖 status。

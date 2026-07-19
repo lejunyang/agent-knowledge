@@ -27,7 +27,7 @@ agent-knowledge query \
   --scenario lint-migration
 ```
 
-`lexical` 使用 SQLite FTS5/BM25，并为中文建立 CJK 2/3-gram 辅助索引。它适合：
+`lexical` 使用 SQLite FTS5/BM25，并为中文建立 CJK 2/3-gram 辅助索引。BM25 的绝对值会随查询 token 数和语料变化，因此实现按单次查询内的最佳相关度归一化到 0–1，并显式按 BM25 排序；不能用固定常数缩放，也不能依赖 SQLite 未声明的返回顺序。它适合：
 
 - API、命令、错误码、路径和产品名。
 - title、aliases、domain、scenario、tag 中的明确术语。
@@ -38,6 +38,8 @@ agent-knowledge query \
 普通 `query` 未显式传 `--project-id` 时，会自动发现当前 Git 工作树并使用稳定 project ID；从仓库任意子目录执行都能召回绑定当前项目的知识。显式传入 `--project-id` 时完全以参数为准，便于跨项目诊断；非 Git 目录或探测失败时使用空项目作用域，只召回未绑定项目的知识。
 
 基础查询仍保留 `related_knowledge` 的受控一跳扩展，但只允许 `depends_on`、`refines`、`supports`、`often_used_with`。完整多跳遍历请显式使用 graph 模式。
+
+只有真实 lexical 命中的候选才获得 lexical 分；dense-only、graph 或关系扩展候选不能因为内部占位分数获得虚假的 lexical 信用。Metadata RRF 通道同样只接收实际命中 domain、scenario 或完整 alias 的候选，0 分候选不参与该通道排名。
 
 ## Hybrid
 

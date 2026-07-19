@@ -423,6 +423,7 @@ function scoreRow(
   row: MemoryRow,
   document: KnowledgeDocument,
   request: MemoryQueryRequest,
+  normalizedLexicalScore: number,
   relationScore: number,
   denseScore: number | undefined,
   rrfScore: number,
@@ -434,7 +435,7 @@ function scoreRow(
   const scenarioScore = request.scenarios.length > 0 && fuzzyIntersects(scenarios, request.scenarios) ? 1 : 0.3;
   const lexicalScore = Math.max(
     hasExactAliasInTask(aliases, request.task) ? 1 : 0,
-    Math.max(0, Math.min(1, 1 - Math.abs(row.rank_score ?? 0) / 20))
+    normalizedLexicalScore
   );
   const confidenceScore = row.confidence;
   const sourceAuthorityScore = AUTHORITY_SCORE[row.source_authority] ?? 0.4;
@@ -468,6 +469,7 @@ function scoreRow(
 type CandidateSelection = {
   rows: MemoryRow[];
   lexicalRanks: Map<string, number>;
+  lexicalScores: Map<string, number>;
   denseRanks: Map<string, number>;
   denseScores: Map<string, number>;
   debug: Omit<
@@ -485,6 +487,30 @@ type CandidateSelection = {
 /** 把有序候选转换成从 1 开始的 rank map，供跨通道 RRF 使用。 */
 function rankMap(rows: MemoryRow[]): Map<string, number> {
   return new Map(rows.map((row, index) => [row.id, index + 1]));
+}
+
+/**
+ * 把当前查询内的 BM25 分数归一化到 0-1。
+ *
+ * SQLite FTS5 的 BM25 越小越相关，且绝对值会随 query token 数和语料变化，不能用固定常数缩放。
+ * 这里先按 BM25 升序，再用最相关候选的 relevance 作为分母；关系或 dense-only 候选不在该 map 中，
+ * 因而不会获得虚假的 lexical 分数。
+ */
+function normalizedLexicalScores(rows: MemoryRow[]): Map<string, number> {
+  if (rows.length === 0) {
+    return new Map();
+  }
+  const relevance = rows.map((row) => ({
+    id: row.id,
+    value: Math.max(0, -(row.rank_score ?? 0))
+  }));
+  const best = Math.max(...relevance.map((item) => item.value));
+  if (best <= 0) {
+    return new Map();
+  }
+  return new Map(
+    relevance.map((item) => [item.id, Math.max(0, Math.min(1, item.value / best))])
+  );
 }
 
 /**
@@ -518,6 +544,7 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
         return {
           rows: [],
           lexicalRanks: new Map(),
+          lexicalScores: new Map(),
           denseRanks: new Map(),
           denseScores: new Map(),
           debug: {
@@ -532,6 +559,7 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
       return {
         rows,
         lexicalRanks: new Map(),
+        lexicalScores: new Map(),
         denseRanks: new Map(),
         denseScores: new Map(),
         debug: { ...baseDebug, fallbackUsed: true, fallbackReason: "empty_fts_query", candidateRowCount: rows.length }
@@ -548,9 +576,16 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
     const ftsRows = rawFtsRows.filter((row) => hasSufficientLexicalEvidence(row, request, taskTokens));
 
     if (ftsRows.length > 0) {
+      // FTS5 不保证未写 ORDER BY 时的返回顺序，必须显式按 BM25 升序生成 lexical rank。
+      const rankedFtsRows = [...ftsRows].sort(
+        (left, right) =>
+          (left.rank_score ?? 0) - (right.rank_score ?? 0) ||
+          left.id.localeCompare(right.id)
+      );
       return {
-        rows: ftsRows,
-        lexicalRanks: rankMap(ftsRows),
+        rows: rankedFtsRows,
+        lexicalRanks: rankMap(rankedFtsRows),
+        lexicalScores: normalizedLexicalScores(rankedFtsRows),
         denseRanks: new Map(),
         denseScores: new Map(),
         debug: {
@@ -566,6 +601,7 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
       return {
         rows: [],
         lexicalRanks: new Map(),
+        lexicalScores: new Map(),
         denseRanks: new Map(),
         denseScores: new Map(),
         debug: {
@@ -580,6 +616,7 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
     return {
       rows,
       lexicalRanks: new Map(),
+      lexicalScores: new Map(),
       denseRanks: new Map(),
       denseScores: new Map(),
       debug: {
@@ -699,13 +736,16 @@ function rankSelectedRows(
   );
 
   const metadataRanks = new Map(
-    [...directRows]
+    directRows
+      .map((row) => ({ row, score: metadataMatchScore(row, expandedRequest) }))
+      // 0 分表示没有 metadata 证据，不能仅因进入候选池就获得 RRF 通道排名。
+      .filter((item) => item.score > 0)
       .sort(
         (left, right) =>
-          metadataMatchScore(right, expandedRequest) - metadataMatchScore(left, expandedRequest) ||
-          left.id.localeCompare(right.id)
+          right.score - left.score ||
+          left.row.id.localeCompare(right.row.id)
       )
-      .map((row, index) => [row.id, index + 1])
+      .map((item, index) => [item.row.id, index + 1])
   );
   const rrfFor = (id: string): number => {
     const ranks = [
@@ -731,6 +771,7 @@ function rankSelectedRows(
           row,
           document,
           expandedRequest,
+          selection.lexicalScores.get(row.id) ?? 0,
           relationScore,
           selection.denseScores.get(row.id),
           rrfFor(row.id),
@@ -818,6 +859,7 @@ export async function queryMemoriesHybridWithDebug(
   const selection: CandidateSelection = {
     rows: [...rowsById.values()],
     lexicalRanks: lexicalSelection.lexicalRanks,
+    lexicalScores: lexicalSelection.lexicalScores,
     denseRanks: new Map(embeddingCandidateIds.map((id, index) => [id, index + 1])),
     denseScores: embeddingSelection.scores,
     debug: {
@@ -878,6 +920,7 @@ export function loadAccessibleMemoriesByIds(
           row,
           document,
           request,
+          0,
           0,
           undefined,
           0,
