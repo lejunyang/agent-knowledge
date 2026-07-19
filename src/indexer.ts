@@ -12,6 +12,7 @@ import path from "node:path";
 import { extractSummary, parseKnowledgeMarkdown } from "./markdown.js";
 import { resolveWorkspacePath } from "./paths.js";
 import type { KnowledgeDocument } from "./types.js";
+import { cjkNgrams } from "./cjk.js";
 
 const require = createRequire(import.meta.url);
 // 当前运行环境可用 Node 内置 `node:sqlite`，避免 native binding 依赖带来的安装失败。
@@ -57,7 +58,11 @@ function discoverKnowledgeFilesSync(rootDir: string): string[] {
       }
 
       const relativePath = toPosixPath(path.relative(rootDir, absolutePath));
-      if (!GENERATED_KNOWLEDGE_FILES.has(relativePath) && !relativePath.startsWith("knowledge/_archive/")) {
+      if (
+        !GENERATED_KNOWLEDGE_FILES.has(relativePath) &&
+        !relativePath.startsWith("knowledge/_archive/") &&
+        !relativePath.startsWith("knowledge/_inbox/")
+      ) {
         files.push(relativePath);
       }
     }
@@ -100,7 +105,9 @@ function openIndexDatabase(rootDir: string): DatabaseConnection {
       conflicts_with TEXT NOT NULL,
       visibility TEXT NOT NULL,
       sensitivity TEXT NOT NULL,
+      project_ids TEXT NOT NULL,
       updated_at TEXT NOT NULL,
+      valid_from TEXT NOT NULL,
       valid_until TEXT,
       summary TEXT NOT NULL,
       body TEXT NOT NULL
@@ -114,7 +121,8 @@ function openIndexDatabase(rootDir: string): DatabaseConnection {
       scenario,
       tags,
       summary,
-      body
+      body,
+      cjk_ngrams
     );
   `);
 
@@ -135,7 +143,8 @@ function insertDocument(db: DatabaseConnection, document: KnowledgeDocument): vo
       id, file_path, type, title, aliases, domain, related_domains, scenario, tags, status,
       confidence, source_authority, source, related_knowledge, supersedes,
       conflicts_with, visibility, sensitivity, updated_at, valid_until, summary, body
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      , project_ids, valid_from
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     frontmatter.id,
     document.filePath,
@@ -158,12 +167,14 @@ function insertDocument(db: DatabaseConnection, document: KnowledgeDocument): vo
     frontmatter.updated_at,
     frontmatter.valid_until,
     summary,
-    document.body
+    document.body,
+    JSON.stringify(frontmatter.project_ids),
+    frontmatter.valid_from
   );
 
   db.prepare(`
-    INSERT INTO memory_fts (id, title, aliases, domain, scenario, tags, summary, body)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO memory_fts (id, title, aliases, domain, scenario, tags, summary, body, cjk_ngrams)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     frontmatter.id,
     frontmatter.title,
@@ -172,7 +183,18 @@ function insertDocument(db: DatabaseConnection, document: KnowledgeDocument): vo
     frontmatter.scenario.join(" "),
     frontmatter.tags.join(" "),
     summary,
-    document.body
+    document.body,
+    cjkNgrams(
+      [
+        frontmatter.title,
+        frontmatter.aliases.join(" "),
+        frontmatter.domain,
+        frontmatter.scenario.join(" "),
+        frontmatter.tags.join(" "),
+        summary,
+        document.body
+      ].join("\n")
+    ).join(" ")
   );
 }
 

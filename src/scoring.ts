@@ -38,12 +38,13 @@ export const AUTHORITY_SCORE: Record<SourceAuthority, number> = {
 };
 
 export const DEFAULT_RERANK_WEIGHTS = {
-  lexicalScore: 0.3,
+  lexicalScore: 0.15,
   embeddingScore: 0.2,
   scenarioScore: 0.15,
   confidenceScore: 0.1,
   sourceAuthorityScore: 0.1,
-  relationScore: 0.05
+  relationScore: 0.05,
+  rrfScore: 0.25
 } as const;
 
 function clampScore(value: number): number {
@@ -135,7 +136,8 @@ export class DefaultMemoryReranker implements MemoryReranker {
         DEFAULT_RERANK_WEIGHTS.scenarioScore * features.scenarioScore +
         DEFAULT_RERANK_WEIGHTS.confidenceScore * features.confidenceScore +
         DEFAULT_RERANK_WEIGHTS.sourceAuthorityScore * features.sourceAuthorityScore +
-        DEFAULT_RERANK_WEIGHTS.relationScore * features.relationScore
+        DEFAULT_RERANK_WEIGHTS.relationScore * features.relationScore +
+        DEFAULT_RERANK_WEIGHTS.rrfScore * features.rrfScore
     );
   }
 }

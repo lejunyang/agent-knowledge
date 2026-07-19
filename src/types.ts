@@ -11,6 +11,8 @@ export type MemoryStatus = "proposed" | "active" | "deprecated" | "rejected";
 export type SourceAuthority = "user_confirmed" | "model_inferred" | "documented" | "verified_task";
 export type Visibility = "private" | "project" | "team";
 export type Sensitivity = "public" | "internal" | "confidential" | "secret";
+export type CaptureMode = "explicit_remember" | "verified_task" | "automated_session" | "direct_material";
+export type ActorType = "owner" | "teammate" | "customer" | "system";
 
 export type KnowledgeRelation =
   | "depends_on"
@@ -56,6 +58,10 @@ export type KnowledgeFrontmatter = {
   conflicts_with: string[];
   visibility: Visibility;
   sensitivity: Sensitivity;
+  project_ids: string[];
+  capture_mode: CaptureMode;
+  actor_type: ActorType;
+  corroboration_count: number;
   created_at: string;
   updated_at: string;
   valid_from: string;
@@ -86,6 +92,10 @@ export type MemoryQueryRequest = {
   scenarios: string[];
   maxTokens: number;
   includeTypes: Array<"profile" | "semantic" | "episodic" | "procedural">;
+  now: string;
+  visibilityScopes: Visibility[];
+  sensitivityClearance: Sensitivity;
+  projectIds: string[];
 };
 
 /**
@@ -132,5 +142,6 @@ export type RankedMemory = {
   confidenceScore: number;
   sourceAuthorityScore: number;
   relationScore: number;
+  rrfScore: number;
   finalScore: number;
 };

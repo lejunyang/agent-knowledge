@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   DeterministicLocalEmbeddingProvider,
   embedKnowledgeIndex,
+  getEmbeddingsManifestPath,
   getEmbeddingsJsonlPath,
+  readEmbeddingManifest,
   readEmbeddingRecords,
   suggestAliases,
   type EmbeddingProvider
@@ -37,7 +39,10 @@ describe("embedding index", () => {
       model: "token-hash-v1",
       indexed: 2,
       dimensions: 32,
-      embedded: true
+      embedded: true,
+      generated: 2,
+      reused: 0,
+      removed: 0
     });
     expect(records).toHaveLength(2);
     expect(records[0]?.vector).toHaveLength(32);
@@ -45,6 +50,42 @@ describe("embedding index", () => {
 
     const raw = await readFile(getEmbeddingsJsonlPath(root), "utf8");
     expect(raw.trim().split("\n")).toHaveLength(2);
+    expect(readEmbeddingManifest(root)).toMatchObject({
+      version: 1,
+      profile: {
+        provider: "deterministic-local",
+        model: "token-hash-v1",
+        dimensions: 32
+      },
+      recordCount: 2
+    });
+    await expect(readFile(getEmbeddingsManifestPath(root), "utf8")).resolves.toContain('"version": 1');
+  });
+
+  it("reuses unchanged embeddings and only regenerates changed documents", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-embed-incremental-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    let embeddedTexts = 0;
+    const base = new DeterministicLocalEmbeddingProvider(16);
+    const provider: EmbeddingProvider = {
+      ...base,
+      name: base.name,
+      model: base.model,
+      dimensions: base.dimensions,
+      profile: base.profile,
+      async embed(texts, purpose) {
+        embeddedTexts += texts.length;
+        return base.embed(texts, purpose);
+      }
+    };
+
+    const first = await embedKnowledgeIndex(root, { provider });
+    const second = await embedKnowledgeIndex(root, { provider });
+
+    expect(first.generated).toBe(2);
+    expect(second).toMatchObject({ generated: 0, reused: 2, removed: 0 });
+    expect(embeddedTexts).toBe(2);
   });
 
   it("produces dry-run alias suggestions from embeddings, logs, and documents", async () => {
@@ -133,5 +174,32 @@ describe("hybrid query", () => {
     expect(result.debug.fallbackSuppressedReason).toBe("missing_domain_or_scenario");
     expect(result.debug.embeddingCandidateIds).toContain("k_20260705_frontend_lint_vue_sfc");
     expect(result.ranked.map((item) => item.document.frontmatter.id)).toContain("k_20260705_frontend_lint_vue_sfc");
+    expect(
+      result.debug.resultScores.find((item) => item.id === "k_20260705_frontend_lint_vue_sfc")?.embeddingScore
+    ).toBe(1);
+    expect(result.debug.resultScores[0]?.rrfScore).toBeGreaterThan(0);
+  });
+
+  it("rejects hybrid queries when the provider is incompatible with the embedding manifest", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-hybrid-mismatch-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+    await embedKnowledgeIndex(root, { provider: new DeterministicLocalEmbeddingProvider(16) });
+
+    await expect(
+      queryMemoriesHybridWithDebug(
+        root,
+        {
+          task: "Vue SFC lint",
+          agentRole: "main",
+          domains: [],
+          scenarios: []
+        },
+        {
+          embeddingProvider: new DeterministicLocalEmbeddingProvider(32)
+        }
+      )
+    ).rejects.toThrow("Embedding profile mismatch");
   });
 });

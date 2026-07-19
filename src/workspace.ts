@@ -61,7 +61,9 @@ export async function discoverKnowledgeFiles(rootDir: string): Promise<string[]>
       "knowledge/README.md",
       "knowledge/_catalog.md",
       "knowledge/_conflicts.md",
-      "knowledge/_review_queue.md"
+      "knowledge/_review_queue.md",
+      "knowledge/_inbox/**",
+      "knowledge/_archive/**"
     ]
   });
 

@@ -11,6 +11,8 @@ export const MemoryStatusSchema = z.enum(["proposed", "active", "deprecated", "r
 export const SourceAuthoritySchema = z.enum(["user_confirmed", "model_inferred", "documented", "verified_task"]);
 export const VisibilitySchema = z.enum(["private", "project", "team"]);
 export const SensitivitySchema = z.enum(["public", "internal", "confidential", "secret"]);
+export const CaptureModeSchema = z.enum(["explicit_remember", "verified_task", "automated_session", "direct_material"]);
+export const ActorTypeSchema = z.enum(["owner", "teammate", "customer", "system"]);
 export const KnowledgeRelationSchema = z.enum([
   "depends_on",
   "refines",
@@ -56,6 +58,10 @@ export const KnowledgeFrontmatterSchema = z.object({
   conflicts_with: z.array(z.string()).default([]),
   visibility: VisibilitySchema.default("project"),
   sensitivity: SensitivitySchema.default("internal"),
+  project_ids: z.array(z.string().min(1)).default([]),
+  capture_mode: CaptureModeSchema.default("direct_material"),
+  actor_type: ActorTypeSchema.default("owner"),
+  corroboration_count: z.number().int().nonnegative().default(1),
   created_at: DateStringSchema,
   updated_at: DateStringSchema,
   valid_from: DateStringSchema,
@@ -88,5 +94,9 @@ export const MemoryQueryRequestSchema = z.object({
     "semantic",
     "episodic",
     "procedural"
-  ])
+  ]),
+  now: DateStringSchema.default(() => new Date().toISOString().slice(0, 10)),
+  visibilityScopes: z.array(VisibilitySchema).default(["private", "project", "team"]),
+  sensitivityClearance: SensitivitySchema.default("internal"),
+  projectIds: z.array(z.string().min(1)).default([])
 });

@@ -15,7 +15,12 @@ import { MemoryQueryRequestSchema } from "./schema.js";
 import type { KnowledgeDocument, MemoryQueryRequest, RankedMemory, SourceAuthority } from "./types.js";
 import { getIndexDbPath } from "./indexer.js";
 import { appendJsonlLog } from "./logging.js";
-import { readEmbeddingRecords, type EmbeddingProvider } from "./embeddings.js";
+import {
+  assertEmbeddingProviderCompatible,
+  readEmbeddingRecords,
+  type EmbeddingProvider
+} from "./embeddings.js";
+import { cjkNgrams } from "./cjk.js";
 import {
   AUTHORITY_SCORE,
   defaultEmbeddingScorer,
@@ -44,6 +49,11 @@ type MemoryRow = {
   tags: string;
   summary: string;
   body: string;
+  visibility: string;
+  sensitivity: string;
+  project_ids: string;
+  valid_from: string;
+  valid_until: string | null;
   rank_score?: number;
 };
 
@@ -75,6 +85,7 @@ export type QueryDebugInfo = {
     confidenceScore: number;
     sourceAuthorityScore: number;
     relationScore: number;
+    rrfScore: number;
     finalScore: number;
   }>;
 };
@@ -103,15 +114,13 @@ const RELATION_EXPANSION = new Set(["depends_on", "refines", "supports", "often_
  * 这里保留 `/` 和 `-`，因为领域名和场景名经常包含这些字符，例如 `frontend/lint`。
  */
 function tokenize(input: string): string[] {
-  return [
-    ...new Set(
-      input
-        .toLowerCase()
-        .split(/[^\p{L}\p{N}_/-]+/u)
-        .map((token) => token.trim())
-        .filter((token) => token.length >= 2)
-    )
-  ].slice(0, 12);
+  const nonCjkTokens = input
+    .toLowerCase()
+    .replace(/\p{Script=Han}+/gu, " ")
+    .split(/[^\p{L}\p{N}_/-]+/u)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2);
+  return [...new Set([...nonCjkTokens, ...cjkNgrams(input)])].slice(0, 48);
 }
 
 /**
@@ -190,6 +199,53 @@ function fuzzyIntersects(left: string[], right: string[]): boolean {
 
 function domainIntersects(left: string[], right: string[]): boolean {
   return left.some((leftItem) => right.some((rightItem) => domainLabelMatches(leftItem, rightItem)));
+}
+
+function metadataMatchScore(row: MemoryRow, request: MemoryQueryRequest): number {
+  const domains = [row.domain, ...parseJsonArray(row.related_domains)];
+  const scenarios = parseJsonArray(row.scenario);
+  const aliases = parseJsonArray(row.aliases);
+  let score = 0;
+
+  if (
+    request.domains.some((requested) =>
+      domains.some((domain) => normalizeLabel(domain) === normalizeLabel(requested))
+    )
+  ) {
+    score += 2;
+  }
+  if (request.scenarios.length > 0 && fuzzyIntersects(scenarios, request.scenarios)) {
+    score += 2;
+  }
+  if (hasExactAliasInTask(aliases, request.task)) {
+    score += 1;
+  }
+  return score;
+}
+
+const SENSITIVITY_LEVEL = {
+  public: 0,
+  internal: 1,
+  confidential: 2,
+  secret: 3
+} as const;
+
+function rowIsAccessible(row: MemoryRow, request: MemoryQueryRequest): boolean {
+  const projectIds = parseJsonArray(row.project_ids);
+  const visibilityOk = request.visibilityScopes.includes(
+    row.visibility as MemoryQueryRequest["visibilityScopes"][number]
+  );
+  const sensitivityOk =
+    (SENSITIVITY_LEVEL[row.sensitivity as keyof typeof SENSITIVITY_LEVEL] ?? Number.POSITIVE_INFINITY) <=
+    SENSITIVITY_LEVEL[request.sensitivityClearance];
+  const validFromOk = row.valid_from <= request.now;
+  const validUntilOk = row.valid_until === null || row.valid_until >= request.now;
+  const projectOk =
+    row.visibility !== "project" ||
+    projectIds.length === 0 ||
+    projectIds.some((projectId) => request.projectIds.includes(projectId));
+
+  return row.status === "active" && visibilityOk && sensitivityOk && validFromOk && validUntilOk && projectOk;
 }
 
 function cosineSimilarity(left: number[], right: number[]): number {
@@ -273,12 +329,39 @@ function rowMatchesRequest(row: MemoryRow, request: MemoryQueryRequest): boolean
   const scenarioOk = request.scenarios.length === 0 || fuzzyIntersects(scenarioPool, request.scenarios);
   const typeOk = request.includeTypes.includes(row.type as MemoryQueryRequest["includeTypes"][number]);
 
-  return row.status === "active" && domainOk && scenarioOk && typeOk;
+  return rowIsAccessible(row, request) && domainOk && scenarioOk && typeOk;
 }
 
 function hasExactAliasInTask(aliases: string[], task: string): boolean {
   const normalizedTask = task.toLowerCase();
   return aliases.some((alias) => alias.trim().length > 0 && normalizedTask.includes(alias.toLowerCase()));
+}
+
+function hasSufficientLexicalEvidence(
+  row: MemoryRow,
+  request: MemoryQueryRequest,
+  taskTokens: string[]
+): boolean {
+  if (request.domains.length > 0 || request.scenarios.length > 0 || taskTokens.length <= 4) {
+    return true;
+  }
+  if (hasExactAliasInTask(parseJsonArray(row.aliases), request.task)) {
+    return true;
+  }
+  const haystack = [
+    row.title,
+    ...parseJsonArray(row.aliases),
+    row.domain,
+    ...parseJsonArray(row.related_domains),
+    ...parseJsonArray(row.scenario),
+    ...parseJsonArray(row.tags),
+    row.summary,
+    row.body
+  ]
+    .join("\n")
+    .toLowerCase();
+  const matchedTerms = taskTokens.filter((token) => haystack.includes(token));
+  return new Set(matchedTerms).size >= 2;
 }
 
 /**
@@ -292,6 +375,8 @@ function scoreRow(
   document: KnowledgeDocument,
   request: MemoryQueryRequest,
   relationScore: number,
+  denseScore: number | undefined,
+  rrfScore: number,
   embeddingScorer: EmbeddingScorer,
   reranker: MemoryReranker
 ): Omit<RankedMemory, "document"> {
@@ -304,14 +389,18 @@ function scoreRow(
   );
   const confidenceScore = row.confidence;
   const sourceAuthorityScore = AUTHORITY_SCORE[row.source_authority] ?? 0.4;
-  const embeddingScore = Math.max(0, Math.min(1, embeddingScorer.score({ request, document })));
+  const embeddingScore = Math.max(
+    0,
+    Math.min(1, denseScore ?? embeddingScorer.score({ request, document }))
+  );
   const features: ScoreFeatures = {
     lexicalScore,
     embeddingScore,
     scenarioScore,
     confidenceScore,
     sourceAuthorityScore,
-    relationScore
+    relationScore,
+    rrfScore
   };
   const finalScore = Math.max(0, Math.min(1, reranker.rerank({ request, document, features })));
 
@@ -322,12 +411,16 @@ function scoreRow(
     confidenceScore,
     sourceAuthorityScore,
     relationScore,
+    rrfScore,
     finalScore
   };
 }
 
 type CandidateSelection = {
   rows: MemoryRow[];
+  lexicalRanks: Map<string, number>;
+  denseRanks: Map<string, number>;
+  denseScores: Map<string, number>;
   debug: Omit<
     QueryDebugInfo,
     | "queryRunId"
@@ -340,6 +433,10 @@ type CandidateSelection = {
   >;
 };
 
+function rankMap(rows: MemoryRow[]): Map<string, number> {
+  return new Map(rows.map((row, index) => [row.id, index + 1]));
+}
+
 /**
  * 先跑 FTS；只有带 domain/scenario 约束时才允许回退到全表 metadata 过滤。
  *
@@ -347,6 +444,7 @@ type CandidateSelection = {
  */
 function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): CandidateSelection {
   const db = new DatabaseSync(getIndexDbPath(rootDir), { readOnly: true });
+  const taskTokens = tokenize(request.task);
   const tokens = tokenize([request.task, ...request.domains, ...request.scenarios, ...request.paths].join(" "));
   const query = toFtsQuery(tokens);
   const canFallbackToMetadata = request.domains.length > 0 || request.scenarios.length > 0;
@@ -368,6 +466,9 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
       if (!canFallbackToMetadata) {
         return {
           rows: [],
+          lexicalRanks: new Map(),
+          denseRanks: new Map(),
+          denseScores: new Map(),
           debug: {
             ...baseDebug,
             fallbackReason: "empty_fts_query",
@@ -379,24 +480,31 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
       const rows = db.prepare("SELECT memories.*, 0 AS rank_score FROM memories").all() as MemoryRow[];
       return {
         rows,
+        lexicalRanks: new Map(),
+        denseRanks: new Map(),
+        denseScores: new Map(),
         debug: { ...baseDebug, fallbackUsed: true, fallbackReason: "empty_fts_query", candidateRowCount: rows.length }
       };
     }
 
-    const ftsRows = db
+    const rawFtsRows = db
       .prepare(
         `SELECT memories.*, bm25(memory_fts) AS rank_score
          FROM memory_fts JOIN memories ON memory_fts.id = memories.id
          WHERE memory_fts MATCH ?`
       )
       .all(query) as MemoryRow[];
+    const ftsRows = rawFtsRows.filter((row) => hasSufficientLexicalEvidence(row, request, taskTokens));
 
     if (ftsRows.length > 0) {
       return {
         rows: ftsRows,
+        lexicalRanks: rankMap(ftsRows),
+        denseRanks: new Map(),
+        denseScores: new Map(),
         debug: {
           ...baseDebug,
-          ftsCandidateCount: ftsRows.length,
+          ftsCandidateCount: rawFtsRows.length,
           candidateRowCount: ftsRows.length
         }
       };
@@ -405,6 +513,9 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
     if (!canFallbackToMetadata) {
       return {
         rows: [],
+        lexicalRanks: new Map(),
+        denseRanks: new Map(),
+        denseScores: new Map(),
         debug: {
           ...baseDebug,
           fallbackReason: "no_fts_matches",
@@ -416,6 +527,9 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
     const rows = db.prepare("SELECT memories.*, 0 AS rank_score FROM memories").all() as MemoryRow[];
     return {
       rows,
+      lexicalRanks: new Map(),
+      denseRanks: new Map(),
+      denseScores: new Map(),
       debug: {
         ...baseDebug,
         fallbackUsed: true,
@@ -433,26 +547,45 @@ async function selectEmbeddingRows(
   request: MemoryQueryRequest,
   provider: EmbeddingProvider,
   topK: number
-): Promise<{ rows: MemoryRow[]; ids: string[]; recordCount: number }> {
+): Promise<{ rows: MemoryRow[]; ids: string[]; recordCount: number; scores: Map<string, number> }> {
   const records = readEmbeddingRecords(rootDir);
   if (records.length === 0 || topK <= 0) {
-    return { rows: [], ids: [], recordCount: records.length };
+    return { rows: [], ids: [], recordCount: records.length, scores: new Map() };
   }
 
+  const manifest = assertEmbeddingProviderCompatible(rootDir, provider);
   const queryText = [request.task, ...request.domains, ...request.scenarios, ...request.paths].join("\n");
-  const [queryVector] = await provider.embed([queryText]);
+  const [queryVector] = await provider.embed([queryText], "query");
   if (!queryVector || queryVector.length === 0) {
-    return { rows: [], ids: [], recordCount: records.length };
+    return { rows: [], ids: [], recordCount: records.length, scores: new Map() };
+  }
+  if (queryVector.length !== manifest.profile.dimensions) {
+    throw new Error(
+      `Embedding query dimension mismatch: manifest=${manifest.profile.dimensions}, query=${queryVector.length}`
+    );
+  }
+  for (const record of records) {
+    if (
+      record.dimensions !== manifest.profile.dimensions ||
+      record.vector.length !== manifest.profile.dimensions
+    ) {
+      throw new Error(`Embedding cache record dimension mismatch: ${record.id}`);
+    }
   }
 
-  const ids = records
+  const scored = records
     .map((record) => ({ id: record.id, score: cosineSimilarity(queryVector, record.vector) }))
     .filter((item) => item.score > 0)
     .sort((left, right) => right.score - left.score)
-    .slice(0, topK)
-    .map((item) => item.id);
+    .slice(0, topK);
+  const ids = scored.map((item) => item.id);
 
-  return { rows: selectRowsByIds(rootDir, ids), ids, recordCount: records.length };
+  return {
+    rows: selectRowsByIds(rootDir, ids),
+    ids,
+    recordCount: records.length,
+    scores: new Map(scored.map((item) => [item.id, item.score]))
+  };
 }
 
 /**
@@ -499,23 +632,52 @@ function rankSelectedRows(
   const relatedCandidateIds = [...relatedIds].sort();
   const relatedRows = selectRowsByIds(rootDir, relatedCandidateIds).filter(
     (row) =>
-      row.status === "active" &&
+      rowIsAccessible(row, expandedRequest) &&
       !directIds.has(row.id) &&
       expandedRequest.includeTypes.includes(row.type as MemoryQueryRequest["includeTypes"][number])
   );
 
-  const ranked = [...directRows.map((row) => ({ row, relationScore: 0 })), ...relatedRows.map((row) => ({ row, relationScore: 1 }))]
+  const metadataRanks = new Map(
+    [...directRows]
+      .sort(
+        (left, right) =>
+          metadataMatchScore(right, expandedRequest) - metadataMatchScore(left, expandedRequest) ||
+          left.id.localeCompare(right.id)
+      )
+      .map((row, index) => [row.id, index + 1])
+  );
+  const rrfFor = (id: string): number => {
+    const ranks = [
+      selection.lexicalRanks.get(id),
+      selection.denseRanks.get(id),
+      metadataRanks.get(id)
+    ].filter((rank): rank is number => rank !== undefined);
+    if (ranks.length === 0) {
+      return 0;
+    }
+    return Math.min(1, ranks.reduce((sum, rank) => sum + 1 / (60 + rank), 0) / (3 / 61));
+  };
+  const ranked = [
+    ...directRows.map((row) => ({ row, relationScore: 0 })),
+    ...relatedRows.map((row) => ({ row, relationScore: 1 }))
+  ]
     .map(({ row, relationScore }) => {
       const document = loadDocument(rootDir, row.file_path);
       return {
         document,
-        ...scoreRow(row, document, expandedRequest, relationScore, embeddingScorer, reranker)
+        ...scoreRow(
+          row,
+          document,
+          expandedRequest,
+          relationScore,
+          selection.denseScores.get(row.id),
+          rrfFor(row.id),
+          embeddingScorer,
+          reranker
+        )
       };
     })
-    .sort((a, b) => {
-      const directDelta = Number(a.relationScore > 0) - Number(b.relationScore > 0);
-      return directDelta || b.finalScore - a.finalScore;
-    });
+    .sort((a, b) => b.finalScore - a.finalScore);
   const debug: QueryDebugInfo = {
     ...selection.debug,
     queryRunId,
@@ -535,6 +697,7 @@ function rankSelectedRows(
       confidenceScore: item.confidenceScore,
       sourceAuthorityScore: item.sourceAuthorityScore,
       relationScore: item.relationScore,
+      rrfScore: item.rrfScore,
       finalScore: item.finalScore
     }))
   };
@@ -588,6 +751,9 @@ export async function queryMemoriesHybridWithDebug(
   const embeddingCandidateIds = embeddingSelection.ids;
   const selection: CandidateSelection = {
     rows: [...rowsById.values()],
+    lexicalRanks: lexicalSelection.lexicalRanks,
+    denseRanks: new Map(embeddingCandidateIds.map((id, index) => [id, index + 1])),
+    denseScores: embeddingSelection.scores,
     debug: {
       ...lexicalSelection.debug,
       retrievalMode: "hybrid",

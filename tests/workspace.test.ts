@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -35,6 +35,22 @@ describe("discoverKnowledgeFiles", () => {
 
     expect(files.every((file) => file.endsWith(".md"))).toBe(true);
     expect(files.some((file) => file.endsWith("_catalog.md"))).toBe(false);
+  });
+
+  it("hard-excludes inbox and archive files even when they contain Markdown", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-isolation-"));
+    tempDirs.push(root);
+
+    await initKnowledgeWorkspace(root);
+    await mkdir(path.join(root, "knowledge", "_inbox"), { recursive: true });
+    await mkdir(path.join(root, "knowledge", "_archive"), { recursive: true });
+    await writeFile(path.join(root, "knowledge", "_inbox", "candidate.md"), "# candidate\n", "utf8");
+    await writeFile(path.join(root, "knowledge", "_archive", "old.md"), "# old\n", "utf8");
+
+    const files = await discoverKnowledgeFiles(root);
+
+    expect(files).not.toContain("knowledge/_inbox/candidate.md");
+    expect(files).not.toContain("knowledge/_archive/old.md");
   });
 });
 

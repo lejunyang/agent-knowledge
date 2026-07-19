@@ -24,6 +24,52 @@ function toItem(memory: RankedMemory): ContextPacketItem {
   };
 }
 
+function clonePacket(packet: ContextPacket): ContextPacket {
+  return {
+    ...packet,
+    scene: { ...packet.scene, domains: [...packet.scene.domains], scenarios: [...packet.scene.scenarios] },
+    always_apply: [...packet.always_apply],
+    relevant_facts: [...packet.relevant_facts],
+    procedures: [...packet.procedures],
+    examples: [...packet.examples],
+    warnings: [...packet.warnings],
+    sources: [...packet.sources]
+  };
+}
+
+function addWithinBudget(
+  packet: ContextPacket,
+  section: "always_apply" | "relevant_facts" | "procedures" | "examples",
+  item: ContextPacketItem,
+  maxTokens: number
+): boolean {
+  const candidate = clonePacket(packet);
+  candidate[section].push(item);
+  candidate.sources = [...new Set([...candidate.sources, ...item.source])].slice(0, 10);
+  if (estimateContextPacketTokens(candidate) > maxTokens) {
+    return false;
+  }
+  packet[section].push(item);
+  packet.sources = candidate.sources;
+  return true;
+}
+
+/**
+ * 对中英文混合上下文做保守 token 估算。
+ *
+ * 中文字符按一个 token、其他文本按约四字符一个 token 估算。该函数不替代模型 tokenizer，
+ * 但适合在无模型热路径中执行预算和评测，且宁可少装包也不突破调用方预算。
+ */
+export function estimateTextTokens(text: string): number {
+  const cjkCount = [...text].filter((character) => /\p{Script=Han}/u.test(character)).length;
+  const otherCount = Math.max(0, text.length - cjkCount);
+  return cjkCount + Math.ceil(otherCount / 4);
+}
+
+export function estimateContextPacketTokens(packet: ContextPacket): number {
+  return estimateTextTokens(JSON.stringify(packet));
+}
+
 /**
  * 构建 context packet。
  *
@@ -51,34 +97,39 @@ export function buildContextPacket(input: BuildContextPacketInput): ContextPacke
     const item = toItem(ranked);
 
     if (type === "profile") {
-      packet.always_apply.push(item);
+      addWithinBudget(packet, "always_apply", item, input.request.maxTokens);
     }
     if (type === "semantic") {
-      packet.relevant_facts.push(item);
+      addWithinBudget(packet, "relevant_facts", item, input.request.maxTokens);
     }
     if (type === "procedural") {
-      packet.procedures.push(item);
+      addWithinBudget(packet, "procedures", item, input.request.maxTokens);
     }
     if (type === "episodic") {
-      packet.examples.push(item);
+      addWithinBudget(packet, "examples", item, input.request.maxTokens);
     }
 
     for (const conflict of ranked.document.frontmatter.conflicts_with) {
-      packet.warnings.push({
+      const warning = {
         type: "conflict",
         message: `${ranked.document.frontmatter.title} 与 ${conflict} 存在冲突，需要人工确认。`,
         source: ranked.document.frontmatter.id
-      });
+      };
+      const candidate = clonePacket(packet);
+      candidate.warnings.push(warning);
+      if (estimateContextPacketTokens(candidate) <= input.request.maxTokens) {
+        packet.warnings.push(warning);
+      }
     }
-
-    packet.sources.push(...ranked.document.frontmatter.source);
   }
 
-  packet.always_apply = packet.always_apply.slice(0, 5);
-  packet.relevant_facts = packet.relevant_facts.slice(0, 8);
-  packet.procedures = packet.procedures.slice(0, 5);
-  packet.examples = packet.examples.slice(0, 2);
-  packet.sources = [...new Set(packet.sources)].slice(0, 10);
+  if (estimateContextPacketTokens(packet) > input.request.maxTokens) {
+    packet.scene.domains = [];
+    packet.scene.scenarios = [];
+  }
+  if (estimateContextPacketTokens(packet) > input.request.maxTokens) {
+    throw new Error(`maxTokens=${input.request.maxTokens} is too small for the context packet envelope`);
+  }
 
   return packet;
 }
