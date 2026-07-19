@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sanitizeLarkSourceXml } from "../scripts/build-lark-source-candidates.mjs";
+import {
+  redactSecretLikeContent,
+  sanitizeLarkSourceXml
+} from "../scripts/build-lark-source-candidates.mjs";
 
 test("removes temporary Lark resource handles while preserving readable evidence", () => {
   const input = `<p id="block1">正文</p>
@@ -15,4 +18,23 @@ test("removes temporary Lark resource handles while preserving readable evidence
   assert.match(output, /关键截图/);
   assert.match(output, /doc-ref="doc123"/);
   assert.match(output, /doc-ref="sync123"/);
+});
+
+test("redacts credential values while preserving surrounding source context", () => {
+  const input = `
+    token=abcdefghijklmnopqrstuvwxyz123456
+    api_key="abcdefghijklmnopqrstuvwxyz123456"
+    Authorization example: sk-abcdefghijklmnopqrstuvwxyz
+    -----BEGIN PRIVATE KEY-----
+    private-key-material
+    -----END PRIVATE KEY-----
+  `;
+
+  const output = redactSecretLikeContent(input);
+
+  assert.match(output, /token=\[REDACTED_SECRET\]/);
+  assert.match(output, /api_key="\[REDACTED_SECRET\]/);
+  assert.match(output, /Authorization example: \[REDACTED_SECRET\]/);
+  assert.match(output, /\[REDACTED_PRIVATE_KEY\]/);
+  assert.doesNotMatch(output, /abcdefghijklmnopqrstuvwxyz|private-key-material/);
 });

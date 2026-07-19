@@ -46,6 +46,24 @@ export function sanitizeLarkSourceXml(content) {
     .replace(/\s+src-block-id="[^"]*"/g, "");
 }
 
+/** 遮蔽常见凭据值，保留字段名和周边说明供知识审阅。 */
+export function redactSecretLikeContent(content) {
+  return content
+    .replace(
+      /-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |OPENSSH |EC )?PRIVATE KEY-----/g,
+      "[REDACTED_PRIVATE_KEY]"
+    )
+    .replace(
+      /(api[_-]?key\s*=\s*["']?)[a-z0-9_-]{20,}/gi,
+      "$1[REDACTED_SECRET]"
+    )
+    .replace(
+      /(token\s*=\s*["']?)[a-z0-9_.-]{20,}/gi,
+      "$1[REDACTED_SECRET]"
+    )
+    .replace(/sk-[a-z0-9]{20,}/gi, "[REDACTED_SECRET]");
+}
+
 /** 解析 CLI 参数。 */
 function parseArguments(argv) {
   let input;
@@ -98,7 +116,7 @@ export async function buildLarkSourceCandidates(options) {
       path.join(corpusRoot, document.directory, "content.xml"),
       "utf8"
     );
-    const content = sanitizeLarkSourceXml(raw);
+    const content = redactSecretLikeContent(sanitizeLarkSourceXml(raw));
     const id = stableId(document.key);
     candidates.push({
       id,
