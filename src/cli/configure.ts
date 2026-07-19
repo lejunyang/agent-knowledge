@@ -45,7 +45,7 @@ export async function runConfigurationWizard(options: {
       { name: "Owner", value: "owner", description: "Trusted personal input" },
       { name: "Teammate", value: "teammate", description: "Known collaborator input" },
       { name: "Customer", value: "customer", description: "Untrusted observation; always reviewed" },
-      { name: "System", value: "system", description: "Automated agent or service" }
+      { name: "Agent", value: "agent", description: "AI agent or automated service" }
     ],
     current.identity.actorType
   );

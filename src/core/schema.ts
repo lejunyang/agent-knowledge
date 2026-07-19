@@ -12,7 +12,10 @@ export const SourceAuthoritySchema = z.enum(["user_confirmed", "model_inferred",
 export const VisibilitySchema = z.enum(["private", "project", "team"]);
 export const SensitivitySchema = z.enum(["public", "internal", "confidential", "secret"]);
 export const CaptureModeSchema = z.enum(["explicit_remember", "verified_task", "automated_session", "direct_material"]);
-export const ActorTypeSchema = z.enum(["owner", "teammate", "customer", "system"]);
+export const ActorTypeSchema = z.preprocess(
+  (value) => (value === "system" ? "agent" : value),
+  z.enum(["owner", "teammate", "customer", "agent"])
+);
 export const KnowledgeRelationSchema = z.enum([
   "depends_on",
   "refines",

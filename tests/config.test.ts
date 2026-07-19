@@ -69,6 +69,17 @@ describe("user configuration", () => {
     expect(loaded.sync.provider).toBe("none");
   });
 
+  it("normalizes legacy system actor configuration to agent", () => {
+    const configured = resolveUserConfig({
+      identity: {
+        actorType: "system"
+      }
+    });
+
+    expect(configured.identity.actorType).toBe("agent");
+    expect(JSON.stringify(configured)).not.toContain('"system"');
+  });
+
   it("runs the full wizard and stores credential environment variable names only", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-config-wizard-"));
     tempDirs.push(root);

@@ -36,7 +36,7 @@ agent-knowledge catalog --no-write
 ```json
 {
   "capture_mode": "automated_session",
-  "actor_type": "system",
+  "actor_type": "agent",
   "corroboration_count": 1,
   "project_ids": ["project_id_if_known"]
 }

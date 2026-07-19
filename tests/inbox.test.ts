@@ -121,12 +121,37 @@ describe("writeCandidateMemory", () => {
       summary: "单次客服会话中尝试成功的步骤。",
       evidence: ["session:hashed"],
       capture_mode: "automated_session",
+      // Keep one legacy value to verify read compatibility during the migration.
       actor_type: "system",
       corroboration_count: 1,
       project_ids: ["project_support"]
     });
 
     expect(result.status).toBe("proposed");
+  });
+
+  it("writes agent as the canonical actor value", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-inbox-agent-"));
+    tempDirs.push(root);
+
+    const result = await writeCandidateMemory(root, {
+      title: "Agent generated procedure",
+      memory_type: "procedural",
+      domain: "agent/memory",
+      related_domains: [],
+      scenario: ["automated-maintenance"],
+      tags: ["agent"],
+      confidence: 0.8,
+      source_authority: "verified_task",
+      summary: "A reusable procedure verified by an AI agent.",
+      evidence: ["agent:verified"],
+      capture_mode: "verified_task",
+      actor_type: "agent"
+    });
+    const content = await readFile(result.filePath, "utf8");
+
+    expect(content).toContain("actor_type: agent");
+    expect(content).not.toContain("actor_type: system");
   });
 
   it("deduplicates an identical candidate instead of rewriting it", async () => {
@@ -144,7 +169,7 @@ describe("writeCandidateMemory", () => {
       summary: "完全相同的候选不重复写入。",
       evidence: ["staging:test"],
       capture_mode: "automated_session" as const,
-      actor_type: "system" as const
+      actor_type: "agent" as const
     };
 
     const first = await writeCandidateMemory(root, candidate);

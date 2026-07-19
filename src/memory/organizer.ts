@@ -292,6 +292,7 @@ function documentFromMaterialInput(input: CandidateMemoryInput): KnowledgeDocume
   const decision = decideCandidateStatus(input);
   const date = today();
   const status = decision.status === "rejected" || decision.status === "deprecated" ? "proposed" : decision.status;
+  const actorType = input.actor_type === "system" ? "agent" : (input.actor_type ?? "owner");
 
   return KnowledgeDocumentSchema.parse({
     filePath: "knowledge/_material/pending.md",
@@ -315,7 +316,7 @@ function documentFromMaterialInput(input: CandidateMemoryInput): KnowledgeDocume
       sensitivity: input.sensitivity ?? "internal",
       project_ids: input.project_ids ?? [],
       capture_mode: input.capture_mode ?? "direct_material",
-      actor_type: input.actor_type ?? "owner",
+      actor_type: actorType,
       corroboration_count: input.corroboration_count ?? 1,
       created_at: date,
       updated_at: date,

@@ -13,4 +13,4 @@ Output only a `CandidateMemoryInput` JSON object or:
 }
 ```
 
-Automatic sessions and customer statements are observations, not confirmed facts. Mark their provenance accurately and never promote them directly to active knowledge.
+Automatic sessions and customer statements are observations, not confirmed facts. Use `actor_type: agent` for AI/automation, mark provenance accurately, and never promote them directly to active knowledge.

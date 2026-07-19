@@ -42,6 +42,8 @@ agent-knowledge configure
 
 配置只保存凭据环境变量名，不保存 secret 值。
 
+`actorType` 可选 `owner`、`teammate`、`customer`、`agent`。其中 `agent` 表示 AI Agent 或自动化服务；旧配置中的 `system` 会自动兼容为 `agent`。
+
 ```bash
 agent-knowledge config show
 agent-knowledge config path

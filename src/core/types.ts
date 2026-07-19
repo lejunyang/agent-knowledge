@@ -12,7 +12,7 @@ export type SourceAuthority = "user_confirmed" | "model_inferred" | "documented"
 export type Visibility = "private" | "project" | "team";
 export type Sensitivity = "public" | "internal" | "confidential" | "secret";
 export type CaptureMode = "explicit_remember" | "verified_task" | "automated_session" | "direct_material";
-export type ActorType = "owner" | "teammate" | "customer" | "system";
+export type ActorType = "owner" | "teammate" | "customer" | "agent";
 
 export type KnowledgeRelation =
   | "depends_on"

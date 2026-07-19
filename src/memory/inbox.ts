@@ -59,6 +59,7 @@ function idFromCandidate(input: CandidateMemoryInput): string {
  */
 export async function writeCandidateMemory(rootDir: string, input: CandidateMemoryInput): Promise<WriteCandidateResult> {
   const decision = decideCandidateStatus(input);
+  const actorType = input.actor_type === "system" ? "agent" : (input.actor_type ?? "owner");
   const sourceAuthority =
     input.actor_type === "customer" ? "model_inferred" : input.source_authority;
   const id = idFromCandidate(input);
@@ -90,7 +91,7 @@ export async function writeCandidateMemory(rootDir: string, input: CandidateMemo
       sensitivity: input.sensitivity ?? "internal",
       project_ids: input.project_ids ?? [],
       capture_mode: input.capture_mode ?? "direct_material",
-      actor_type: input.actor_type ?? "owner",
+      actor_type: actorType,
       corroboration_count: input.corroboration_count ?? 1,
       created_at: date,
       updated_at: date,

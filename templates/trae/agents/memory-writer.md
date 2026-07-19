@@ -28,7 +28,7 @@ tools: ""
   "scenarios": ["code-review", "lint-migration"],
   "user_confirmed": false,
   "capture_mode": "explicit_remember | verified_task | automated_session | direct_material",
-  "actor_type": "owner | teammate | customer | system",
+  "actor_type": "owner | teammate | customer | agent",
   "corroboration_count": 1,
   "project_ids": ["project_id_if_known"]
 }
@@ -52,7 +52,7 @@ tools: ""
   "summary": "迁移 lint 配置后应按 Oxlint -> ESLint fallback -> Oxfmt 顺序验证。",
   "evidence": ["conversation:current-session"],
   "capture_mode": "verified_task",
-  "actor_type": "system",
+  "actor_type": "agent",
   "corroboration_count": 1,
   "project_ids": ["project_example"],
   "related_knowledge": [
