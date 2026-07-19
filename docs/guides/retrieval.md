@@ -62,6 +62,8 @@ agent-knowledge query --task "自然语言问题" --retrieval hybrid --debug
 
 Embedding 缓存包含 model、revision、dtype、dimensions、pooling、prefix 和内容 hash manifest。查询 provider 与缓存不兼容时会明确失败，不会静默混用向量。
 
+`embedding status`、`embedding download`、`embed-index`、hybrid query 和 reranker 必须使用同一个 `embeddings.cacheDir`。默认目录是 `~/.cache/agent-knowledge/models`；项目 local 配置可以复用全局已下载模型。状态显示 cached 但运行时仍找不到模型，通常说明 provider 没有使用该缓存目录，应先修配置贯通，不能重新下载一份到 `node_modules` 或其他默认目录。
+
 `type: source` 用于保存完整原始证据，不属于默认 query `includeTypes`，因此 `index` 和 `embed-index` 都不把 source 原文放入 FTS/向量缓存。应由 `knowledge-organizer` 从 source 中拆出精炼 semantic/procedural/episodic/profile 知识承担检索，避免超长原文污染 lexical/dense topK。
 
 `embedding status` 只检查本地缓存，不联网；`embedding download` 是普通工作流中唯一默认允许显式下载模型的命令：

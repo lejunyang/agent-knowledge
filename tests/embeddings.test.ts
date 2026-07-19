@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  createEmbeddingProvider,
   DeterministicLocalEmbeddingProvider,
   embedKnowledgeIndex,
   getEmbeddingsManifestPath,
@@ -10,6 +11,7 @@ import {
   readEmbeddingManifest,
   readEmbeddingRecords,
   suggestAliases,
+  TransformersJsEmbeddingProvider,
   type EmbeddingProvider
 } from "../src/retrieval/embeddings.js";
 import { rebuildIndex } from "../src/storage/indexer.js";
@@ -24,6 +26,21 @@ afterEach(async () => {
 });
 
 describe("embedding index", () => {
+  it("passes the configured model cache directory into the Transformers provider", () => {
+    const cacheDir = "/tmp/agent-knowledge-model-cache";
+    const provider = createEmbeddingProvider({
+      provider: "transformers",
+      profile: "multilingual-e5-small",
+      cacheDir
+    });
+
+    expect(provider).toBeInstanceOf(TransformersJsEmbeddingProvider);
+    expect(provider).toMatchObject({
+      model: "Xenova/multilingual-e5-small",
+      cacheDir
+    });
+  });
+
   it("writes active Markdown document embeddings to a JSONL store without network providers", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-embed-"));
     tempDirs.push(root);

@@ -496,6 +496,7 @@ export class TransformersJsEmbeddingProvider implements EmbeddingProvider {
   readonly dimensions: number;
   readonly model: string;
   readonly profile: EmbeddingProfile;
+  readonly cacheDir?: string;
   private extractorPromise?: Promise<unknown>;
 
   /** 选择已知或自定义 profile，并记录是否允许本地/远程模型。 */
@@ -505,6 +506,7 @@ export class TransformersJsEmbeddingProvider implements EmbeddingProvider {
       localFilesOnly?: boolean;
       allowRemoteModels?: boolean;
       profile?: EmbeddingProfile;
+      cacheDir?: string;
     } = {}
   ) {
     const knownProfile = Object.values(EMBEDDING_PROFILES).find((profile) => profile.model === model);
@@ -519,6 +521,7 @@ export class TransformersJsEmbeddingProvider implements EmbeddingProvider {
     };
     this.model = model;
     this.dimensions = this.profile.dimensions;
+    this.cacheDir = options.cacheDir;
   }
 
   /** 按 query/document purpose 添加正确 prefix，并把模型 tensor 转换为普通向量。 */
@@ -562,12 +565,20 @@ export class TransformersJsEmbeddingProvider implements EmbeddingProvider {
   private async getExtractor(): Promise<unknown> {
     this.extractorPromise ??= (async () => {
       const transformers = (await import("@huggingface/transformers")) as {
-        env: { allowRemoteModels?: boolean; allowLocalModels?: boolean };
+        env: {
+          allowRemoteModels?: boolean;
+          allowLocalModels?: boolean;
+          cacheDir?: string;
+        };
         pipeline: (task: string, model: string, options?: Record<string, unknown>) => Promise<unknown>;
       };
       transformers.env.allowLocalModels = true;
       transformers.env.allowRemoteModels = this.options.allowRemoteModels ?? false;
+      if (this.cacheDir) {
+        transformers.env.cacheDir = this.cacheDir;
+      }
       return transformers.pipeline("feature-extraction", this.model, {
+        ...(this.cacheDir ? { cache_dir: this.cacheDir } : {}),
         local_files_only: this.options.localFilesOnly ?? true,
         dtype: this.profile.dtype === "q8" ? "q8" : undefined,
         revision: this.profile.revision
@@ -585,6 +596,7 @@ export function createEmbeddingProvider(options: {
   profile?: keyof typeof EMBEDDING_PROFILES;
   dimensions?: number;
   allowRemoteModels?: boolean;
+  cacheDir?: string;
 }): EmbeddingProvider {
   if (options.provider === "local") {
     return new DeterministicLocalEmbeddingProvider(options.dimensions);
@@ -593,7 +605,8 @@ export function createEmbeddingProvider(options: {
   return new TransformersJsEmbeddingProvider(options.model ?? selectedProfile?.model, {
     localFilesOnly: !options.allowRemoteModels,
     allowRemoteModels: options.allowRemoteModels,
-    profile: selectedProfile
+    profile: selectedProfile,
+    cacheDir: options.cacheDir
   });
 }
 

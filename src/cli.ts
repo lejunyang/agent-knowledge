@@ -499,7 +499,8 @@ program
           ? options.profile
           : configuredEmbeddings.profile,
       model: options.model ?? configuredEmbeddings.model ?? undefined,
-      allowRemoteModels: options.allowRemoteModels || configuredEmbeddings.allowRemoteModels
+      allowRemoteModels: options.allowRemoteModels || configuredEmbeddings.allowRemoteModels,
+      cacheDir: configuredEmbeddings.cacheDir
     });
     const result = await embedKnowledgeIndex(resolveCliRoot(options.root), { provider });
     console.log(JSON.stringify(result, null, 2));
@@ -533,7 +534,8 @@ program
       provider: configuredEmbeddings.provider,
       profile: configuredEmbeddings.profile,
       model: configuredEmbeddings.model ?? undefined,
-      allowRemoteModels: false
+      allowRemoteModels: false,
+      cacheDir: configuredEmbeddings.cacheDir
     });
     if (options.pipeline === "hybrid") {
       console.log(
@@ -629,7 +631,8 @@ program
         provider: providerName,
         profile: configuredEmbeddings.profile,
         model: options.model ?? configuredEmbeddings.model ?? undefined,
-        allowRemoteModels: options.allowRemoteModels || configuredEmbeddings.allowRemoteModels
+        allowRemoteModels: options.allowRemoteModels || configuredEmbeddings.allowRemoteModels,
+        cacheDir: configuredEmbeddings.cacheDir
       });
       const result = await suggestAliases(resolveCliRoot(options.root), {
         provider,
@@ -719,7 +722,8 @@ program
           : configuredEmbeddings.profile,
       model: options.model ?? configuredEmbeddings.model ?? undefined,
       allowRemoteModels:
-        options.allowRemoteModels || configuredEmbeddings.allowRemoteModels
+        options.allowRemoteModels || configuredEmbeddings.allowRemoteModels,
+      cacheDir: configuredEmbeddings.cacheDir
     });
     const embeddingTopK = options.embeddingTopK
       ? Number.parseInt(options.embeddingTopK, 10)
