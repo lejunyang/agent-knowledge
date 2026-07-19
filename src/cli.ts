@@ -59,6 +59,11 @@ import {
   runConfigurationWizard,
   TerminalConfigurationPrompter
 } from "./cli/configure.js";
+import {
+  formatIntegrationInstallResult,
+  promptForIntegrationInstall,
+  TerminalIntegrationPrompter
+} from "./cli/integration.js";
 
 const program = new Command();
 
@@ -644,39 +649,93 @@ integration
 
 integration
   .command("install")
-  .requiredOption("--product <product>", "trae or claude-code")
-  .option("--scope <scope>", "user or project", "user")
-  .option("--components <components>", "comma-separated hooks,agents,skills,plugin-bundle", "hooks,agents,skills")
+  .option("--product <product>", "trae, trae-cn, or claude-code")
+  .option("--scope <scope>", "user or project")
+  .option("--components <components>", "comma-separated hooks,agents,skills,plugin-bundle")
   .option("--target-dir <dir>", "override product config root; primarily for project installs and testing")
+  .option("--mode <mode>", "merge or overwrite")
+  .option("--overwrite", "replace target files and symlinks instead of merging", false)
+  .option("--debug", "emit the full JSON result", false)
   .action(
     async (options: {
-      product: string;
-      scope: string;
-      components: string;
+      product?: string;
+      scope?: string;
+      components?: string;
       targetDir?: string;
+      mode?: string;
+      overwrite: boolean;
+      debug: boolean;
     }) => {
-      if (options.product !== "trae" && options.product !== "claude-code") {
-        throw new Error("--product must be trae or claude-code");
+      const configuredDefaults = userConfig().integration;
+      const partial = {
+        ...(options.product ? { product: options.product as "trae" | "trae-cn" | "claude-code" } : {}),
+        ...(options.scope ? { scope: options.scope as "user" | "project" } : {}),
+        ...(options.components
+          ? {
+              components: options.components
+                .split(",")
+                .map((component) => component.trim())
+                .filter(Boolean) as Array<"hooks" | "agents" | "skills" | "plugin-bundle">
+            }
+          : {}),
+        ...(options.targetDir ? { targetDir: options.targetDir } : {}),
+        ...(options.overwrite
+          ? { mode: "overwrite" as const }
+          : options.mode
+            ? { mode: options.mode as "merge" | "overwrite" }
+            : {})
+      };
+      const shouldPrompt =
+        process.stdin.isTTY &&
+        (!options.product || !options.scope || !options.components || (!options.mode && !options.overwrite));
+      let selected;
+      if (shouldPrompt) {
+        const prompter = new TerminalIntegrationPrompter();
+        try {
+          selected = await promptForIntegrationInstall({
+            defaults: configuredDefaults,
+            prompter,
+            partial
+          });
+        } finally {
+          prompter.close();
+        }
+      } else {
+        selected = {
+          product: partial.product ?? configuredDefaults.product,
+          scope: partial.scope ?? configuredDefaults.scope,
+          components: partial.components ?? configuredDefaults.components,
+          targetDir: partial.targetDir ?? configuredDefaults.targetDir ?? undefined,
+          mode: partial.mode ?? configuredDefaults.mode
+        };
       }
-      if (options.scope !== "user" && options.scope !== "project") {
+      if (
+        selected.product !== "trae" &&
+        selected.product !== "trae-cn" &&
+        selected.product !== "claude-code"
+      ) {
+        throw new Error("--product must be trae, trae-cn, or claude-code");
+      }
+      if (selected.scope !== "user" && selected.scope !== "project") {
         throw new Error("--scope must be user or project");
       }
-      const components = options.components
-        .split(",")
-        .map((component) => component.trim())
-        .filter(Boolean);
+      if (selected.mode !== "merge" && selected.mode !== "overwrite") {
+        throw new Error("--mode must be merge or overwrite");
+      }
       const allowed = new Set(["hooks", "agents", "skills", "plugin-bundle"]);
-      if (components.some((component) => !allowed.has(component))) {
+      if (selected.components.some((component) => !allowed.has(component))) {
         throw new Error("--components contains an unsupported component");
       }
       const result = await installIntegration({
         packageRoot: findPackageRoot(),
-        product: options.product,
-        scope: options.scope,
-        targetDir: options.targetDir,
-        components: components as Array<"hooks" | "agents" | "skills" | "plugin-bundle">
+        product: selected.product,
+        scope: selected.scope,
+        targetDir: selected.targetDir,
+        components: selected.components,
+        mode: selected.mode
       });
-      console.log(JSON.stringify(result, null, 2));
+      const machineOutput = program.opts<{ json: boolean }>().json || options.debug;
+      console.log(machineOutput ? JSON.stringify(result, null, 2) : formatIntegrationInstallResult(result));
     }
   );
 
@@ -686,8 +745,12 @@ integration
   .option("--scope <scope>", "user or project", "user")
   .option("--target-dir <dir>", "override product config root")
   .action(async (options: { product: string; scope: string; targetDir?: string }) => {
-    if (options.product !== "trae" && options.product !== "claude-code") {
-      throw new Error("--product must be trae or claude-code");
+    if (
+      options.product !== "trae" &&
+      options.product !== "trae-cn" &&
+      options.product !== "claude-code"
+    ) {
+      throw new Error("--product must be trae, trae-cn, or claude-code");
     }
     if (options.scope !== "user" && options.scope !== "project") {
       throw new Error("--scope must be user or project");
@@ -711,8 +774,12 @@ integration
   .option("--scope <scope>", "user or project", "user")
   .option("--target-dir <dir>", "override product config root")
   .action(async (options: { product: string; scope: string; targetDir?: string }) => {
-    if (options.product !== "trae" && options.product !== "claude-code") {
-      throw new Error("--product must be trae or claude-code");
+    if (
+      options.product !== "trae" &&
+      options.product !== "trae-cn" &&
+      options.product !== "claude-code"
+    ) {
+      throw new Error("--product must be trae, trae-cn, or claude-code");
     }
     if (options.scope !== "user" && options.scope !== "project") {
       throw new Error("--scope must be user or project");

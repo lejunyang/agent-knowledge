@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -32,14 +32,38 @@ describe("managed integrations", () => {
     const readerTarget = path.join(targetDir, "agents", "memory-reader.md");
     const writerTarget = path.join(targetDir, "agents", "memory-writer.md");
     const hooksTarget = path.join(targetDir, "hooks.json");
+    const cliHooksTarget = path.join(targetDir, "cli", "hooks.json");
     const skillTarget = path.join(targetDir, "skills", "knowledge-organizer");
 
     expect((await lstat(readerTarget)).isFile()).toBe(true);
     expect((await lstat(writerTarget)).isFile()).toBe(true);
     expect((await lstat(hooksTarget)).isFile()).toBe(true);
+    expect((await lstat(cliHooksTarget)).isFile()).toBe(true);
     expect((await lstat(skillTarget)).isDirectory()).toBe(true);
     expect(result.conflicts).toEqual([]);
     expect(result.managed.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("installs TRAE CN resources under a .trae-cn-style root", async () => {
+    const targetDir = await mkdtemp(path.join(tmpdir(), "agent-knowledge-trae-cn-"));
+    tempDirs.push(targetDir);
+
+    const result = await installIntegration({
+      packageRoot: process.cwd(),
+      product: "trae-cn",
+      scope: "project",
+      targetDir,
+      components: ["hooks", "agents"]
+    });
+
+    expect(result.product).toBe("trae-cn");
+    await expect(readFile(path.join(targetDir, "hooks.json"), "utf8")).resolves.toContain(
+      "agent-knowledge hook"
+    );
+    await expect(readFile(path.join(targetDir, "agents", "memory-reader.md"), "utf8")).resolves.toContain(
+      "memory-reader"
+    );
+    expect(result.managed.map((item) => item.path)).not.toContain(path.join(targetDir, "cli", "hooks.json"));
   });
 
   it("structurally merges hooks and preserves foreign handlers and top-level fields", async () => {
@@ -137,6 +161,34 @@ describe("managed integrations", () => {
     await expect(readFile(path.join(targetDir, "agents", "memory-reader.md"), "utf8")).resolves.toBe("foreign");
   });
 
+  it("overwrites target resources and replaces symlinks when explicitly requested", async () => {
+    const targetDir = await mkdtemp(path.join(tmpdir(), "agent-knowledge-trae-overwrite-"));
+    const externalDir = await mkdtemp(path.join(tmpdir(), "agent-knowledge-trae-external-"));
+    tempDirs.push(targetDir, externalDir);
+    await mkdir(path.join(targetDir, "agents"), { recursive: true });
+    const externalFile = path.join(externalDir, "memory-reader.md");
+    await writeFile(externalFile, "external", "utf8");
+    await symlink(externalFile, path.join(targetDir, "agents", "memory-reader.md"));
+    await writeFile(path.join(targetDir, "hooks.json"), '{"foreign":true}\n', "utf8");
+
+    const result = await installIntegration({
+      packageRoot: process.cwd(),
+      product: "trae",
+      scope: "project",
+      targetDir,
+      components: ["hooks", "agents"],
+      mode: "overwrite"
+    });
+
+    expect(result.conflicts).toEqual([]);
+    expect((await lstat(path.join(targetDir, "agents", "memory-reader.md"))).isSymbolicLink()).toBe(false);
+    await expect(readFile(path.join(targetDir, "agents", "memory-reader.md"), "utf8")).resolves.toContain(
+      "memory-reader"
+    );
+    await expect(readFile(path.join(targetDir, "hooks.json"), "utf8")).resolves.not.toContain('"foreign"');
+    await expect(readFile(externalFile, "utf8")).resolves.toBe("external");
+  });
+
   it("supports Windows TRAE hooks, Claude Code, plugin bundles, and doctor", async () => {
     const windowsTarget = await mkdtemp(path.join(tmpdir(), "agent-knowledge-trae-windows-"));
     const claudeTarget = await mkdtemp(path.join(tmpdir(), "agent-knowledge-claude-"));
@@ -176,6 +228,6 @@ describe("managed integrations", () => {
       targetDir: windowsTarget
     });
     expect(doctor.healthy).toBe(true);
-    expect(listIntegrationProducts().map((product) => product.id)).toEqual(["trae", "claude-code"]);
+    expect(listIntegrationProducts().map((product) => product.id)).toEqual(["trae", "trae-cn", "claude-code"]);
   });
 });

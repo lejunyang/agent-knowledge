@@ -12,9 +12,10 @@ import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:
 import { homedir } from "node:os";
 import path from "node:path";
 
-export type IntegrationProductId = "trae" | "claude-code";
+export type IntegrationProductId = "trae" | "trae-cn" | "claude-code";
 export type IntegrationScope = "user" | "project";
 export type IntegrationComponent = "hooks" | "agents" | "skills" | "plugin-bundle";
+export type IntegrationInstallMode = "merge" | "overwrite";
 
 type JsonObject = Record<string, unknown>;
 
@@ -40,6 +41,7 @@ export type InstallIntegrationOptions = {
   targetDir?: string;
   components?: readonly IntegrationComponent[];
   platform?: NodeJS.Platform;
+  mode?: IntegrationInstallMode;
 };
 
 export type InstallIntegrationResult = {
@@ -90,6 +92,11 @@ const PRODUCTS: IntegrationProduct[] = [
     components: ["hooks", "agents", "skills", "plugin-bundle"]
   },
   {
+    id: "trae-cn",
+    displayName: "TRAE CN",
+    components: ["hooks", "agents", "skills", "plugin-bundle"]
+  },
+  {
     id: "claude-code",
     displayName: "Claude Code",
     components: ["hooks", "agents", "skills"]
@@ -107,11 +114,17 @@ function resolveRoots(
 ): { hooks: string; resources: string } {
   if (targetDir) {
     const resolved = path.resolve(targetDir);
-    return { hooks: resolved, resources: resolved };
+    return {
+      hooks: product === "trae" ? path.join(resolved, "cli") : resolved,
+      resources: resolved
+    };
   }
 
   if (scope === "project") {
-    const root = path.join(process.cwd(), product === "trae" ? ".trae" : ".claude");
+    const root = path.join(
+      process.cwd(),
+      product === "trae" ? ".trae" : product === "trae-cn" ? ".trae-cn" : ".claude"
+    );
     return { hooks: root, resources: root };
   }
 
@@ -119,6 +132,11 @@ function resolveRoots(
     const traeHome = path.resolve(process.env.TRAE_HOME ?? path.join(homedir(), ".trae"));
     const traeCliHome = path.resolve(process.env.TRAECLI_HOME ?? path.join(traeHome, "cli"));
     return { hooks: traeCliHome, resources: traeHome };
+  }
+
+  if (product === "trae-cn") {
+    const root = path.resolve(process.env.TRAE_CN_HOME ?? path.join(homedir(), ".trae-cn"));
+    return { hooks: root, resources: root };
   }
 
   const claudeHome = path.join(homedir(), ".claude");
@@ -270,7 +288,7 @@ function hookTemplatePath(
   product: IntegrationProductId,
   platform: NodeJS.Platform
 ): string {
-  if (product === "trae") {
+  if (product === "trae" || product === "trae-cn") {
     return path.join(packageRoot, "templates", "trae", platform === "win32" ? "hooks.windows.json" : "hooks.json");
   }
   return path.join(
@@ -281,12 +299,25 @@ function hookTemplatePath(
   );
 }
 
-function hookTargetPath(product: IntegrationProductId, roots: { hooks: string }): string {
-  return path.join(roots.hooks, product === "trae" ? "hooks.json" : "settings.json");
+function hookTargetPaths(
+  product: IntegrationProductId,
+  roots: { hooks: string; resources: string }
+): string[] {
+  if (product === "trae") {
+    return [
+      path.join(roots.resources, "hooks.json"),
+      path.join(roots.hooks, "hooks.json")
+    ].filter((value, index, values) => values.indexOf(value) === index);
+  }
+  if (product === "trae-cn") {
+    return [path.join(roots.resources, "hooks.json")];
+  }
+  return [path.join(roots.hooks, "settings.json")];
 }
 
 function agentSourceRoot(packageRoot: string, product: IntegrationProductId): string {
-  const productRoot = path.join(packageRoot, "templates", product, "agents");
+  const templateProduct = product === "trae-cn" ? "trae" : product;
+  const productRoot = path.join(packageRoot, "templates", templateProduct, "agents");
   return existsSync(productRoot) ? productRoot : path.join(packageRoot, "templates", "trae", "agents");
 }
 
@@ -294,13 +325,33 @@ async function copyManagedPath(
   source: string,
   target: string,
   previous: ManagedResource | undefined,
-  kind: "file" | "directory"
+  kind: "file" | "directory",
+  mode: IntegrationInstallMode
 ): Promise<
   | { resource: ManagedResource & { status: "installed" | "updated" | "unchanged" } }
   | { conflict: string }
 > {
   const sourceHash = await hashPath(source);
   if (existsSync(target)) {
+    if (mode === "overwrite") {
+      const currentHash = await hashPath(target);
+      if (currentHash === sourceHash) {
+        return {
+          resource: { path: target, kind, hash: sourceHash, status: "unchanged" }
+        };
+      }
+      await rm(target, { recursive: true, force: true });
+      await mkdir(path.dirname(target), { recursive: true });
+      await cp(source, target, { recursive: kind === "directory" });
+      return {
+        resource: {
+          path: target,
+          kind,
+          hash: sourceHash,
+          status: previous ? "updated" : "installed"
+        }
+      };
+    }
     if (!previous) {
       if ((await hashPath(target)) === sourceHash) {
         return {
@@ -339,6 +390,7 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
     throw new Error(`Unsupported integration product: ${options.product}`);
   }
   const components = [...new Set(options.components ?? DEFAULT_COMPONENTS)];
+  const mode = options.mode ?? "merge";
   for (const component of components) {
     if (!product.components.includes(component)) {
       throw new Error(`${options.product} does not support component: ${component}`);
@@ -353,22 +405,25 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
   const conflicts: string[] = [];
 
   if (components.includes("hooks")) {
-    const target = hookTargetPath(options.product, roots);
-    const existing = await readJsonObject(target);
     const template = await readJsonObject(
       hookTemplatePath(path.resolve(options.packageRoot), options.product, options.platform ?? process.platform)
     );
-    const merged = mergeManagedHooks(existing, template);
-    const content = stableJson(merged);
-    const previous = previousByPath.get(target);
-    const status =
-      existsSync(target) && hashText(await readFile(target, "utf8")) === hashText(content)
-        ? "unchanged"
-        : previous
-          ? "updated"
-          : "installed";
-    await writeAtomic(target, content, true);
-    managed.push({ path: target, kind: "hooks", hash: hashText(content), status });
+    for (const target of hookTargetPaths(options.product, roots)) {
+      const existing = mode === "merge" ? await readJsonObject(target) : {};
+      const content = stableJson(mode === "merge" ? mergeManagedHooks(existing, template) : template);
+      const previous = previousByPath.get(target);
+      const status =
+        existsSync(target) && hashText(await readFile(target, "utf8")) === hashText(content)
+          ? "unchanged"
+          : previous
+            ? "updated"
+            : "installed";
+      if (mode === "overwrite" && existsSync(target)) {
+        await rm(target, { recursive: true, force: true });
+      }
+      await writeAtomic(target, content, mode === "merge");
+      managed.push({ path: target, kind: "hooks", hash: hashText(content), status });
+    }
   }
 
   if (components.includes("agents")) {
@@ -380,7 +435,8 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
         path.join(sourceRoot, entry.name),
         target,
         previousByPath.get(target),
-        "file"
+        "file",
+        mode
       );
       if ("conflict" in outcome) {
         conflicts.push(outcome.conflict);
@@ -400,7 +456,8 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
           path.join(sourceRoot, entry.name),
           target,
           previousByPath.get(target),
-          "directory"
+          "directory",
+          mode
         );
         if ("conflict" in outcome) {
           conflicts.push(outcome.conflict);
@@ -414,7 +471,7 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
   if (components.includes("plugin-bundle")) {
     const source = path.join(path.resolve(options.packageRoot), "templates", "trae", "plugin");
     const target = path.join(roots.resources, "plugins", "agent-knowledge");
-    const outcome = await copyManagedPath(source, target, previousByPath.get(target), "directory");
+    const outcome = await copyManagedPath(source, target, previousByPath.get(target), "directory", mode);
     if ("conflict" in outcome) {
       conflicts.push(outcome.conflict);
     } else {
