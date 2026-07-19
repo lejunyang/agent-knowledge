@@ -12,6 +12,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { ActorTypeSchema, CaptureModeSchema, SensitivitySchema, VisibilitySchema } from "./schema.js";
+import type { LocalePreference } from "../i18n/locale.js";
 
 const EmbeddingProfileSchema = z.enum(["multilingual-e5-small", "bge-small-zh-v1.5"]);
 const IntegrationProductSchema = z.enum(["trae", "trae-cn", "claude-code"]);
@@ -81,6 +82,7 @@ const SyncConfigSchema = z
 
 export const UserConfigSchema = z.object({
   version: z.literal(1).default(1),
+  locale: z.enum(["auto", "zh-CN", "en"]).default("auto"),
   knowledgeRoot: z.string().min(1).default(path.join(homedir(), ".agent_knowledge")),
   identity: IdentityConfigSchema,
   embeddings: EmbeddingsConfigSchema,
@@ -90,6 +92,7 @@ export const UserConfigSchema = z.object({
 
 export type UserConfig = z.output<typeof UserConfigSchema>;
 export type UserConfigInput = z.input<typeof UserConfigSchema>;
+export type UserLocalePreference = LocalePreference;
 
 export const DEFAULT_USER_CONFIG: UserConfig = UserConfigSchema.parse({});
 

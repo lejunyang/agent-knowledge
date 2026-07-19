@@ -67,6 +67,7 @@ describe("user configuration", () => {
     expect(loaded.embeddings.provider).toBe("local");
     expect(loaded.embeddings.profile).toBe(DEFAULT_USER_CONFIG.embeddings.profile);
     expect(loaded.sync.provider).toBe("none");
+    expect(loaded.locale).toBe("auto");
   });
 
   it("normalizes legacy system actor configuration to agent", () => {
@@ -85,6 +86,7 @@ describe("user configuration", () => {
     tempDirs.push(root);
     const configPath = path.join(root, "config.json");
     const prompter = new AnswerPrompter([
+      "auto",
       "/tmp/shared-knowledge",
       "customer",
       "automated_session",
@@ -118,6 +120,7 @@ describe("user configuration", () => {
     const raw = await readFile(configPath, "utf8");
 
     expect(configured.knowledgeRoot).toBe("/tmp/shared-knowledge");
+    expect(configured.locale).toBe("auto");
     expect(configured.identity).toMatchObject({
       actorType: "customer",
       captureMode: "automated_session"

@@ -137,6 +137,7 @@ src/cli.ts            命令行入口和各模块编排
 - 修改代码时优先补充解释“设计意图、兼容性原因、安全边界、失败策略和非显然算法”的注释。不要给直白赋值、简单循环或已经由函数名完整表达的行为添加重复注释。
 - 新增对外 CLI 命令、配置项、同步策略或治理规则时，入口模块应说明优先级、默认值和为什么不能绕过对应边界；复杂模块的文件头注释应说明职责和明确非职责。
 - 用户配置 schema 变化时同步更新 `src/core/config.ts`、配置向导、README、AGENTS 和配置测试；配置不得持久化 secret 值。
+- CLI/Hook 人类文案统一通过 `src/i18n/`；首发支持 `zh-CN` 和 `en`，默认 `auto`，未知系统语言回退中文。JSON 字段、frontmatter key 和知识 ID 不翻译。
 - 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。`related_knowledge` 只有能指向明确已有或同批可生成的知识 ID 时才填写。`project_ids`、`capture_mode`、`actor_type`、`corroboration_count` 用于适用范围和来源治理，旧 Markdown 依赖 schema 默认值保持兼容。
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - active 知识落盘目录必须保留 domain 的层级结构，例如 `bytedance/business/account` 写到 `knowledge/semantic/bytedance/business/account/`，不要压平成 `bytedance-business-account`。

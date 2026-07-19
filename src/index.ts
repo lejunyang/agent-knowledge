@@ -9,6 +9,7 @@ export * from "./core/schema.js";
 export * from "./core/paths.js";
 export * from "./core/logging.js";
 export * from "./core/config.js";
+export * from "./i18n/locale.js";
 export * from "./storage/markdown.js";
 export * from "./storage/workspace.js";
 export * from "./storage/indexer.js";

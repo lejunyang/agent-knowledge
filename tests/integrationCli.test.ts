@@ -62,7 +62,8 @@ describe("integration CLI helpers", () => {
         "hooks,agents",
         "/tmp/project/.trae-cn",
         "overwrite"
-      ])
+      ]),
+      locale: "en"
     });
 
     expect(selected).toEqual({
@@ -94,7 +95,7 @@ describe("integration CLI helpers", () => {
       conflicts: []
     };
 
-    const human = formatIntegrationInstallResult(result);
+    const human = formatIntegrationInstallResult(result, "en");
 
     expect(human).toContain("Installed Agent Knowledge for TRAE");
     expect(human).toContain("/tmp/.trae/hooks.json");
@@ -106,7 +107,8 @@ describe("integration CLI helpers", () => {
 
     await promptForIntegrationInstall({
       defaults: DEFAULT_USER_CONFIG.integration,
-      prompter
+      prompter,
+      locale: "en"
     });
 
     expect(prompter.calls).toContain("select:Product");

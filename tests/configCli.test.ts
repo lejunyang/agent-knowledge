@@ -63,4 +63,20 @@ describe("CLI user configuration", () => {
     expect(printedPath).toBe(configPath);
     expect(printedConfig.integration.product).toBe("trae-cn");
   });
+
+  it("renders Chinese help by default and English help with a manual override", async () => {
+    const chinese = await runCli(["--help"], {
+      LANG: "fr_FR.UTF-8",
+      LC_ALL: "",
+      LC_MESSAGES: ""
+    });
+    const english = await runCli(["--locale", "en", "--help"], {
+      LANG: "zh_CN.UTF-8"
+    });
+
+    expect(chinese).toContain("本地、可读、可审计的 Agent 知识工具");
+    expect(chinese).toContain("交互式配置");
+    expect(english).toContain("Local human-readable memory toolkit for agents");
+    expect(english).toContain("Interactively configure");
+  });
 });

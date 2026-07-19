@@ -61,6 +61,7 @@ agent-knowledge query --task "审查 Vue SFC lint 迁移方案"
 ```bash
 # 配置
 agent-knowledge configure
+agent-knowledge --locale en --help
 agent-knowledge config show
 agent-knowledge config path
 

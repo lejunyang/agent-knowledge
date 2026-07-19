@@ -52,7 +52,10 @@ import {
   loadUserConfig,
   writeCandidateMemory,
   type CandidateMemoryInput,
-  type UserConfig
+  type UserConfig,
+  resolveLocale,
+  translate,
+  type SupportedLocale
 } from "./index.js";
 import { getDefaultKnowledgeRoot } from "./core/paths.js";
 import { getGitRuntimeContext, type GitRuntimeContext } from "./hooks/gitContext.js";
@@ -67,18 +70,37 @@ import {
   TerminalIntegrationPrompter
 } from "./cli/integration.js";
 
+function readArgValue(name: string): string | undefined {
+  const direct = process.argv.find((argument) => argument.startsWith(`${name}=`));
+  if (direct) {
+    return direct.slice(name.length + 1);
+  }
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+const startupConfigPath = path.resolve(
+  readArgValue("--config") ?? getDefaultUserConfigPath()
+);
+const startupConfig = loadUserConfig(startupConfigPath);
+const locale: SupportedLocale = resolveLocale({
+  explicit: readArgValue("--locale"),
+  configured: startupConfig.locale
+});
+const t = (chinese: string, english: string): string => translate(locale, chinese, english);
+
 const program = new Command();
 
 program
   .name("agent-knowledge")
-  .description("Local human-readable memory toolkit for agents")
+  .description(t("本地、可读、可审计的 Agent 知识工具", "Local human-readable memory toolkit for agents"))
   .version("0.1.0")
-  .option("--config <file>", "user config file; defaults to ~/.config/agent-knowledge/config.json")
-  .option("--json", "emit machine-readable JSON for commands that support human output", false);
+  .option("--config <file>", t("用户配置文件；默认 ~/.config/agent-knowledge/config.json", "user config file; defaults to ~/.config/agent-knowledge/config.json"))
+  .option("--locale <locale>", t("界面语言：auto、zh-CN 或 en", "UI language: auto, zh-CN, or en"))
+  .option("--json", t("对支持的命令输出机器可读 JSON", "emit machine-readable JSON for commands that support human output"), false);
 
 function resolveConfigPath(): string {
-  const option = program.opts<{ config?: string }>().config;
-  return option ? path.resolve(option) : getDefaultUserConfigPath();
+  return startupConfigPath;
 }
 
 function userConfig(): UserConfig {
@@ -184,7 +206,7 @@ async function readHookInput(): Promise<Record<string, unknown>> {
 
 program
   .command("configure")
-  .description("Interactively configure Agent Knowledge defaults")
+  .description(t("交互式配置 Agent Knowledge 默认设置", "Interactively configure Agent Knowledge defaults"))
   .action(async () => {
     const configPath = resolveConfigPath();
     const prompter = new TerminalConfigurationPrompter();
@@ -192,18 +214,24 @@ program
       const configured = await runConfigurationWizard({
         configPath,
         prompter,
-        current: loadUserConfig(configPath)
+        current: loadUserConfig(configPath),
+        locale
       });
-      console.log(`Saved Agent Knowledge configuration to ${configPath}`);
+      console.log(t(`已保存 Agent Knowledge 配置：${configPath}`, `Saved Agent Knowledge configuration to ${configPath}`));
       console.log(
-        `Knowledge root: ${configured.knowledgeRoot}; actor: ${configured.identity.actorType}; sync: ${configured.sync.provider}`
+        t(
+          `知识库：${configured.knowledgeRoot}；身份：${configured.identity.actorType}；同步：${configured.sync.provider}`,
+          `Knowledge root: ${configured.knowledgeRoot}; actor: ${configured.identity.actorType}; sync: ${configured.sync.provider}`
+        )
       );
     } finally {
       prompter.close();
     }
   });
 
-const configCommand = program.command("config").description("Inspect the active user configuration");
+const configCommand = program
+  .command("config")
+  .description(t("查看当前用户配置", "Inspect the active user configuration"));
 
 configCommand.command("path").action(() => {
   console.log(resolveConfigPath());
@@ -234,7 +262,8 @@ function formatRuntimeContext(context: GitRuntimeContext): string {
 
 program
   .command("init")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .description(t("初始化知识库目录", "Initialize a knowledge workspace"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { root?: string }) => {
     const root = resolveCliRoot(options.root);
     await initKnowledgeWorkspace(root);
@@ -243,7 +272,8 @@ program
 
 program
   .command("index")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .description(t("从 Markdown 重建检索索引", "Rebuild the retrieval index from Markdown"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action((options: { root?: string }) => {
     const result = rebuildIndex(resolveCliRoot(options.root));
     console.log(JSON.stringify(result, null, 2));
@@ -251,12 +281,12 @@ program
 
 program
   .command("embed-index")
-  .description("Build .memory/embeddings/index.jsonl from active Markdown knowledge")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--provider <provider>", "transformers or local; defaults to user config")
-  .option("--profile <profile>", "embedding profile: multilingual-e5-small or bge-small-zh-v1.5")
-  .option("--model <model>", "Transformers.js model id or local model path")
-  .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
+  .description(t("为 active Markdown 构建本地 Embedding 缓存", "Build local embeddings for active Markdown knowledge"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--provider <provider>", t("transformers 或 local；默认读取用户配置", "transformers or local; defaults to user config"))
+  .option("--profile <profile>", t("Embedding 配置：multilingual-e5-small 或 bge-small-zh-v1.5", "embedding profile: multilingual-e5-small or bge-small-zh-v1.5"))
+  .option("--model <model>", t("Transformers.js 模型 ID 或本地路径", "Transformers.js model id or local model path"))
+  .option("--allow-remote-models", t("允许 Transformers.js 下载远程模型；默认关闭", "allow Transformers.js to download remote models; disabled by default"), false)
   .action(async (options: {
     root?: string;
     provider?: string;
@@ -284,9 +314,9 @@ program
 
 program
   .command("eval")
-  .description("Run a retrieval eval suite from YAML")
-  .requiredOption("--input <file>", "eval YAML containing one case or a cases array")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .description(t("运行 YAML 检索评测集", "Run a retrieval eval suite from YAML"))
+  .requiredOption("--input <file>", t("包含单个 case 或 cases 数组的评测 YAML", "eval YAML containing one case or a cases array"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { input: string; root?: string }) => {
     const root = resolveCliRoot(options.root);
     rebuildIndex(root);
@@ -296,7 +326,7 @@ program
 
 program
   .command("suggest-aliases")
-  .description("Dry-run alias suggestions using embeddings, logs, and Markdown docs")
+  .description(t("根据 Embedding、日志和 Markdown 生成别名建议（dry-run）", "Dry-run alias suggestions using embeddings, logs, and Markdown docs"))
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
   .option("--provider <provider>", "transformers or local; defaults to user config")
   .option("--model <model>", "Transformers.js model id or local model path")
@@ -334,16 +364,17 @@ program
 
 program
   .command("query")
-  .requiredOption("--task <task>", "task text")
-  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--domain <domain...>", "domains")
-  .option("--scenario <scenario...>", "scenarios")
-  .option("--visibility <scope...>", "allowed visibility scopes: private, project, team")
-  .option("--sensitivity-clearance <level>", "public, internal, confidential, or secret")
+  .description(t("查询与当前任务相关的知识上下文", "Query knowledge relevant to the current task"))
+  .requiredOption("--task <task>", t("当前任务文本", "task text"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--domain <domain...>", t("领域过滤", "domains"))
+  .option("--scenario <scenario...>", t("场景过滤", "scenarios"))
+  .option("--visibility <scope...>", t("允许的可见范围：private、project、team", "allowed visibility scopes: private, project, team"))
+  .option("--sensitivity-clearance <level>", t("敏感级别权限：public、internal、confidential、secret", "public, internal, confidential, or secret"))
   .option("--project-id <id...>", "allowed project IDs")
   .option("--agent-role <role>", "agent role", "main")
-  .option("--debug", "include retrieval debug details in JSON output", false)
-  .option("--retrieval <mode>", "lexical or hybrid; defaults to user config")
+  .option("--debug", t("在 JSON 中包含检索调试信息", "include retrieval debug details in JSON output"), false)
+  .option("--retrieval <mode>", t("lexical 或 hybrid；默认读取用户配置", "lexical or hybrid; defaults to user config"))
   .option("--provider <provider>", "embedding provider for hybrid retrieval: transformers or local")
   .option("--profile <profile>", "embedding profile: multilingual-e5-small or bge-small-zh-v1.5")
   .option("--model <model>", "Transformers.js model id or local model path for hybrid retrieval")
@@ -410,7 +441,7 @@ program
 
 program
   .command("feedback")
-  .description("Log whether a retrieved memory was useful without modifying Markdown facts")
+  .description(t("记录检索知识是否有用，不修改 Markdown 事实", "Log whether a retrieved memory was useful without modifying Markdown facts"))
   .requiredOption("--memory-id <id>", "knowledge id shown in query output")
   .requiredOption("--usefulness <value>", "one of: useful, not_useful, neutral")
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
@@ -439,7 +470,7 @@ program
 
 program
   .command("catalog")
-  .description("Build a knowledge catalog and optionally refresh knowledge/_catalog.md")
+  .description(t("生成知识目录并可选刷新 knowledge/_catalog.md", "Build a knowledge catalog and optionally refresh knowledge/_catalog.md"))
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
   .option("--no-write", "print catalog JSON without rewriting knowledge/_catalog.md")
   .action(async (options: { root?: string; write: boolean }) => {
@@ -459,7 +490,7 @@ program
 
 program
   .command("list")
-  .description("Summarize knowledge files, statuses, domains, and inbox items")
+  .description(t("汇总知识文件、状态、领域和 inbox", "Summarize knowledge files, statuses, domains, and inbox items"))
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
   .action(async (options: { root?: string }) => {
     const result = await listKnowledge(resolveCliRoot(options.root));
@@ -468,7 +499,7 @@ program
 
 program
   .command("organize-inbox")
-  .description("Plan or apply promotion of knowledge/_inbox Markdown files into typed active directories")
+  .description(t("预览或应用 inbox 知识晋升", "Plan or apply promotion of inbox Markdown into active directories"))
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
   .option("--apply", "move files and activate them; defaults to dry-run", false)
   .option("--no-rebuild", "skip index rebuild after applying changes")
@@ -482,7 +513,7 @@ program
 
 program
   .command("capture-material")
-  .description("Write user-provided, skill-structured material into active knowledge or inbox")
+  .description(t("把用户材料写入 active 知识或 inbox", "Write user-provided material into active knowledge or inbox"))
   .requiredOption("--input <file>", "JSON file containing one candidate object or an array of candidates")
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
   .option("--target <target>", "active or inbox", "active")
@@ -502,7 +533,7 @@ program
 
 program
   .command("sync")
-  .description("Synchronize Markdown knowledge with WebDAV or S3");
+  .description(t("通过 WebDAV 或 S3 同步 Markdown 知识", "Synchronize Markdown knowledge with WebDAV or S3"));
 
 const sync = program.commands.find((command) => command.name() === "sync")!;
 
@@ -518,7 +549,7 @@ function configuredSyncPolicy(config: UserConfig["sync"]): {
 
 sync
   .command("run")
-  .description("Run one synchronization using the user config")
+  .description(t("按用户配置执行一次同步", "Run one synchronization using the user config"))
   .option("--root <dir>", "workspace root override")
   .option("--json", "emit the full JSON result", false)
   .action(async (options: { root?: string; json: boolean }) => {
@@ -533,13 +564,16 @@ sync
     console.log(
       machineOutput
         ? JSON.stringify(result, null, 2)
-        : `Sync completed: ${result.pushed.length} pushed, ${result.pulled.length} pulled, ${result.conflicts.length} conflicts.`
+        : t(
+            `同步完成：推送 ${result.pushed.length}，拉取 ${result.pulled.length}，冲突 ${result.conflicts.length}。`,
+            `Sync completed: ${result.pushed.length} pushed, ${result.pulled.length} pulled, ${result.conflicts.length} conflicts.`
+          )
     );
   });
 
 sync
   .command("watch")
-  .description("Run synchronization immediately and repeat at a configured interval")
+  .description(t("立即同步并按配置间隔持续运行", "Run synchronization immediately and repeat at a configured interval"))
   .option("--root <dir>", "workspace root override")
   .option("--interval-minutes <minutes>", "override the configured sync interval")
   .action(async (options: { root?: string; intervalMinutes?: string }) => {
@@ -552,9 +586,10 @@ sync
     const stop = (): void => controller.abort();
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
-    console.log(
+    console.log(t(
+      `开始定时 ${configuredSync.provider} 同步，每 ${intervalMinutes} 分钟执行一次。按 Ctrl+C 停止。`,
       `Starting scheduled ${configuredSync.provider} sync every ${intervalMinutes} minute(s). Press Ctrl+C to stop.`
-    );
+    ));
     await runScheduledSync({
       intervalMinutes,
       signal: controller.signal,
@@ -694,7 +729,7 @@ staging
 
 program
   .command("project")
-  .description("Detect and register the current Git project");
+  .description(t("检测并注册当前 Git 项目", "Detect and register the current Git project"));
 
 const project = program.commands.find((command) => command.name() === "project")!;
 
@@ -708,13 +743,13 @@ project
 
 program
   .command("integration")
-  .description("Manage Agent Knowledge integrations for supported agent products");
+  .description(t("管理 Agent Knowledge 产品接入", "Manage Agent Knowledge integrations for supported products"));
 
 const integration = program.commands.find((command) => command.name() === "integration")!;
 
 integration
   .command("list")
-  .description("List supported products and optional components")
+  .description(t("列出支持的产品和可选组件", "List supported products and optional components"))
   .action(() => {
     console.log(JSON.stringify({ products: listIntegrationProducts() }, null, 2));
   });
@@ -767,7 +802,8 @@ integration
           selected = await promptForIntegrationInstall({
             defaults: configuredDefaults,
             prompter,
-            partial
+            partial,
+            locale
           });
         } finally {
           prompter.close();
@@ -807,7 +843,7 @@ integration
         mode: selected.mode
       });
       const machineOutput = program.opts<{ json: boolean }>().json || options.debug;
-      console.log(machineOutput ? JSON.stringify(result, null, 2) : formatIntegrationInstallResult(result));
+      console.log(machineOutput ? JSON.stringify(result, null, 2) : formatIntegrationInstallResult(result, locale));
     }
   );
 

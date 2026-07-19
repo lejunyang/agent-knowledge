@@ -27,6 +27,7 @@ agent-knowledge configure
 
 | 配置 | 默认值 | 用途 |
 | --- | --- | --- |
+| `locale` | `auto` | `auto` 检测系统语言；支持 `zh-CN` 和 `en`，其他语言回退中文 |
 | `knowledgeRoot` | `~/.agent_knowledge` | Markdown、索引、缓存和日志的 workspace root |
 | `identity.actorType` | `owner` | 控制写入来源权威性 |
 | `identity.captureMode` | `direct_material` | 控制自动内容是否必须审阅 |
@@ -43,6 +44,15 @@ agent-knowledge configure
 配置只保存凭据环境变量名，不保存 secret 值。
 
 `actorType` 可选 `owner`、`teammate`、`customer`、`agent`。其中 `agent` 表示 AI Agent 或自动化服务；旧配置中的 `system` 会自动兼容为 `agent`。
+
+语言优先级是全局 `--locale` > 用户配置 > `LC_ALL` / `LC_MESSAGES` / `LANG` > 系统 locale。默认和未知系统语言都使用中文说明。
+
+敏感级别：
+
+- `public`：允许公开传播。
+- `internal`：组织或项目内部内容，默认权限。
+- `confidential`：仅授权成员可见的敏感业务信息。
+- `secret`：最高敏感级别；凭据、密钥等 secret-like 原文仍禁止写入知识库。
 
 ```bash
 agent-knowledge config show
