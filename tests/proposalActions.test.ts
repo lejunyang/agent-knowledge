@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   acceptMaintenanceProposal,
+  installAcceptedSkillProposal,
   rejectMaintenanceProposal,
   showMaintenanceProposal
 } from "../src/memory/proposalActions.js";
@@ -93,15 +94,24 @@ describe("proposal actions", () => {
     const inbox = await acceptMaintenanceProposal(root, "proposal_skill", {});
     expect(inbox.skillPath).toContain("knowledge/_inbox-skills/proposal_skill/SKILL.md");
 
-    await writeMaintenanceProposal(root, { ...proposal, status: "pending", updatedAt: "2026-07-19T00:01:00.000Z" });
-    const projectResult = await acceptMaintenanceProposal(root, "proposal_skill", {
+    const projectResult = await installAcceptedSkillProposal(
+      root,
+      "proposal_skill",
+      {
       skillTarget: "project",
       projectRoot: project
-    });
+      }
+    );
     expect(projectResult.skillPath).toBe(path.join(project, ".trae", "skills", "release-validation", "SKILL.md"));
 
-    await writeMaintenanceProposal(root, { ...proposal, status: "pending", updatedAt: "2026-07-19T00:02:00.000Z" });
-    const userResult = await acceptMaintenanceProposal(root, "proposal_skill", {
+    await writeMaintenanceProposal(root, {
+      ...proposal,
+      id: "proposal_skill_user",
+      status: "pending",
+      updatedAt: "2026-07-19T00:02:00.000Z"
+    });
+    await acceptMaintenanceProposal(root, "proposal_skill_user", {});
+    const userResult = await installAcceptedSkillProposal(root, "proposal_skill_user", {
       skillTarget: "user",
       traeHome: userHome
     });
@@ -146,5 +156,56 @@ describe("proposal actions", () => {
     expect(rejected.status).toBe("rejected");
     expect(rejected.resolution).toBe("Not reusable");
     await expect(stat(existing)).resolves.toBeDefined();
+  });
+
+  it("installs only accepted Skill proposals and still refuses existing targets", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-proposal-install-"));
+    const project = await mkdtemp(path.join(tmpdir(), "agent-knowledge-proposal-install-project-"));
+    tempDirs.push(root, project);
+    await writeMaintenanceProposal(root, {
+      version: 1,
+      id: "proposal_install",
+      type: "skill",
+      status: "pending",
+      createdAt: "2026-07-19T00:00:00.000Z",
+      updatedAt: "2026-07-19T00:00:00.000Z",
+      domain: "delivery/release",
+      title: "Release validation",
+      observationIds: ["obs-1", "obs-2", "obs-3"],
+      targetMemoryIds: [],
+      reason: "verified",
+      proposedSummary: "Run tests.",
+      skillDraft: "---\nname: release-validation\ndescription: Validate\n---\n"
+    });
+
+    await expect(
+      installAcceptedSkillProposal(root, "proposal_install", {
+        skillTarget: "project",
+        projectRoot: project
+      })
+    ).rejects.toThrow("must be accepted");
+
+    await acceptMaintenanceProposal(root, "proposal_install", {});
+    const target = path.join(
+      project,
+      ".trae",
+      "skills",
+      "release-validation",
+      "SKILL.md"
+    );
+    await writeFile(target, "existing", { encoding: "utf8", flag: "w" }).catch(
+      async () => {
+        const { mkdir } = await import("node:fs/promises");
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, "existing", "utf8");
+      }
+    );
+
+    await expect(
+      installAcceptedSkillProposal(root, "proposal_install", {
+        skillTarget: "project",
+        projectRoot: project
+      })
+    ).rejects.toThrow("Refusing to overwrite");
   });
 });

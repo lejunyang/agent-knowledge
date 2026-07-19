@@ -97,6 +97,41 @@ export async function acceptMaintenanceProposal(
   return { proposalId, status: "accepted", candidatePath, skillPath };
 }
 
+/**
+ * Installs a previously accepted Skill proposal after the user has reviewed its inbox draft.
+ *
+ * This second phase keeps proposal acceptance and external Skill writes separate. The installation
+ * target is always explicit, and the same no-overwrite boundary used by one-step acceptance applies.
+ */
+export async function installAcceptedSkillProposal(
+  rootDir: string,
+  proposalId: string,
+  options: {
+    skillTarget: "project" | "user";
+    projectRoot?: string;
+    traeHome?: string;
+  }
+): Promise<ProposalActionResult> {
+  const proposal = await showMaintenanceProposal(rootDir, proposalId);
+  if (proposal.type !== "skill") {
+    throw new Error(`Proposal is not a Skill proposal: ${proposalId}`);
+  }
+  if (proposal.status !== "accepted") {
+    throw new Error(`Skill proposal must be accepted before installation: ${proposalId}`);
+  }
+  if (!proposal.skillDraft) {
+    throw new Error(`Skill proposal has no draft: ${proposalId}`);
+  }
+  const skillPath = await writeSkillDraft(rootDir, proposal, options);
+  await writeMaintenanceProposal(rootDir, {
+    ...proposal,
+    updatedAt: new Date().toISOString(),
+    resolution: "accepted_and_installed",
+    skillPath
+  });
+  return { proposalId, status: "accepted", skillPath };
+}
+
 /** Marks a pending proposal rejected while preserving its evidence and draft. */
 export async function rejectMaintenanceProposal(
   rootDir: string,

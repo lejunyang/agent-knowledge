@@ -34,6 +34,7 @@ import {
   getRetrievalModelStatus,
   getObservationStatus,
   getSubagentLogStatus,
+  installAcceptedSkillProposal,
   embedKnowledgeIndex,
   loadEvalSuite,
   loadEvalCorpus,
@@ -1118,6 +1119,49 @@ maintenance
           projectRoot: options.projectRoot,
           traeHome: process.env.TRAE_HOME
         }),
+        null,
+        2
+      )
+    );
+  });
+
+maintenance
+  .command("install-skill")
+  .description(
+    t(
+      "把已接受并审阅的 Skill proposal 安装到项目或用户目录",
+      "Install an accepted and reviewed Skill proposal to a project or user directory"
+    )
+  )
+  .argument("<proposal-id>", t("Proposal ID", "Proposal ID"))
+  .requiredOption(
+    "--skill-target <target>",
+    t("Skill 目标：project 或 user", "Skill target: project or user")
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--project-root <dir>", t("项目根目录覆盖", "project root override"))
+  .action(async (
+    proposalId: string,
+    options: {
+      root?: string;
+      skillTarget: string;
+      projectRoot?: string;
+    }
+  ) => {
+    if (options.skillTarget !== "project" && options.skillTarget !== "user") {
+      throw new Error(t("未知 Skill 目标", "Unknown Skill target"));
+    }
+    console.log(
+      JSON.stringify(
+        await installAcceptedSkillProposal(
+          resolveCliRoot(options.root),
+          proposalId,
+          {
+            skillTarget: options.skillTarget,
+            projectRoot: options.projectRoot,
+            traeHome: process.env.TRAE_HOME
+          }
+        ),
         null,
         2
       )
