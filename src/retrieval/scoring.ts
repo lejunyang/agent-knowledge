@@ -47,6 +47,7 @@ export const DEFAULT_RERANK_WEIGHTS = {
   rrfScore: 0.25
 } as const;
 
+/** 把非有限值和越界特征分数收敛到 0-1，防止污染最终排序。 */
 function clampScore(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
@@ -54,6 +55,7 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+/** 为无模型 deterministic scorer 提取稳定词项。 */
 function tokenizeForLocalEmbedding(input: string): string[] {
   return input
     .toLowerCase()
@@ -62,6 +64,7 @@ function tokenizeForLocalEmbedding(input: string): string[] {
     .filter((token) => token.length >= 2);
 }
 
+/** 把多个字段按权重累积成稀疏词项向量。 */
 function toWeightedVector(weightedTexts: Array<{ text: string; weight: number }>): Map<string, number> {
   const vector = new Map<string, number>();
 
@@ -74,6 +77,7 @@ function toWeightedVector(weightedTexts: Array<{ text: string; weight: number }>
   return vector;
 }
 
+/** 计算两个稀疏词项向量 cosine；任一为空时返回 0。 */
 function cosineSimilarity(left: Map<string, number>, right: Map<string, number>): number {
   let dot = 0;
   let leftNorm = 0;
@@ -104,6 +108,7 @@ function cosineSimilarity(left: Map<string, number>, right: Map<string, number>)
 export class DefaultLocalEmbeddingScorer implements EmbeddingScorer {
   readonly name = "default-local-token-cosine";
 
+  /** 对 request/document 多字段构造加权词项向量并计算确定性 cosine。 */
   score(input: EmbeddingScoreInput): number {
     const requestVector = toWeightedVector([
       { text: input.request.task, weight: 1 },
@@ -125,9 +130,15 @@ export class DefaultLocalEmbeddingScorer implements EmbeddingScorer {
   }
 }
 
+/**
+ * 使用固定权重融合 lexical、embedding、metadata、authority、relation 和 RRF 特征。
+ *
+ * 这是无模型的稳定默认排序边界，不替代显式 `--rerank` 使用的 cross-encoder。
+ */
 export class DefaultMemoryReranker implements MemoryReranker {
   readonly name = "default-weighted-linear";
 
+  /** 按固定公开权重融合全部 feature，并把结果限制到 0-1。 */
   rerank(input: RerankInput): number {
     const features = input.features;
     return clampScore(

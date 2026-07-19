@@ -27,6 +27,11 @@ export type MemoryFeedbackResult = {
   usefulness: MemoryUsefulness;
 };
 
+/**
+ * 记录某条检索知识的有用性反馈，不修改 Markdown 事实或即时影响排序。
+ *
+ * 日志供后续阈值校准和维护诊断使用，避免单次负反馈直接删除长期知识。
+ */
 export function logMemoryFeedback(rootDir: string, rawInput: unknown): MemoryFeedbackResult {
   const input = MemoryFeedbackInputSchema.parse(rawInput);
   const logPath = appendJsonlLog(rootDir, {

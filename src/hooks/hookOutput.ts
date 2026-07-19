@@ -1,5 +1,6 @@
 import type { KnowledgeCatalog } from "../storage/catalog.js";
 
+/** 返回宿主要求的上下文 envelope；空内容返回 null，保证静默 Hook 不产生 stdout。 */
 export function hookContextJson(
   hookEventName: "SessionStart" | "UserPromptSubmit",
   additionalContext: string
@@ -15,6 +16,7 @@ export function hookContextJson(
   };
 }
 
+/** 生成只含聚合统计的 catalog，刻意省略词表和具体知识条目。 */
 export function coarseCatalogForHook(catalog: KnowledgeCatalog): Record<string, unknown> {
   return {
     total: catalog.total,
@@ -25,6 +27,7 @@ export function coarseCatalogForHook(catalog: KnowledgeCatalog): Record<string, 
   };
 }
 
+/** 生成有数量上限的详细 catalog，只供显式浏览和诊断使用。 */
 export function compactCatalogForHook(catalog: KnowledgeCatalog): Record<string, unknown> {
   return {
     ...coarseCatalogForHook(catalog),

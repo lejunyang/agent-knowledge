@@ -20,11 +20,17 @@ export type AppendJsonlLogOptions = {
   strict?: boolean;
 };
 
+/** 解析可重建 `.memory` 目录中的每日 append-only 运行日志路径。 */
 export function getLogFilePath(rootDir: string, date = new Date()): string {
   const day = date.toISOString().slice(0, 10);
   return resolveWorkspacePath(rootDir, ".memory", "logs", `${day}.jsonl`);
 }
 
+/**
+ * 追加一条运行事件，默认不阻塞主 Agent 路径。
+ *
+ * 只有“丢失审计记录比操作失败更危险”时才启用 `strict`；Hook 和检索通常优先选择优雅降级。
+ */
 export function appendJsonlLog(rootDir: string, event: MemoryLogEvent, options: AppendJsonlLogOptions = {}): string {
   const logPath = getLogFilePath(rootDir);
   try {

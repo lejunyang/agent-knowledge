@@ -1,10 +1,10 @@
-/** Deterministic graph exports for machines and lightweight human inspection. */
+/** 为机器消费和轻量人工检查提供确定性 graph 导出。 */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { KnowledgeGraph } from "./types.js";
 import { renderKnowledgeGraphHtml } from "./html.js";
 
-/** Exports JSON or Mermaid to a caller-selected path. */
+/** 按调用方选择导出 JSON、Mermaid 或自包含 HTML，并覆盖指定输出文件。 */
 export async function exportKnowledgeGraph(
   graph: KnowledgeGraph,
   options: { format: "json" | "mermaid" | "html"; output: string }
@@ -19,7 +19,7 @@ export async function exportKnowledgeGraph(
   await writeFile(path.resolve(options.output), content, "utf8");
 }
 
-/** Renders a stable Mermaid flowchart with sanitized labels. */
+/** 生成稳定 Mermaid flowchart，并为节点分配与原始 ID 解耦的安全标识。 */
 function renderMermaid(graph: KnowledgeGraph): string {
   const nodeIds = new Map(
     graph.nodes.map((node, index) => [node.id, `n${index + 1}`])
@@ -39,7 +39,7 @@ function renderMermaid(graph: KnowledgeGraph): string {
   return lines.join("\n");
 }
 
-/** Escapes text used inside Mermaid quoted labels. */
+/** 转义 Mermaid 引号 label，避免反斜杠、引号和换行破坏语法。 */
 function escapeLabel(input: string): string {
   return input.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ");
 }

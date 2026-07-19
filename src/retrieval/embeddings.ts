@@ -145,6 +145,7 @@ const EMBEDDINGS_DIR = [".memory", "embeddings"] as const;
 const EMBEDDINGS_FILE = "index.jsonl";
 const MANIFEST_FILE = "manifest.json";
 
+/** 为确定性测试 provider 和 alias 候选提取稳定词项。 */
 function tokenize(input: string): string[] {
   return [
     ...new Set(
@@ -157,6 +158,7 @@ function tokenize(input: string): string[] {
   ];
 }
 
+/** 清理 alias 外围符号和重复空白，保留人类可读形式。 */
 function normalizeAlias(input: string): string {
   return input
     .trim()
@@ -164,10 +166,12 @@ function normalizeAlias(input: string): string {
     .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
 }
 
+/** 生成 alias/domain 去重使用的大小写和分隔符无关表示。 */
 function normalizeForCompare(input: string): string {
   return normalizeAlias(input).toLowerCase().replace(/[_\s]+/g, "-").replace(/-+/g, "-");
 }
 
+/** 对向量做 L2 normalization；零向量保持全零，避免除零。 */
 function l2Normalize(vector: number[]): number[] {
   const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
   if (norm === 0) {
@@ -176,6 +180,7 @@ function l2Normalize(vector: number[]): number[] {
   return vector.map((value) => value / norm);
 }
 
+/** 计算向量 cosine；正式查询会在调用前执行更严格的维度校验。 */
 function cosineSimilarity(left: number[], right: number[]): number {
   const length = Math.min(left.length, right.length);
   let dot = 0;
@@ -196,10 +201,12 @@ function cosineSimilarity(left: number[], right: number[]): number {
   return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
 }
 
+/** 计算知识 embedding 文本的 contentHash，用于增量复用。 */
 function stableHash(input: string): string {
   return createHash("sha256").update(input).digest("hex");
 }
 
+/** 按稳定字段顺序拼接 document 文本，保证相同事实生成相同 contentHash。 */
 function documentEmbeddingText(document: KnowledgeDocument): string {
   const frontmatter = document.frontmatter;
   return [
@@ -216,6 +223,7 @@ function documentEmbeddingText(document: KnowledgeDocument): string {
     .join("\n");
 }
 
+/** 把知识、provider 元数据和向量组合成可审计 JSONL 缓存记录。 */
 function toEmbeddingRecord(document: KnowledgeDocument, provider: EmbeddingProvider, vector: number[]): EmbeddingJsonlRecord {
   const frontmatter = document.frontmatter;
   const text = documentEmbeddingText(document);
@@ -240,6 +248,7 @@ function toEmbeddingRecord(document: KnowledgeDocument, provider: EmbeddingProvi
   };
 }
 
+/** 解析 JSONL 缓存；损坏行会明确失败，不能静默丢失向量记录。 */
 function parseJsonlRecords(text: string): EmbeddingJsonlRecord[] {
   return text
     .split("\n")
@@ -249,6 +258,7 @@ function parseJsonlRecords(text: string): EmbeddingJsonlRecord[] {
     .filter((record) => record.kind === "document" && Array.isArray(record.vector));
 }
 
+/** 只加载正式目录中的 active Markdown，并按路径硬排除 inbox/archive。 */
 async function loadActiveDocuments(rootDir: string): Promise<KnowledgeDocument[]> {
   const files = await discoverKnowledgeFiles(rootDir);
   const documents: KnowledgeDocument[] = [];
@@ -263,6 +273,7 @@ async function loadActiveDocuments(rootDir: string): Promise<KnowledgeDocument[]
   return documents;
 }
 
+/** 从 query/feedback 日志提取与知识 ID 关联的真实用户词项，作为 alias 建议证据。 */
 function extractLogTerms(rootDir: string): Map<string, Set<string>> {
   const logsDir = resolveWorkspacePath(rootDir, ".memory", "logs");
   const termsByMemory = new Map<string, Set<string>>();
@@ -308,6 +319,7 @@ function extractLogTerms(rootDir: string): Map<string, Set<string>> {
   return termsByMemory;
 }
 
+/** 汇总标题、场景、domain 和日志词项，并保留每个 alias 候选的来源理由。 */
 function candidateTermsForDocument(document: KnowledgeDocument, logTerms: Set<string> | undefined): Map<string, Set<string>> {
   const frontmatter = document.frontmatter;
   const candidates = new Map<string, Set<string>>();
@@ -340,6 +352,7 @@ function candidateTermsForDocument(document: KnowledgeDocument, logTerms: Set<st
   return candidates;
 }
 
+/** 收集知识已有规范词项，避免 alias 建议重复 title/domain/scenario/tag。 */
 function existingTerms(document: KnowledgeDocument): Set<string> {
   const frontmatter = document.frontmatter;
   return new Set(
@@ -354,14 +367,17 @@ function existingTerms(document: KnowledgeDocument): Set<string> {
   );
 }
 
+/** 返回可重建 embedding JSONL 缓存路径。 */
 export function getEmbeddingsJsonlPath(rootDir: string): string {
   return resolveWorkspacePath(rootDir, ...EMBEDDINGS_DIR, EMBEDDINGS_FILE);
 }
 
+/** 返回 embedding profile/generation manifest 路径。 */
 export function getEmbeddingsManifestPath(rootDir: string): string {
   return resolveWorkspacePath(rootDir, ...EMBEDDINGS_DIR, MANIFEST_FILE);
 }
 
+/** 把任意 provider 归一化为可持久化、可比较的完整 profile。 */
 function profileForProvider(provider: EmbeddingProvider, dimensions = provider.dimensions): EmbeddingProfile {
   return {
     id: provider.profile?.id ?? `${provider.name}:${provider.model}`,
@@ -378,6 +394,7 @@ function profileForProvider(provider: EmbeddingProvider, dimensions = provider.d
   };
 }
 
+/** 比较所有影响向量语义空间的 profile 字段；未知维度只用于首次生成阶段。 */
 function compatibleProfiles(left: EmbeddingProfile, right: EmbeddingProfile): boolean {
   const dimensionsCompatible = left.dimensions === 0 || right.dimensions === 0 || left.dimensions === right.dimensions;
   return (
@@ -394,6 +411,7 @@ function compatibleProfiles(left: EmbeddingProfile, right: EmbeddingProfile): bo
   );
 }
 
+/** 读取当前 embedding manifest；缺失表示缓存尚未建立或不可信。 */
 export function readEmbeddingManifest(rootDir: string): EmbeddingManifest | null {
   const manifestPath = getEmbeddingsManifestPath(rootDir);
   if (!existsSync(manifestPath)) {
@@ -402,6 +420,12 @@ export function readEmbeddingManifest(rootDir: string): EmbeddingManifest | null
   return JSON.parse(readFileSync(manifestPath, "utf8")) as EmbeddingManifest;
 }
 
+/**
+ * 校验 query provider 与缓存 profile 完全兼容。
+ *
+ * model、revision、dtype、dimensions、pooling、prefix 或 normalization 任一不一致都必须失败，
+ * 不能按较短向量静默 cosine。
+ */
 export function assertEmbeddingProviderCompatible(rootDir: string, provider: EmbeddingProvider): EmbeddingManifest {
   const manifest = readEmbeddingManifest(rootDir);
   if (!manifest) {
@@ -416,11 +440,13 @@ export function assertEmbeddingProviderCompatible(rootDir: string, provider: Emb
   return manifest;
 }
 
+/** 供测试和协议检查使用的确定性 token-hash provider，不代表真实语义质量。 */
 export class DeterministicLocalEmbeddingProvider implements EmbeddingProvider {
   readonly name = "deterministic-local";
   readonly model = "token-hash-v1";
   readonly profile: EmbeddingProfile;
 
+  /** 固定测试向量维度并构造可写入 manifest 的 deterministic profile。 */
   constructor(readonly dimensions = 64) {
     this.profile = {
       id: "deterministic-local",
@@ -437,6 +463,7 @@ export class DeterministicLocalEmbeddingProvider implements EmbeddingProvider {
     };
   }
 
+  /** 用 token hash 生成确定性归一化向量；purpose 参数不改变测试语义。 */
   async embed(texts: string[], _purpose: "query" | "document" = "document"): Promise<number[][]> {
     return texts.map((text) => {
       const vector = Array.from({ length: this.dimensions }, () => 0);
@@ -451,6 +478,11 @@ export class DeterministicLocalEmbeddingProvider implements EmbeddingProvider {
   }
 }
 
+/**
+ * 按显式 profile 运行本地 Transformers.js feature extraction。
+ *
+ * 默认只读本地模型；只有人工命令显式允许时才开放远程下载，避免 Hook/查询热路径联网。
+ */
 export class TransformersJsEmbeddingProvider implements EmbeddingProvider {
   readonly name = "transformers-js-feature-extraction";
   readonly dimensions: number;
@@ -458,6 +490,7 @@ export class TransformersJsEmbeddingProvider implements EmbeddingProvider {
   readonly profile: EmbeddingProfile;
   private extractorPromise?: Promise<unknown>;
 
+  /** 选择已知或自定义 profile，并记录是否允许本地/远程模型。 */
   constructor(
     model = process.env.AGENT_KNOWLEDGE_EMBEDDING_MODEL ?? DEFAULT_EMBEDDING_PROFILE.model,
     private readonly options: {
@@ -480,6 +513,7 @@ export class TransformersJsEmbeddingProvider implements EmbeddingProvider {
     this.dimensions = this.profile.dimensions;
   }
 
+  /** 按 query/document purpose 添加正确 prefix，并把模型 tensor 转换为普通向量。 */
   async embed(texts: string[], purpose: "query" | "document" = "document"): Promise<number[][]> {
     const extractor = (await this.getExtractor()) as (texts: string[], options: Record<string, unknown>) => Promise<unknown>;
     const prefix = purpose === "query" ? this.profile.queryPrefix : this.profile.documentPrefix;
@@ -516,6 +550,7 @@ export class TransformersJsEmbeddingProvider implements EmbeddingProvider {
     return vectors;
   }
 
+  /** 懒加载并缓存 feature-extraction pipeline，避免同一进程重复加载模型。 */
   private async getExtractor(): Promise<unknown> {
     this.extractorPromise ??= (async () => {
       const transformers = (await import("@huggingface/transformers")) as {
@@ -535,6 +570,7 @@ export class TransformersJsEmbeddingProvider implements EmbeddingProvider {
   }
 }
 
+/** 根据 CLI/用户配置创建确定性测试 provider 或本地 Transformers.js provider。 */
 export function createEmbeddingProvider(options: {
   provider?: "transformers" | "local";
   model?: string;
@@ -553,6 +589,11 @@ export function createEmbeddingProvider(options: {
   });
 }
 
+/**
+ * 为 active Markdown 增量构建 embedding 缓存，并原子替换 JSONL 与 manifest。
+ *
+ * contentHash 和 filePath 未变化的记录直接复用；profile 不兼容时全部重算，避免新旧向量混用。
+ */
 export async function embedKnowledgeIndex(rootDir: string, options: EmbedIndexOptions = {}): Promise<EmbedIndexResult> {
   const provider = options.provider ?? new TransformersJsEmbeddingProvider();
   const documents = await loadActiveDocuments(rootDir);
@@ -589,6 +630,7 @@ export async function embedKnowledgeIndex(rootDir: string, options: EmbedIndexOp
 
   const previousManifest = readEmbeddingManifest(rootDir);
   const providerProfile = profileForProvider(provider);
+  // 只有完整 profile 兼容时才复用旧向量，否则看似相同的维度也可能具有不同语义空间。
   const previousRecords =
     previousManifest && compatibleProfiles(previousManifest.profile, providerProfile) ? readEmbeddingRecords(rootDir) : [];
   const previousById = new Map(previousRecords.map((record) => [record.id, record]));
@@ -667,6 +709,7 @@ export async function embedKnowledgeIndex(rootDir: string, options: EmbedIndexOp
   };
 }
 
+/** 按写入顺序读取 embedding 记录；缓存不存在时返回空集合，事实源不受影响。 */
 export function readEmbeddingRecords(rootDir: string): EmbeddingJsonlRecord[] {
   const embeddingsPath = getEmbeddingsJsonlPath(rootDir);
   if (!existsSync(embeddingsPath)) {
@@ -675,6 +718,11 @@ export function readEmbeddingRecords(rootDir: string): EmbeddingJsonlRecord[] {
   return parseJsonlRecords(readFileSync(embeddingsPath, "utf8"));
 }
 
+/**
+ * 结合 embedding、查询日志和 Markdown 元数据生成 alias dry-run 建议。
+ *
+ * 本函数只返回建议 JSON，绝不直接改写 Markdown；别名仍需人工确认，不能成为事实来源。
+ */
 export async function suggestAliases(rootDir: string, options: SuggestAliasesOptions = {}): Promise<SuggestAliasesResult> {
   const provider = options.provider ?? new DeterministicLocalEmbeddingProvider();
   const maxSuggestions = options.maxSuggestionsPerMemory ?? 5;

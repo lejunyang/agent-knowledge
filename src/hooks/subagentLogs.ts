@@ -1,8 +1,8 @@
 /**
- * Detailed Subagent logs preserve local debugging evidence that redacted staging intentionally drops.
+ * 详细 Subagent 日志保留脱敏 staging 刻意丢弃的本地调试证据。
  *
- * These files are never a knowledge source, never synced, and never injected into model context.
- * Start/stop pairing is best-effort because host payloads can be incomplete or interrupted.
+ * 这些文件永远不是知识来源，不参与同步，也不注入模型上下文。宿主 payload 可能不完整或中断，
+ * 因此 Start/Stop 配对只能尽力而为。
  */
 import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -40,10 +40,9 @@ type SubagentPairState = {
 };
 
 /**
- * Appends one raw Subagent event and updates pairing state.
+ * 追加一条原始 Subagent 事件并更新配对状态。
  *
- * `enabled=false` is a future removal switch: templates can remain installed while detailed writes
- * are disabled after the Subagent workflow becomes stable.
+ * `enabled=false` 是未来移除详细日志的开关：Subagent 流程稳定后可以保留模板但停止原文写入。
  */
 export async function appendSubagentEvent(
   rootDir: string,
@@ -111,7 +110,7 @@ export async function appendSubagentEvent(
   return { written: true, record };
 }
 
-/** Returns detailed logs across all daily files with optional agent/event filters. */
+/** 跨每日文件读取详细日志，并支持按 agent type 和事件类型过滤。 */
 export async function readSubagentLogs(
   rootDir: string,
   options: {
@@ -150,7 +149,7 @@ export async function readSubagentLogs(
     .slice(-(options.limit ?? 100));
 }
 
-/** Summarizes pairing health without exposing payload contents in the status output. */
+/** 汇总 Start/Stop 配对健康度，status 输出不暴露 payload 内容。 */
 export async function getSubagentLogStatus(rootDir: string): Promise<SubagentLogStatus> {
   const records = await readSubagentLogs(rootDir, { limit: Number.MAX_SAFE_INTEGER });
   const starts = records.filter((record) => record.event === "subagent_start").length;
@@ -169,7 +168,7 @@ export async function getSubagentLogStatus(rootDir: string): Promise<SubagentLog
   };
 }
 
-/** Resolves the daily append-only detailed log path. */
+/** 返回每日 append-only 详细日志路径。 */
 export function getSubagentLogPath(rootDir: string, date = new Date()): string {
   return resolveWorkspacePath(
     rootDir,
@@ -179,7 +178,7 @@ export function getSubagentLogPath(rootDir: string, date = new Date()): string {
   );
 }
 
-/** Distinguishes current and compatibility event field names. */
+/** 兼容宿主当前和旧版事件字段命名。 */
 function normalizeSubagentEvent(
   payload: Record<string, unknown>
 ): "subagent_start" | "subagent_stop" | null {
@@ -196,8 +195,8 @@ function normalizeSubagentEvent(
 }
 
 /**
- * Builds a stable pairing key. Agent ID is authoritative; session+type is only a compatibility
- * fallback and can pair incorrectly if the host runs multiple same-type Subagents concurrently.
+ * 构造稳定配对 key。agent ID 最权威；session+type 仅为兼容 fallback，同一 session 并发运行
+ * 多个同类型 Subagent 时可能无法精确配对。
  */
 function pairingKey(payload: Record<string, unknown>): string | null {
   const agentId = stringValue(payload.agent_id);
@@ -211,7 +210,7 @@ function pairingKey(payload: Record<string, unknown>): string | null {
   return sessionId && agentType ? `session:${sessionId}:${agentType}` : null;
 }
 
-/** Reads persisted unmatched starts used for cross-process pairing. */
+/** 读取未匹配 Start 状态，使跨进程 Stop 仍可计算 duration。 */
 async function readPairState(rootDir: string): Promise<SubagentPairState> {
   const target = resolveWorkspacePath(rootDir, ".memory", "subagents", "state.json");
   if (!existsSync(target)) {
@@ -223,19 +222,19 @@ async function readPairState(rootDir: string): Promise<SubagentPairState> {
   };
 }
 
-/** Persists pairing state separately so daily log rotation does not lose open Subagents. */
+/** 独立持久化配对状态，避免每日日志轮转丢失仍在运行的 Subagent。 */
 async function writePairState(rootDir: string, state: SubagentPairState): Promise<void> {
   const target = resolveWorkspacePath(rootDir, ".memory", "subagents", "state.json");
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
-/** Returns a non-empty string payload field. */
+/** 只接受非空字符串 payload 字段。 */
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-/** Reads a nested compatibility string without trusting arbitrary object shapes. */
+/** 在不信任任意对象形状的前提下读取嵌套兼容字符串。 */
 function nestedString(
   payload: Record<string, unknown>,
   parent: string,

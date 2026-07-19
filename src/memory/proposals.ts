@@ -1,7 +1,7 @@
 /**
- * Maintenance proposals are machine-readable review artifacts, not knowledge facts.
+ * Maintenance proposal 是机器可读的审阅产物，不是知识事实。
  *
- * They live under `.memory/proposals`, can be regenerated, and never bypass inbox/human review.
+ * 它们位于 `.memory/proposals`，可以重建，且永远不能绕过 inbox 和人工审阅。
  */
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
@@ -39,6 +39,11 @@ export const MaintenanceProposalSchema = z.object({
 export type MaintenanceProposal = z.output<typeof MaintenanceProposalSchema>;
 export type MaintenanceProposalInput = z.input<typeof MaintenanceProposalSchema>;
 
+/**
+ * 根据 proposal 语义身份生成稳定 ID。
+ *
+ * observation/target 排序后再 hash，使重复 worker 或不同输入顺序不会产生重复 proposal。
+ */
 export function maintenanceProposalId(input: {
   type: string;
   domain: string;
@@ -58,6 +63,9 @@ export function maintenanceProposalId(input: {
     .slice(0, 20)}`;
 }
 
+/**
+ * 校验并原子写入单个 proposal，避免读者观察到半写 JSON。
+ */
 export async function writeMaintenanceProposal(
   rootDir: string,
   rawProposal: MaintenanceProposalInput
@@ -72,6 +80,9 @@ export async function writeMaintenanceProposal(
   return target;
 }
 
+/**
+ * 按文件名稳定顺序读取全部 proposal，并在边界处重新执行 schema 校验。
+ */
 export async function readMaintenanceProposals(rootDir: string): Promise<MaintenanceProposal[]> {
   const directory = resolveWorkspacePath(rootDir, ".memory", "proposals");
   try {

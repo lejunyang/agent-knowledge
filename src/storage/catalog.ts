@@ -49,6 +49,7 @@ export type CatalogOptions = {
   write?: boolean;
 };
 
+/** 从 Markdown 事实源读取 catalog 文档，排除生成文件和非正式目录。 */
 async function loadDocuments(rootDir: string): Promise<KnowledgeDocument[]> {
   const files = await discoverKnowledgeFiles(rootDir);
   const documents: KnowledgeDocument[] = [];
@@ -60,6 +61,7 @@ async function loadDocuments(rootDir: string): Promise<KnowledgeDocument[]> {
   return documents;
 }
 
+/** 按 selector 返回的单值维度统计 catalog 频次。 */
 function countBy<T extends string>(items: CatalogItem[], selector: (item: CatalogItem) => T): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const item of items) {
@@ -69,6 +71,7 @@ function countBy<T extends string>(items: CatalogItem[], selector: (item: Catalo
   return counts;
 }
 
+/** 按 selector 返回的多值维度展开并统计 catalog 频次。 */
 function countMany(items: CatalogItem[], selector: (item: CatalogItem) => string[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const item of items) {
@@ -79,10 +82,12 @@ function countMany(items: CatalogItem[], selector: (item: CatalogItem) => string
   return counts;
 }
 
+/** 返回按字典序排序的统计键，保证 catalog 输出可复现。 */
 function sortedKeys(counts: Record<string, number>): string[] {
   return Object.keys(counts).sort((left, right) => left.localeCompare(right));
 }
 
+/** 把机器 catalog 渲染为人类可浏览的 `_catalog.md`，不改变任何知识事实。 */
 function renderCatalogMarkdown(catalog: KnowledgeCatalog): string {
   const lines = [
     "# Knowledge Catalog",
@@ -136,6 +141,11 @@ function renderCatalogMarkdown(catalog: KnowledgeCatalog): string {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+/**
+ * 从 Markdown 事实源生成可查询 catalog，并可选择刷新人类可读 `_catalog.md`。
+ *
+ * catalog 是导航与诊断视图，不参与事实权威性判断；自动 Hook 只能使用经过相关性裁剪的子集。
+ */
 export async function catalogKnowledge(rootDir: string, options: CatalogOptions = {}): Promise<KnowledgeCatalog> {
   await initKnowledgeWorkspace(rootDir);
   const generatedAt = new Date().toISOString();

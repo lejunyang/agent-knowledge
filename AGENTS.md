@@ -306,9 +306,10 @@ Hook 主动记忆边界：
 
 源码注释应解释“背景、意图和约束”，不要只翻译代码表面含义。
 
-- 每个 exported function、class 和承担公共契约的 type/interface 应有 JSDoc，说明用途、调用背景、重要边界和外部副作用。
-- 每个非平凡内部函数应有注释。优先说明“为什么存在、输入为何可信或不可信、返回值如何被下游使用”，而不只是复述函数名。
-- 简单 getter、纯字段映射、显然的一行 wrapper 可以不写重复注释；但一旦涉及策略或边界就必须说明。
+- 源码注释统一使用中文；函数名、字段名、协议名和必要技术术语可保留英文，避免生硬翻译影响准确性。
+- 每个具名 function、class method、constructor、exported class/function 和承担公共契约的 type/interface 都应有相邻 JSDoc，说明用途、调用背景、重要边界或外部副作用。
+- 内部函数也必须有中文注释。优先说明“为什么存在、输入为何可信或不可信、返回值如何被下游使用”，而不只是复述函数名。
+- 简单 getter、纯字段映射、显然的一行 wrapper 也应至少用一句话说明职责；只有审计脚本中范围严格且写明理由的例外才能省略。
 - 函数内部的关键操作和判断必须在附近说明“为什么”，尤其是：
   - 安全过滤、权限、visibility、sensitivity、project/tenant 隔离。
   - fallback、阈值、token budget、abstention 和静默失败。

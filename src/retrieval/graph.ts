@@ -1,8 +1,8 @@
 /**
- * Graph retrieval augments lexical/hybrid seeds with bounded typed traversal.
+ * Graph retrieval 使用有界类型化遍历补充 lexical/hybrid seed。
  *
- * The graph only proposes candidate IDs. Expanded documents are reloaded through query's security
- * boundary, and conflict/supersedes edges are excluded from normal context expansion.
+ * 图只提出 candidate ID；扩展文档必须重新经过 query 安全边界，conflict/supersedes 边不进入
+ * 普通上下文扩展。
  */
 import { buildKnowledgeGraph } from "../graph/build.js";
 import { readKnowledgeGraph } from "../graph/query.js";
@@ -30,7 +30,7 @@ const TRAVERSABLE_RELATIONS = new Set<GraphEdgeType>([
   "often_used_with"
 ]);
 
-/** Traverses allowed knowledge-to-knowledge edges with exponential depth decay. */
+/** 只遍历允许的知识关系，并按深度指数衰减；最大两跳用于限制噪声和成本。 */
 export function expandGraphCandidates(
   graph: KnowledgeGraph,
   seedMemoryIds: string[],
@@ -79,7 +79,7 @@ export function expandGraphCandidates(
   );
 }
 
-/** Runs lexical or hybrid seed retrieval, then merges secure graph-expanded memories. */
+/** 先运行 lexical/hybrid seed 检索，再合并经过安全过滤的 graph 扩展知识。 */
 export async function queryMemoriesGraphWithDebug(
   rootDir: string,
   rawRequest: unknown,
@@ -148,8 +148,7 @@ export async function queryMemoriesGraphWithDebug(
       retrievalMode:
         options.baseMode === "hybrid" ? "hybrid-graph" : "graph",
       resultIds: ranked.map((memory) => memory.document.frontmatter.id),
-      // Graph expansion changes the final result set, so debug scores must be rebuilt from that
-      // final set rather than retaining the seed query's stale score snapshot.
+      // Graph 扩展改变了最终结果集，因此必须从最终结果重建 debug 分数，不能保留 seed 查询的旧快照。
       resultScores: ranked.map((memory) => {
         const id = memory.document.frontmatter.id;
         return {
@@ -180,7 +179,7 @@ export async function queryMemoriesGraphWithDebug(
   };
 }
 
-/** Avoids floating-point noise in debug output and deterministic tests. */
+/** 消除浮点噪声，使 debug 输出和确定性测试稳定。 */
 function roundScore(value: number): number {
   return Number(value.toFixed(6));
 }

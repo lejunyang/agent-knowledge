@@ -11,6 +11,7 @@ import yaml from "js-yaml";
 import { KnowledgeDocumentSchema } from "../core/schema.js";
 import type { KnowledgeDocument } from "../core/types.js";
 
+/** 把 YAML parser 生成的 Date 递归转换为 frontmatter 日期字符串。 */
 function normalizeYamlDates(value: unknown): unknown {
   if (value instanceof Date) {
     return value.toISOString().slice(0, 10);

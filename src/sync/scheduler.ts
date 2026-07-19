@@ -28,6 +28,7 @@ export async function runScheduledSync(options: {
   }
 }
 
+/** 等待下一周期；AbortSignal 会清理 timer 并立即结束，支持进程优雅停止。 */
 function waitForNextRun(intervalMs: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, intervalMs);

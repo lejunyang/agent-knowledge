@@ -103,10 +103,15 @@ const PRODUCTS: IntegrationProduct[] = [
   }
 ];
 
+/** 返回支持的产品和组件副本，避免调用方修改内部注册表。 */
 export function listIntegrationProducts(): IntegrationProduct[] {
   return PRODUCTS.map((product) => ({ ...product, components: [...product.components] }));
 }
 
+/**
+ * 解析产品/范围对应的 Hook 与资源根目录。
+ * TRAE CLI Hook 根和通用资源根可能不同，因此必须同时返回，不能假设单一路径。
+ */
 function resolveRoots(
   product: IntegrationProductId,
   scope: IntegrationScope,
@@ -143,18 +148,22 @@ function resolveRoots(
   return { hooks: claudeHome, resources: claudeHome };
 }
 
+/** 返回产品资源根中的 integration 所有权 manifest 路径。 */
 function manifestPathFor(roots: { resources: string }): string {
   return path.join(roots.resources, MANIFEST_FILE);
 }
 
+/** 生成带结尾换行的稳定缩进 JSON，便于 hash、diff 和人工审阅。 */
 function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+/** 计算内容所有权校验使用的 SHA-256。 */
 function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
+/** 递归计算文件或目录内容 hash，用于判断托管资源是否被用户修改。 */
 async function hashPath(target: string): Promise<string> {
   const targetStat = await stat(target);
   if (targetStat.isFile()) {
@@ -170,6 +179,7 @@ async function hashPath(target: string): Promise<string> {
   return hashText(hashes.join("\n"));
 }
 
+/** 原子写文件；merge 更新可选保留一次备份，避免配置解析正确但写入中断。 */
 async function writeAtomic(target: string, content: string, backup = false): Promise<void> {
   await mkdir(path.dirname(target), { recursive: true });
   if (backup && existsSync(target)) {
@@ -183,6 +193,7 @@ async function writeAtomic(target: string, content: string, backup = false): Pro
   await rename(temporary, target);
 }
 
+/** 读取集成配置并强制顶层为对象，拒绝数组等无法结构化 merge 的形状。 */
 async function readJsonObject(target: string): Promise<JsonObject> {
   if (!existsSync(target)) {
     return {};
@@ -194,6 +205,7 @@ async function readJsonObject(target: string): Promise<JsonObject> {
   return parsed as JsonObject;
 }
 
+/** 只有命令明确匹配 `agent-knowledge(.cmd) hook` 才视为本工具自有 handler。 */
 function isOwnedHandler(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -202,6 +214,7 @@ function isOwnedHandler(value: unknown): boolean {
   return typeof command === "string" && OWNED_COMMAND_PATTERN.test(command);
 }
 
+/** 检查配置是否仍包含至少一个 Agent Knowledge 自有 Hook。 */
 function containsOwnedHook(config: JsonObject): boolean {
   const rawHooks = config.hooks;
   if (!rawHooks || typeof rawHooks !== "object" || Array.isArray(rawHooks)) {
@@ -221,6 +234,7 @@ function containsOwnedHook(config: JsonObject): boolean {
   );
 }
 
+/** 删除所有自有 Hook，同时保留第三方 event、group、handler 和顶层字段。 */
 function withoutOwnedHooks(config: JsonObject): JsonObject {
   const output = { ...config };
   const rawHooks = config.hooks;
@@ -253,6 +267,10 @@ function withoutOwnedHooks(config: JsonObject): JsonObject {
   return output;
 }
 
+/**
+ * 结构化合并 Hook：先清理旧自有 handler，再追加当前模板。
+ * 不能按字符串覆盖整个 JSON，否则会破坏用户已有的第三方集成。
+ */
 function mergeManagedHooks(existing: JsonObject, managed: JsonObject): JsonObject {
   const cleaned = withoutOwnedHooks(existing);
   const existingHooks =
@@ -276,6 +294,7 @@ function mergeManagedHooks(existing: JsonObject, managed: JsonObject): JsonObjec
   };
 }
 
+/** 读取安装所有权 manifest；缺失表示目标未由本工具托管。 */
 async function loadManifest(target: string): Promise<IntegrationManifest | null> {
   if (!existsSync(target)) {
     return null;
@@ -283,6 +302,7 @@ async function loadManifest(target: string): Promise<IntegrationManifest | null>
   return JSON.parse(await readFile(target, "utf8")) as IntegrationManifest;
 }
 
+/** 按产品和平台选择 POSIX/Windows Hook 源模板。 */
 function hookTemplatePath(
   packageRoot: string,
   product: IntegrationProductId,
@@ -299,6 +319,7 @@ function hookTemplatePath(
   );
 }
 
+/** 返回产品实际读取的全部 Hook 目标；TRAE 必须同时覆盖根目录和 CLI 目录。 */
 function hookTargetPaths(
   product: IntegrationProductId,
   roots: { hooks: string; resources: string }
@@ -315,12 +336,17 @@ function hookTargetPaths(
   return [path.join(roots.hooks, "settings.json")];
 }
 
+/** 选择产品专用 Agent 模板，不存在时安全回退 TRAE 通用模板。 */
 function agentSourceRoot(packageRoot: string, product: IntegrationProductId): string {
   const templateProduct = product === "trae-cn" ? "trae" : product;
   const productRoot = path.join(packageRoot, "templates", templateProduct, "agents");
   return existsSync(productRoot) ? productRoot : path.join(packageRoot, "templates", "trae", "agents");
 }
 
+/**
+ * 按 manifest 所有权复制 Agent/Skill/plugin 路径。
+ * merge 模式遇到未托管同名资源必须报告冲突；overwrite 才允许替换文件、目录或 symlink。
+ */
 async function copyManagedPath(
   source: string,
   target: string,
@@ -384,6 +410,10 @@ async function copyManagedPath(
   };
 }
 
+/**
+ * 安装选定产品组件，并记录内容 hash manifest 以支持安全更新和卸载。
+ * 默认 merge 保留外部配置；显式 overwrite 只删除目标节点，不跟随 symlink 删除外部源。
+ */
 export async function installIntegration(options: InstallIntegrationOptions): Promise<InstallIntegrationResult> {
   const product = PRODUCTS.find((item) => item.id === options.product);
   if (!product) {
@@ -419,6 +449,7 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
             ? "updated"
             : "installed";
       if (mode === "overwrite" && existsSync(target)) {
+        // rm 作用于 symlink 本身；不能解析真实路径后删除，否则会破坏用户外部资源。
         await rm(target, { recursive: true, force: true });
       }
       await writeAtomic(target, content, mode === "merge");
@@ -514,6 +545,10 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
   };
 }
 
+/**
+ * 只卸载 manifest 记录且内容未被用户修改的资源。
+ * 自有 Hook 通过结构化删除处理；用户改写的 Agent/Skill 保留并报告，避免误删。
+ */
 export async function uninstallIntegration(
   options: UninstallIntegrationOptions
 ): Promise<UninstallIntegrationResult> {
@@ -548,6 +583,7 @@ export async function uninstallIntegration(
   return { removed, preserved };
 }
 
+/** 检查 manifest 中每个托管资源是否存在且仍包含预期内容/自有 Hook。 */
 export async function doctorIntegration(
   options: UninstallIntegrationOptions
 ): Promise<IntegrationDoctorResult> {

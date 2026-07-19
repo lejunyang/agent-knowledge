@@ -1,8 +1,8 @@
 /**
- * Graph building converts current Markdown/proposal metadata into a deterministic adjacency index.
+ * 图构建模块把当前 Markdown/proposal 元数据转换为确定性的邻接索引。
  *
- * It never invents entities or relationships with an LLM. All edges are explicit frontmatter,
- * project/episode/source membership, or proposal targets.
+ * 本模块不使用 LLM 发明实体或关系；所有边都来自显式 frontmatter、project/episode/source
+ * 归属或 proposal target。
  */
 import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -17,7 +17,7 @@ import type {
   KnowledgeGraph
 } from "./types.js";
 
-/** Builds and atomically persists `.memory/graph.json`. */
+/** 构建并原子写入 `.memory/graph.json`；Markdown 和 proposal 仍是事实来源。 */
 export async function buildKnowledgeGraph(rootDir: string): Promise<KnowledgeGraph> {
   const nodes = new Map<string, GraphNode>();
   const edges = new Map<string, GraphEdge>();
@@ -145,19 +145,19 @@ export async function buildKnowledgeGraph(rootDir: string): Promise<KnowledgeGra
   return graph;
 }
 
-/** Returns the rebuildable graph index path. */
+/** 返回可重建 graph 索引路径。 */
 export function getKnowledgeGraphPath(rootDir: string): string {
   return resolveWorkspacePath(rootDir, ".memory", "graph.json");
 }
 
-/** Adds one node if another source has not already emitted it. */
+/** 仅在尚未出现同 ID 节点时添加，合并多来源构图时保持确定性。 */
 function addNode(nodes: Map<string, GraphNode>, node: GraphNode): void {
   if (!nodes.has(node.id)) {
     nodes.set(node.id, node);
   }
 }
 
-/** Adds one deterministic typed edge. */
+/** 根据 source/type/target 生成稳定 ID，并添加一条类型化边。 */
 function addEdge(
   edges: Map<string, GraphEdge>,
   source: string,

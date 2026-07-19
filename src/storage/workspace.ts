@@ -21,6 +21,7 @@ This directory is the human-readable fact source for agent memory.
 - \`_archive/\`: deprecated or rejected memories.
 `;
 
+/** 只创建缺失的 workspace 模板文件，绝不覆盖用户已有 Markdown。 */
 async function writeFileIfMissing(filePath: string, content: string): Promise<void> {
   try {
     await writeFile(filePath, content, { encoding: "utf8", flag: "wx" });

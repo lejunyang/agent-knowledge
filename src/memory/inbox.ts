@@ -19,6 +19,7 @@ export type WriteCandidateResult = {
   deduplicated?: boolean;
 };
 
+/** 生成 frontmatter 和文件名使用的本地无关 UTC 日期。 */
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -47,6 +48,7 @@ function idSlugify(input: string): string {
   return slug || "memory";
 }
 
+/** 根据日期、domain 和标题生成可跨文件引用的稳定候选 ID。 */
 function idFromCandidate(input: CandidateMemoryInput): string {
   const date = today().replaceAll("-", "");
   return `k_${date}_${idSlugify(input.domain)}_${idSlugify(input.title)}`;

@@ -103,6 +103,7 @@ import {
   TerminalModelPrompter
 } from "./cli/model.js";
 
+/** 从启动参数读取 `--name=value` 或 `--name value`，供 Commander 初始化前解析全局配置。 */
 function readArgValue(name: string): string | undefined {
   const direct = process.argv.find((argument) => argument.startsWith(`${name}=`));
   if (direct) {
@@ -132,18 +133,22 @@ program
   .option("--locale <locale>", t("界面语言：auto、zh-CN 或 en", "UI language: auto, zh-CN, or en"))
   .option("--json", t("对支持的命令输出机器可读 JSON", "emit machine-readable JSON for commands that support human output"), false);
 
+/** 返回进程启动时冻结的配置路径，避免运行中环境变化造成同一命令读取不同文件。 */
 function resolveConfigPath(): string {
   return startupConfigPath;
 }
 
+/** 每次使用时重新加载用户配置，使同一长进程能读取刚由向导写入的设置。 */
 function userConfig(): UserConfig {
   return loadUserConfig(resolveConfigPath());
 }
 
+/** 区分“用户确实配置了值”和“仅使用 schema 默认值”，用于保留旧环境变量优先级。 */
 function hasUserConfigFile(): boolean {
   return existsSync(resolveConfigPath());
 }
 
+/** 按显式参数、用户配置、兼容环境变量、内置默认值解析 workspace root。 */
 function resolveCliRoot(root?: string): string {
   return (
     root ??
@@ -153,6 +158,7 @@ function resolveCliRoot(root?: string): string {
   );
 }
 
+/** 解析并校验 caller 可见范围，拒绝未知值进入后续权限判断。 */
 function resolveVisibilityScopes(explicit?: string[]): Array<"private" | "project" | "team"> {
   const values =
     explicit ??
@@ -168,6 +174,7 @@ function resolveVisibilityScopes(explicit?: string[]): Array<"private" | "projec
   return values as Array<"private" | "project" | "team">;
 }
 
+/** 解析 caller 最高敏感级别；未知值必须失败，不能默认为更高权限。 */
 function resolveSensitivityClearance(
   explicit?: string
 ): "public" | "internal" | "confidential" | "secret" {
@@ -182,6 +189,10 @@ function resolveSensitivityClearance(
   return value;
 }
 
+/**
+ * 用配置或兼容环境变量覆盖 candidate 的 actor/capture policy。
+ * 只接受 schema 支持值；无效环境变量会被忽略，避免绕过候选治理枚举。
+ */
 function applyCapturePolicyOverrides(input: CandidateMemoryInput): CandidateMemoryInput {
   const configuredIdentity = hasUserConfigFile() ? userConfig().identity : undefined;
   const actorType =
@@ -205,6 +216,7 @@ function applyCapturePolicyOverrides(input: CandidateMemoryInput): CandidateMemo
   };
 }
 
+/** 向上查找包含 package 与模板的安装源根目录，兼容 src 和 dist 两种运行位置。 */
 function findPackageRoot(startDir = dirname(fileURLToPath(import.meta.url))): string {
   let current = startDir;
   while (true) {
@@ -219,6 +231,7 @@ function findPackageRoot(startDir = dirname(fileURLToPath(import.meta.url))): st
   }
 }
 
+/** 完整读取 Hook stdin；宿主 payload 很小，集中解析可保持错误处理一致。 */
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -227,6 +240,7 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+/** 把空 stdin 视为空对象，否则严格解析宿主 Hook JSON。 */
 async function readHookInput(): Promise<Record<string, unknown>> {
   const text = await readStdin();
   if (text.trim().length === 0) {
@@ -363,6 +377,7 @@ embeddingCommand
     );
   });
 
+/** 只在存在额外上下文时输出 Hook envelope，空内容必须保持 stdout 静默。 */
 function hookContext(hookEventName: "SessionStart" | "UserPromptSubmit", additionalContext: string): void {
   const output = hookContextJson(hookEventName, additionalContext);
   if (output) {
@@ -370,6 +385,7 @@ function hookContext(hookEventName: "SessionStart" | "UserPromptSubmit", additio
   }
 }
 
+/** 为 SessionStart 诊断上下文提供稳定、可读的 JSON 文本。 */
 function formatRuntimeContext(context: GitRuntimeContext): string {
   return JSON.stringify(context, null, 2);
 }
@@ -801,6 +817,7 @@ program
 
 const sync = program.commands.find((command) => command.name() === "sync")!;
 
+/** 从同步配置提取上传权限边界，避免 backend 构造和 policy 解析相互耦合。 */
 function configuredSyncPolicy(config: UserConfig["sync"]): {
   visibilityScopes: Array<"private" | "project" | "team">;
   sensitivityClearance: "public" | "internal" | "confidential" | "secret";
@@ -1516,6 +1533,10 @@ program
 
 const hook = program.command("hook").description(t("供 TRAE hooks.json 调用的内部命令", "Internal commands called by TRAE hooks.json"));
 
+/**
+ * 为当前 Hook 补充自动发现的 project ID，再写入脱敏 staging 和运行摘要。
+ * Git 探测失败只降级为无 project，不得阻塞宿主 Agent 生命周期。
+ */
 async function stageCurrentHook(root: string): Promise<void> {
   const input = await readHookInput();
   const runtimeContext = getGitRuntimeContext(

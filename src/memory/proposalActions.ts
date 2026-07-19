@@ -1,8 +1,8 @@
 /**
- * Proposal actions are the only bridge from machine review artifacts to inbox/Skill files.
+ * Proposal action 是机器审阅产物通向 inbox/Skill 文件的唯一桥梁。
  *
- * Accepting a proposal never activates knowledge. Knowledge changes become `_inbox` candidates;
- * Skill installation requires an explicit target and refuses to overwrite existing files.
+ * 接受 proposal 永远不会激活知识；知识变更先成为 `_inbox` candidate。Skill 安装必须显式指定
+ * target，并拒绝覆盖已有文件。
  */
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -23,7 +23,7 @@ export type ProposalActionResult = {
   skillPath?: string;
 };
 
-/** Returns one proposal by ID or throws a clear lookup error. */
+/** 按 ID 返回 proposal；不存在时抛出明确错误，避免操作错误对象。 */
 export async function showMaintenanceProposal(
   rootDir: string,
   proposalId: string
@@ -38,10 +38,10 @@ export async function showMaintenanceProposal(
 }
 
 /**
- * Accepts one pending proposal.
+ * 接受一个 pending proposal。
  *
- * Duplicate proposals only update audit status. Knowledge changes become conservative model-inferred
- * inbox candidates. Skill drafts stay in an inbox unless the caller explicitly selects project/user.
+ * duplicate 只更新审计状态；知识变更成为保守的 model-inferred inbox candidate；Skill 草稿默认留在
+ * inbox，除非调用方显式选择 project/user。
  */
 export async function acceptMaintenanceProposal(
   rootDir: string,
@@ -98,10 +98,10 @@ export async function acceptMaintenanceProposal(
 }
 
 /**
- * Installs a previously accepted Skill proposal after the user has reviewed its inbox draft.
+ * 用户审阅 inbox 草稿后，安装已接受的 Skill proposal。
  *
- * This second phase keeps proposal acceptance and external Skill writes separate. The installation
- * target is always explicit, and the same no-overwrite boundary used by one-step acceptance applies.
+ * 第二阶段把 proposal 接受和外部 Skill 写入分开；安装 target 始终显式，并复用一步式接受的
+ * no-overwrite 边界。
  */
 export async function installAcceptedSkillProposal(
   rootDir: string,
@@ -132,7 +132,7 @@ export async function installAcceptedSkillProposal(
   return { proposalId, status: "accepted", skillPath };
 }
 
-/** Marks a pending proposal rejected while preserving its evidence and draft. */
+/** 拒绝 pending proposal，同时保留证据和草稿用于审计。 */
 export async function rejectMaintenanceProposal(
   rootDir: string,
   proposalId: string,
@@ -152,8 +152,8 @@ export async function rejectMaintenanceProposal(
 }
 
 /**
- * Writes a Skill draft to the review inbox or an explicitly selected installation root.
- * Existing files are never replaced because a proposal cannot prove ownership of external Skills.
+ * 把 Skill 草稿写入审阅 inbox 或显式安装根目录。
+ * Proposal 无法证明外部 Skill 的所有权，因此已有文件永远不能替换。
  */
 async function writeSkillDraft(
   rootDir: string,
@@ -198,7 +198,7 @@ async function writeSkillDraft(
   return target;
 }
 
-/** Parses the required `name` field from a Skill Markdown frontmatter block. */
+/** 从 Skill Markdown frontmatter 解析必需的 `name`，并限制为安全目录名。 */
 function parseSkillName(skillDraft: string): string {
   const match = skillDraft.match(/^---\n([\s\S]*?)\n---/);
   if (!match) {

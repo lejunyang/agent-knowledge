@@ -1,7 +1,7 @@
-/** Self-contained offline HTML visualization for a knowledge graph. */
+/** 知识关系图的自包含离线 HTML 可视化。 */
 import type { KnowledgeGraph } from "./types.js";
 
-/** Embeds graph data and a small SVG renderer without external scripts or stylesheets. */
+/** 内嵌 graph 数据和轻量 SVG renderer，不依赖外部脚本、样式或 CDN。 */
 export function renderKnowledgeGraphHtml(graph: KnowledgeGraph): string {
   const data = JSON.stringify(graph).replace(/</g, "\\u003c");
   return `<!doctype html>

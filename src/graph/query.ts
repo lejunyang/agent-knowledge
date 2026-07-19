@@ -1,9 +1,9 @@
-/** In-memory graph search and bounded breadth-first traversal. */
+/** 内存 graph 搜索和有界 breadth-first traversal。 */
 import { existsSync, readFileSync } from "node:fs";
 import { getKnowledgeGraphPath } from "./build.js";
 import type { KnowledgeGraph } from "./types.js";
 
-/** Queries text/id seeds and returns the induced graph up to depth two. */
+/** 按文本或 ID 找 seed，并返回最多两跳的诱导子图，避免可视化查询无界扩张。 */
 export async function queryKnowledgeGraph(
   rootDir: string,
   options: { text?: string; id?: string; depth?: number }
@@ -48,7 +48,7 @@ export async function queryKnowledgeGraph(
   };
 }
 
-/** Reads a previously built graph index. */
+/** 读取已经构建的 graph 索引；缺失时明确要求先构建，避免静默使用空图。 */
 export function readKnowledgeGraph(rootDir: string): KnowledgeGraph {
   const target = getKnowledgeGraphPath(rootDir);
   if (!existsSync(target)) {

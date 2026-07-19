@@ -167,10 +167,12 @@ function parseJsonArray(value: string): string[] {
   return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
 }
 
+/** 从索引记录的相对路径重新读取 Markdown，保证最终内容始终来自事实源。 */
 function loadDocument(rootDir: string, filePath: string): KnowledgeDocument {
   return parseKnowledgeMarkdown(filePath, readFileSync(resolveWorkspacePath(rootDir, filePath), "utf8"));
 }
 
+/** 统一 domain/scenario/alias 标签中的大小写、空格和下划线差异。 */
 function normalizeLabel(input: string): string {
   return input
     .trim()
@@ -179,6 +181,7 @@ function normalizeLabel(input: string): string {
     .replace(/-+/g, "-");
 }
 
+/** 把层级标签拆成路径片段，供非 domain 的模糊场景匹配使用。 */
 function labelSegments(input: string): string[] {
   return normalizeLabel(input)
     .split(/[/-]+/)
@@ -186,6 +189,10 @@ function labelSegments(input: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * 比较场景/别名标签，允许层级包含或片段集合匹配。
+ * Domain 不使用该宽松策略，避免无关领域因共享一个短片段被放行。
+ */
 function fuzzyLabelMatches(left: string, right: string): boolean {
   const normalizedLeft = normalizeLabel(left);
   const normalizedRight = normalizeLabel(right);
@@ -209,6 +216,7 @@ function fuzzyLabelMatches(left: string, right: string): boolean {
   return shorter.every((segment) => longer.includes(segment));
 }
 
+/** Domain 只允许相等或明确的父子层级关系，保持硬过滤边界。 */
 function domainLabelMatches(left: string, right: string): boolean {
   const normalizedLeft = normalizeLabel(left);
   const normalizedRight = normalizeLabel(right);
@@ -220,14 +228,17 @@ function domainLabelMatches(left: string, right: string): boolean {
   );
 }
 
+/** 判断两组场景/别名是否存在宽松匹配。 */
 function fuzzyIntersects(left: string[], right: string[]): boolean {
   return left.some((leftItem) => right.some((rightItem) => fuzzyLabelMatches(leftItem, rightItem)));
 }
 
+/** 判断两组 domain 是否存在严格层级匹配。 */
 function domainIntersects(left: string[], right: string[]): boolean {
   return left.some((leftItem) => right.some((rightItem) => domainLabelMatches(leftItem, rightItem)));
 }
 
+/** 给 metadata exact-match 通道计算离散分数，随后仅用于生成 rank。 */
 function metadataMatchScore(row: MemoryRow, request: MemoryQueryRequest): number {
   const domains = [row.domain, ...parseJsonArray(row.related_domains)];
   const scenarios = parseJsonArray(row.scenario);
@@ -257,6 +268,11 @@ const SENSITIVITY_LEVEL = {
   secret: 3
 } as const;
 
+/**
+ * 执行所有不可由排序绕过的访问控制。
+ *
+ * 该函数被 direct、related 和 graph 扩展共同复用，保证关系边只能发现候选，不能授予权限。
+ */
 function rowIsAccessible(row: MemoryRow, request: MemoryQueryRequest): boolean {
   const projectIds = parseJsonArray(row.project_ids);
   const visibilityOk = request.visibilityScopes.includes(
@@ -275,6 +291,7 @@ function rowIsAccessible(row: MemoryRow, request: MemoryQueryRequest): boolean {
   return row.status === "active" && visibilityOk && sensitivityOk && validFromOk && validUntilOk && projectOk;
 }
 
+/** 计算等维向量 cosine；零向量返回 0，避免 NaN 进入排序。 */
 function cosineSimilarity(left: number[], right: number[]): number {
   const length = Math.min(left.length, right.length);
   let dot = 0;
@@ -359,11 +376,16 @@ function rowMatchesRequest(row: MemoryRow, request: MemoryQueryRequest): boolean
   return rowIsAccessible(row, request) && domainOk && scenarioOk && typeOk;
 }
 
+/** 检查任务文本是否直接包含完整 alias，用于提高 metadata rank 而不是绕过 domain 过滤。 */
 function hasExactAliasInTask(aliases: string[], task: string): boolean {
   const normalizedTask = task.toLowerCase();
   return aliases.some((alias) => alias.trim().length > 0 && normalizedTask.includes(alias.toLowerCase()));
 }
 
+/**
+ * 过滤只有 CJK n-gram 偶然重合、但缺少 metadata 或完整词项证据的 FTS 候选。
+ * 这道门控用于降低短中文片段造成的误召回。
+ */
 function hasSufficientLexicalEvidence(
   row: MemoryRow,
   request: MemoryQueryRequest,
@@ -460,6 +482,7 @@ type CandidateSelection = {
   >;
 };
 
+/** 把有序候选转换成从 1 开始的 rank map，供跨通道 RRF 使用。 */
 function rankMap(rows: MemoryRow[]): Map<string, number> {
   return new Map(rows.map((row, index) => [row.id, index + 1]));
 }
@@ -490,6 +513,7 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
 
   try {
     if (query.length === 0) {
+      // 没有 query token 且没有 metadata 约束时禁止全表扫描，否则任意短 prompt 都会注入整库。
       if (!canFallbackToMetadata) {
         return {
           rows: [],
@@ -538,6 +562,7 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
     }
 
     if (!canFallbackToMetadata) {
+      // FTS 无命中时仍坚持 abstain；只有显式 domain/scenario 才能把全表作为 metadata 候选池。
       return {
         rows: [],
         lexicalRanks: new Map(),
@@ -569,6 +594,10 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
   }
 }
 
+/**
+ * 从兼容 embedding 缓存中选择 dense topK，并保留真实 cosine 分数。
+ * Manifest 和每条记录的维度都会校验，防止混用不同向量空间。
+ */
 async function selectEmbeddingRows(
   rootDir: string,
   request: MemoryQueryRequest,
@@ -633,6 +662,10 @@ function selectRowsByIds(rootDir: string, ids: string[]): MemoryRow[] {
   }
 }
 
+/**
+ * 对统一候选集执行访问过滤、受控一跳关系扩展、RRF 和最终 feature rerank。
+ * Query run ID 与完整分项分数在这里生成，保证所有检索模式共享一致 debug 契约。
+ */
 function rankSelectedRows(
   rootDir: string,
   request: MemoryQueryRequest,
@@ -659,6 +692,7 @@ function rankSelectedRows(
   const relatedCandidateIds = [...relatedIds].sort();
   const relatedRows = selectRowsByIds(rootDir, relatedCandidateIds).filter(
     (row) =>
+      // 显式关系允许跨 domain/scenario，但绝不能绕过访问控制或 includeTypes。
       rowIsAccessible(row, expandedRequest) &&
       !directIds.has(row.id) &&
       expandedRequest.includeTypes.includes(row.type as MemoryQueryRequest["includeTypes"][number])
@@ -682,6 +716,7 @@ function rankSelectedRows(
     if (ranks.length === 0) {
       return 0;
     }
+    // 常数 60 降低单个通道第一名的支配力；按三个可能通道的理论最大值归一化到 0-1。
     return Math.min(1, ranks.reduce((sum, rank) => sum + 1 / (60 + rank), 0) / (3 / 61));
   };
   const ranked = [
@@ -758,6 +793,10 @@ export function queryMemoriesWithDebug(
   return result;
 }
 
+/**
+ * 融合 lexical、真实 dense embedding 和 metadata rank，并返回完整 debug。
+ * Dense 只补候选和分数，最终仍复用统一访问过滤与排序边界。
+ */
 export async function queryMemoriesHybridWithDebug(
   rootDir: string,
   rawRequest: unknown,
@@ -803,16 +842,16 @@ export async function queryMemoriesHybridWithDebug(
   return result;
 }
 
+/** 提供不含 debug envelope 的同步 lexical 查询便利入口。 */
 export function queryMemories(rootDir: string, rawRequest: unknown, scoringOptions: QueryScoringOptions = {}): RankedMemory[] {
   return queryMemoriesWithDebug(rootDir, rawRequest, scoringOptions).ranked;
 }
 
 /**
- * Loads graph-selected memory IDs through the same metadata and security policy as direct retrieval.
+ * 让 graph 选中的 memory ID 重新通过与直接检索相同的 metadata 和安全策略。
  *
- * Graph traversal can discover an ID, but it cannot grant access. This boundary deliberately reruns
- * validity, visibility, sensitivity, project, and include-type checks. Domain/scenario are not
- * repeated because an explicit trusted relation is allowed to cross those direct-query filters.
+ * Graph traversal 只能发现 ID，不能授予访问权。这里刻意重跑 validity、visibility、sensitivity、
+ * project 和 include-type；不重复 domain/scenario，因为显式可信关系允许跨越直接查询过滤。
  */
 export function loadAccessibleMemoriesByIds(
   rootDir: string,
@@ -849,6 +888,10 @@ export function loadAccessibleMemoriesByIds(
     });
 }
 
+/**
+ * 在已有 lexical/hybrid/graph 结果上运行有界 batch cross-encoder rerank。
+ * 候选窗口、阈值和最终数量都显式进入 debug，便于评测和调参复现。
+ */
 export async function queryMemoriesRerankedWithDebug(
   rootDir: string,
   rawRequest: unknown,

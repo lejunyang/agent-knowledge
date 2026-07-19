@@ -7,6 +7,7 @@ export type GitRuntimeContext = {
   gitOrigin?: string;
 };
 
+/** 执行只读 Git 探测；任何失败都返回 undefined，避免 Hook 阻塞主流程。 */
 function runGit(cwd: string, args: string[]): string | undefined {
   try {
     return execFileSync("git", ["-C", cwd, ...args], {

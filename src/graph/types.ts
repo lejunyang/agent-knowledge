@@ -1,4 +1,4 @@
-/** Rebuildable knowledge-graph index types. Markdown and proposal files remain the fact sources. */
+/** 可重建知识关系图索引类型；Markdown 和 proposal 文件仍是事实来源。 */
 export type GraphNodeType =
   | "knowledge"
   | "domain"

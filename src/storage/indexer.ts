@@ -31,6 +31,7 @@ const GENERATED_KNOWLEDGE_FILES = new Set([
   "knowledge/_review_queue.md"
 ]);
 
+/** 统一索引中的相对路径分隔符，保证跨平台缓存可比较。 */
 function toPosixPath(filePath: string): string {
   return filePath.split(path.sep).join("/");
 }

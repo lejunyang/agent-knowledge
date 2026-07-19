@@ -12,6 +12,7 @@ type BuildContextPacketInput = {
   ranked: RankedMemory[];
 };
 
+/** 把排序结果裁剪为可注入 context packet 的稳定字段集合。 */
 function toItem(memory: RankedMemory): ContextPacketItem {
   const document = memory.document;
 
@@ -24,6 +25,7 @@ function toItem(memory: RankedMemory): ContextPacketItem {
   };
 }
 
+/** 深复制 packet 分区数组，供预算试装时回滚而不修改已接受结果。 */
 function clonePacket(packet: ContextPacket): ContextPacket {
   return {
     ...packet,
@@ -37,6 +39,7 @@ function clonePacket(packet: ContextPacket): ContextPacket {
   };
 }
 
+/** 试装一个条目，只有估算 token 未超预算时才提交到目标分区。 */
 function addWithinBudget(
   packet: ContextPacket,
   section: "always_apply" | "relevant_facts" | "procedures" | "examples",
@@ -66,6 +69,7 @@ export function estimateTextTokens(text: string): number {
   return cjkCount + Math.ceil(otherCount / 4);
 }
 
+/** 使用与装包逻辑相同的保守估算计算完整 context packet token 数。 */
 export function estimateContextPacketTokens(packet: ContextPacket): number {
   return estimateTextTokens(JSON.stringify(packet));
 }

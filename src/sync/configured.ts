@@ -8,6 +8,11 @@ import type { SyncBackend } from "./core.js";
 import { S3HttpObjectClient, S3SyncBackend } from "./s3.js";
 import { WebDavSyncBackend } from "./webdav.js";
 
+/**
+ * 根据用户配置构造 WebDAV 或 S3 backend，并在真正同步前解析凭据环境变量。
+ *
+ * 配置文件只保存环境变量名；缺失 provider 参数或凭据时明确失败，不能静默降级到其他远端。
+ */
 export function createConfiguredSyncBackend(
   config: UserConfig["sync"],
   environment: NodeJS.ProcessEnv = process.env

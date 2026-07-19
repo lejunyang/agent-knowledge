@@ -1,8 +1,8 @@
 /**
- * Retrieval model cache management is the only code path that intentionally downloads models.
+ * 检索模型缓存管理是唯一刻意下载模型的代码路径。
  *
- * Status uses the Transformers.js model registry with local-only checks. Download requires an
- * explicit command and passes a progress callback. Query, hooks, and embed-index remain local-only.
+ * status 只通过 Transformers.js registry 做本地检查；download 必须由显式命令触发并上报进度。
+ * query、Hook 和 embed-index 继续保持 local-only。
  */
 import type { UserConfig } from "../core/config.js";
 import { EMBEDDING_PROFILES } from "./embeddings.js";
@@ -44,7 +44,9 @@ export type ModelCacheAdapter = {
   }): Promise<void>;
 };
 
+/** 把 Transformers.js ModelRegistry 适配为可注入、可测试的缓存管理接口。 */
 export class TransformersModelCacheAdapter implements ModelCacheAdapter {
+  /** 只查询本地 registry 文件状态，不触发网络请求。 */
   async status(options: RetrievalModelDescriptor): Promise<{
     cached: boolean;
     files: ModelCacheFile[];
@@ -70,6 +72,7 @@ export class TransformersModelCacheAdapter implements ModelCacheAdapter {
     return normalizeRegistryStatus(result);
   }
 
+  /** 显式开放远程模型并下载到 Agent Knowledge 专用缓存目录。 */
   async download(
     options: RetrievalModelDescriptor & {
       onProgress?: (event: ModelProgressEvent) => void;
@@ -95,6 +98,7 @@ export class TransformersModelCacheAdapter implements ModelCacheAdapter {
   }
 }
 
+/** 从用户配置解析 embedding/reranker 的模型、任务、dtype 和专用缓存目录。 */
 export function resolveRetrievalModelDescriptor(
   config: UserConfig["embeddings"],
   kind: RetrievalModelKind
@@ -118,6 +122,7 @@ export function resolveRetrievalModelDescriptor(
   };
 }
 
+/** 只检查本地缓存状态，不联网，也不隐式下载缺失文件。 */
 export async function getRetrievalModelStatus(
   descriptor: RetrievalModelDescriptor,
   adapter: ModelCacheAdapter = new TransformersModelCacheAdapter()
@@ -131,6 +136,7 @@ export async function getRetrievalModelStatus(
   };
 }
 
+/** 通过显式模型下载入口填充缓存，并在完成后重新读取真实本地状态。 */
 export async function downloadRetrievalModel(
   descriptor: RetrievalModelDescriptor,
   adapter: ModelCacheAdapter = new TransformersModelCacheAdapter(),
@@ -140,6 +146,7 @@ export async function downloadRetrievalModel(
   return getRetrievalModelStatus(descriptor, adapter);
 }
 
+/** 兼容 Transformers.js registry 的多种返回形状，并归一化为文件级缓存状态。 */
 function normalizeRegistryStatus(input: unknown): {
   cached: boolean;
   files: ModelCacheFile[];

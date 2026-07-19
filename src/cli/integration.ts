@@ -22,6 +22,8 @@ import {
 } from "./prompts.js";
 
 export type IntegrationPrompter = InteractivePrompter;
+
+/** 提供美观的终端控件，同时允许测试和非 TTY 调用方注入替代实现。 */
 export class TerminalIntegrationPrompter extends InquirerPrompter {}
 
 export type IntegrationInstallSelection = {
@@ -32,6 +34,11 @@ export type IntegrationInstallSelection = {
   mode: IntegrationInstallMode;
 };
 
+/**
+ * 使用持久默认值和交互选择补全 integration 安装参数。
+ *
+ * 选择阶段与安装阶段分离，保证 prompt 本身不会写入外部产品配置文件。
+ */
 export async function promptForIntegrationInstall(options: {
   defaults: UserConfig["integration"];
   prompter: IntegrationPrompter;
@@ -130,6 +137,7 @@ export async function promptForIntegrationInstall(options: {
   return { product, scope, components, targetDir, mode };
 }
 
+/** 为人类格式化托管路径和冲突；机器调用方通过 `--json` 读取原始结果。 */
 export function formatIntegrationInstallResult(
   result: InstallIntegrationResult,
   locale: SupportedLocale = "zh-CN"

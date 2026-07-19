@@ -70,14 +70,17 @@ const SENSITIVITY_LEVEL: Record<Sensitivity, number> = {
   secret: 3
 };
 
+/** 计算同步 manifest、内容和冲突文件名使用的 SHA-256。 */
 function sha256(input: string): string {
   return createHash("sha256").update(input).digest("hex");
 }
 
+/** 按 backend+policy 身份隔离本地共同祖先 manifest。 */
 function baseManifestPath(rootDir: string, backendId: string): string {
   return resolveWorkspacePath(rootDir, ".memory", "sync", `base-${sha256(backendId).slice(0, 16)}.json`);
 }
 
+/** 读取上次成功同步的共同祖先；缺失表示首次同步。 */
 async function readBaseManifest(rootDir: string, backendId: string): Promise<RemoteSyncManifest | null> {
   const target = baseManifestPath(rootDir, backendId);
   if (!existsSync(target)) {
@@ -86,6 +89,7 @@ async function readBaseManifest(rootDir: string, backendId: string): Promise<Rem
   return JSON.parse(await readFile(target, "utf8")) as RemoteSyncManifest;
 }
 
+/** 原子写本地同步状态或拉取文件，避免中断留下半写内容。 */
 async function writeAtomic(target: string, content: string): Promise<void> {
   await mkdir(path.dirname(target), { recursive: true });
   const temporary = `${target}.tmp`;
@@ -93,10 +97,12 @@ async function writeAtomic(target: string, content: string): Promise<void> {
   await rename(temporary, target);
 }
 
+/** 仅在完整同步完成后持久化新的共同祖先 manifest。 */
 async function writeBaseManifest(rootDir: string, backendId: string, manifest: RemoteSyncManifest): Promise<void> {
   await writeAtomic(baseManifestPath(rootDir, backendId), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
+/** 从 Markdown frontmatter 提取同步权限元数据；远端 manifest 不能替代正文校验。 */
 function contentMetadata(
   filePath: string,
   content: string
@@ -108,6 +114,7 @@ function contentMetadata(
   };
 }
 
+/** 按 visibility 集合和 sensitivity clearance 执行同步硬过滤。 */
 function metadataAllowed(
   metadata: { visibility: Visibility; sensitivity: Sensitivity },
   policy: Required<SyncPolicy>
@@ -118,6 +125,7 @@ function metadataAllowed(
   );
 }
 
+/** 读取允许同步的正式 Markdown，并硬排除生成文件、inbox 和 archive。 */
 async function readLocalFiles(
   rootDir: string,
   policy: Required<SyncPolicy>
@@ -150,6 +158,9 @@ async function readLocalFiles(
   return files;
 }
 
+/**
+ * 读取策略允许的远端状态；无权限项放入 inaccessible，不能误解释为删除。
+ */
 async function readRemoteState(
   backend: SyncBackend,
   manifest: RemoteSyncManifest | null,
@@ -187,10 +198,12 @@ async function readRemoteState(
   return { state, inaccessible };
 }
 
+/** 把存在、删除和未知状态统一为三方比较使用的 hash/null。 */
 function stateHash(value: { hash: string } | null | undefined): string | null {
   return value?.hash ?? null;
 }
 
+/** 把双边内容原样写入本地冲突产物，等待人工决定事实版本。 */
 async function writeConflict(
   rootDir: string,
   backendId: string,
@@ -222,6 +235,7 @@ async function writeConflict(
   return target;
 }
 
+/** 远端拉取修改 Markdown 后标记 embedding 过期，避免继续使用旧向量。 */
 async function markEmbeddingsStale(rootDir: string): Promise<void> {
   const target = resolveWorkspacePath(rootDir, ".memory", "embeddings", "stale.json");
   await writeAtomic(
@@ -230,6 +244,12 @@ async function markEmbeddingsStale(rootDir: string): Promise<void> {
   );
 }
 
+/**
+ * 通过 local/base/remote 三方比较同步正式 Markdown，并把并发修改写成冲突产物。
+ *
+ * 同步遵守 visibility/sensitivity 上传边界，不采用 last-write-wins；远端拉取后重建 lexical
+ * 索引并标记 embedding stale，但 graph 仍由用户显式重建。
+ */
 export async function syncKnowledge(
   rootDir: string,
   backend: SyncBackend,
@@ -268,6 +288,7 @@ export async function syncKnowledge(
 
   for (const filePath of [...paths].sort()) {
     if (remoteRead.inaccessible.has(filePath)) {
+      // 无权限读取的远端项不能被当作“已删除”，否则会错误传播 tombstone。
       continue;
     }
     const localValue = local.get(filePath);
@@ -279,6 +300,7 @@ export async function syncKnowledge(
     const hasBase = baseState.has(filePath);
 
     if (!hasBase) {
+      // 首次见到路径时没有共同祖先：双端内容不同必须冲突，不能猜测哪一端更新。
       if (!localValue && !remoteValue && remoteManifest?.entries[filePath]?.deleted) {
         nextBaseEntries[filePath] = remoteManifest.entries[filePath];
         continue;
@@ -329,6 +351,7 @@ export async function syncKnowledge(
     const localChanged = localHash !== baseHash;
     const remoteChanged = remoteHash !== baseHash;
     if (localChanged && remoteChanged && localHash !== remoteHash) {
+      // 双边都偏离共同 base 时保留两份内容，禁止用时间戳或遍历顺序静默覆盖。
       conflicts.push(
         await writeConflict(rootDir, policyId, filePath, localValue?.content ?? null, remoteValue?.content ?? null)
       );
@@ -341,6 +364,7 @@ export async function syncKnowledge(
         pushed.push(filePath);
         nextEntries[filePath] = { hash: localValue.hash, deleted: false, updatedAt: now };
       } else {
+        // 本地删除而远端未变时传播 tombstone，防止下次同步把旧文件复活。
         await backend.deleteFile(filePath);
         deletedRemote.push(filePath);
         nextEntries[filePath] = { hash: baseHash ?? "", deleted: true, updatedAt: now };
@@ -361,6 +385,7 @@ export async function syncKnowledge(
           sensitivity: remoteValue.sensitivity
         };
       } else {
+        // 远端 tombstone 只在本地未修改时生效，避免删除本地新内容。
         await rm(resolveWorkspacePath(rootDir, filePath), { force: true });
         deletedLocal.push(filePath);
         nextEntries[filePath] = {

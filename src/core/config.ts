@@ -118,6 +118,7 @@ export type UserLocalePreference = LocalePreference;
 
 export const DEFAULT_USER_CONFIG: UserConfig = UserConfigSchema.parse({});
 
+/** 解析 XDG 风格配置路径，同时保留显式兼容环境变量覆盖。 */
 export function getDefaultUserConfigPath(
   environment: NodeJS.ProcessEnv = process.env
 ): string {
@@ -130,10 +131,12 @@ export function getDefaultUserConfigPath(
   return path.join(configHome, "agent-knowledge", "config.json");
 }
 
+/** 校验部分用户输入，并通过 Zod schema 补齐所有文档化默认值。 */
 export function resolveUserConfig(input: unknown = {}): UserConfig {
   return UserConfigSchema.parse(input);
 }
 
+/** 读取原始 JSON 而不补默认值，使调用方能区分配置来源和最终生效配置。 */
 export function readUserConfigSource(configPath = getDefaultUserConfigPath()): unknown {
   if (!existsSync(configPath)) {
     return {};
@@ -141,10 +144,17 @@ export function readUserConfigSource(configPath = getDefaultUserConfigPath()): u
   return JSON.parse(readFileSync(configPath, "utf8")) as unknown;
 }
 
+/** 加载最终生效配置；配置文件不存在等价于空的部分配置。 */
 export function loadUserConfig(configPath = getDefaultUserConfigPath()): UserConfig {
   return resolveUserConfig(readUserConfigSource(configPath));
 }
 
+/**
+ * 原子写入权限为 0600 的配置文件。
+ *
+ * 配置虽然只保存凭据环境变量名，限制文件权限仍能减少 endpoint、用户名、路径和运行策略的
+ * 意外泄露。
+ */
 export function writeUserConfig(configPath: string, config: UserConfig): void {
   const resolvedPath = path.resolve(configPath);
   mkdirSync(path.dirname(resolvedPath), { recursive: true });

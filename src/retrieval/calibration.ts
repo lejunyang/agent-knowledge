@@ -1,8 +1,8 @@
 /**
- * Calibration searches a deliberately small configuration grid and never mutates user config.
+ * Calibration 只搜索刻意限制的小型配置网格，永不修改用户配置。
  *
- * Safety-related failures dominate the objective: forbidden injection and failed abstention are
- * compared before recall/MRR. Negative usefulness feedback is an additional penalty.
+ * 安全失败优先主导目标函数：先比较 forbidden injection 和 abstention 失败，再比较 recall/MRR；
+ * not_useful 反馈提供额外惩罚。
  */
 export type CalibrationCandidate = {
   id: string;
@@ -35,6 +35,11 @@ export type CalibrationSuggestion = {
   mrr: number;
 };
 
+/**
+ * 在有限参数网格中评估阈值、基础权重和结果数量，并返回 dry-run 建议。
+ *
+ * 目标函数优先惩罚 forbidden injection、abstention 失败和 not_useful 反馈；本函数不自动改配置。
+ */
 export function calibrateRetrieval(options: {
   cases: CalibrationCase[];
   feedback: CalibrationFeedback[];
@@ -123,6 +128,7 @@ export function calibrateRetrieval(options: {
   };
 }
 
+/** 按安全失败、反馈惩罚、MRR 和结果规模的优先级比较两个参数建议。 */
 function compareSuggestions(
   left: CalibrationSuggestion,
   right: CalibrationSuggestion

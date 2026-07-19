@@ -133,6 +133,7 @@ const EvalCorpusSchema = z.object({
 
 export type EvalCorpus = z.output<typeof EvalCorpusSchema>;
 
+/** 把 YAML parser 产生的 Date 递归转换为 schema 使用的日期字符串。 */
 function normalizeYamlDates(value: unknown): unknown {
   if (value instanceof Date) {
     return value.toISOString().slice(0, 10);
@@ -148,12 +149,14 @@ function normalizeYamlDates(value: unknown): unknown {
   return value;
 }
 
+/** 读取并校验带文档 fixture 的完整评测语料，同时规范 YAML 日期对象。 */
 export async function loadEvalCorpus(filePath: string): Promise<EvalCorpus> {
   return EvalCorpusSchema.parse(
     normalizeYamlDates(yaml.load(await readFile(filePath, "utf8")))
   );
 }
 
+/** 把脱敏评测 fixture 写成真实 Markdown，使评测复用生产索引和过滤链路。 */
 export async function materializeEvalCorpus(rootDir: string, corpus: EvalCorpus): Promise<void> {
   for (const item of corpus.documents) {
     const relativePath = path.posix.join(
@@ -221,6 +224,7 @@ export async function loadEvalSuite(filePath: string): Promise<EvalSuite> {
   return { cases: [EvalCaseSchema.parse(parsed)] };
 }
 
+/** 计算 expected memory 在 top-K 中的覆盖比例。 */
 function recallAtK(matchedIds: string[], expectedIds: string[], k: 1 | 3 | 5): number {
   if (expectedIds.length === 0) {
     return 1;
@@ -229,15 +233,18 @@ function recallAtK(matchedIds: string[], expectedIds: string[], k: 1 | 3 | 5): n
   return expectedIds.filter((id) => topIds.has(id)).length / expectedIds.length;
 }
 
+/** 计算首个相关结果的 reciprocal rank；未命中返回 0。 */
 function reciprocalRank(matchedIds: string[], relevantIds: Set<string>): number {
   const index = matchedIds.findIndex((id) => relevantIds.has(id));
   return index === -1 ? 0 : 1 / (index + 1);
 }
 
+/** 按位置折损 relevance grade，供 nDCG 计算。 */
 function discountedCumulativeGain(grades: number[]): number {
   return grades.reduce((sum, grade, index) => sum + (2 ** grade - 1) / Math.log2(index + 2), 0);
 }
 
+/** 用理想排序归一化 DCG，评估多级相关性的排序质量。 */
 function normalizedDiscountedCumulativeGain(matchedIds: string[], grades: Record<string, number>, k = 5): number {
   const actual = matchedIds.slice(0, k).map((id) => grades[id] ?? 0);
   const ideal = Object.values(grades)
@@ -362,10 +369,16 @@ export async function runEvalCase(
   };
 }
 
+/** 对空集合返回 0 的稳定平均值 helper。 */
 function average(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+/**
+ * 顺序运行评测套件并汇总 rank、误注入、abstention、延迟和 token 指标。
+ *
+ * 顺序执行避免并发模型/SQLite 竞争污染延迟和确定性结果。
+ */
 export async function runEvalSuite(
   rootDir: string,
   suite: EvalSuite,

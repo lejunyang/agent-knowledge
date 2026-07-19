@@ -21,14 +21,17 @@ import {
 } from "./prompts.js";
 
 export type ConfigurationPrompter = InteractivePrompter;
+
+/** 真实终端使用 Inquirer 控件，测试可注入确定性 prompter。 */
 export class TerminalConfigurationPrompter extends InquirerPrompter {}
 
+/** 空答案保留已有字符串配置，避免重复运行向导时意外清空路径或 endpoint。 */
 function withDefault(answer: string, defaultValue: string): string {
   const trimmed = answer.trim();
   return trimmed.length > 0 ? trimmed : defaultValue;
 }
 
-/** Parses a decimal setting while preserving the current value for an empty answer. */
+/** 解析指定范围内的小数；空答案保留当前配置值。 */
 function decimalInRange(
   answer: string,
   currentValue: number,
@@ -43,6 +46,12 @@ function decimalInRange(
   return value;
 }
 
+/**
+ * 收集所有持久化功能设置，并原子重写用户配置。
+ *
+ * 向导刻意不执行安装、下载或网络副作用；这些动作保留为显式命令，避免用户只是在审阅配置
+ * 答案时意外修改其他系统。
+ */
 export async function runConfigurationWizard(options: {
   configPath: string;
   prompter: ConfigurationPrompter;

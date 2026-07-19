@@ -69,10 +69,12 @@ export type CaptureMaterialResult = {
   indexed?: number;
 };
 
+/** 生成归档文件名和 frontmatter 使用的 UTC 日期。 */
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** 生成保留 Unicode 的人类可读文件名片段。 */
 function slugify(input: string): string {
   const slug = input
     .toLowerCase()
@@ -83,6 +85,7 @@ function slugify(input: string): string {
   return slug || "knowledge";
 }
 
+/** 生成满足知识 ID schema 的 ASCII 片段。 */
 function idSlugify(input: string): string {
   const slug = input
     .toLowerCase()
@@ -93,10 +96,12 @@ function idSlugify(input: string): string {
   return slug || "memory";
 }
 
+/** 根据日期、domain 和标题生成直接材料的知识 ID。 */
 function idFromInput(input: CandidateMemoryInput): string {
   return `k_${today().replaceAll("-", "")}_${idSlugify(input.domain)}_${idSlugify(input.title)}`;
 }
 
+/** 保留 domain 层级生成目录路径，避免把业务层级压平成单段名称。 */
 function domainDirectory(domain: string): string {
   return domain
     .split("/")
@@ -104,6 +109,7 @@ function domainDirectory(domain: string): string {
     .join("/");
 }
 
+/** 用 access 探测路径存在性，不把权限/缺失差异暴露给命名循环。 */
 async function pathExists(filePath: string): Promise<boolean> {
   try {
     await access(filePath);
@@ -113,6 +119,7 @@ async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
+/** 为同名知识追加数字后缀，避免覆盖已有 Markdown 事实。 */
 async function uniqueRelativePath(rootDir: string, desiredRelativePath: string): Promise<string> {
   const parsed = path.posix.parse(desiredRelativePath);
   let candidate = desiredRelativePath;
@@ -126,6 +133,7 @@ async function uniqueRelativePath(rootDir: string, desiredRelativePath: string):
   return candidate;
 }
 
+/** 根据知识类型、完整 domain 层级和标题生成 active 相对路径。 */
 function activeRelativePath(frontmatter: KnowledgeFrontmatter): string {
   const date = frontmatter.created_at || today();
   return path.posix.join(
@@ -136,6 +144,7 @@ function activeRelativePath(frontmatter: KnowledgeFrontmatter): string {
   );
 }
 
+/** 读取所有可审阅 Markdown，包括 inbox/archive，但排除生成式导航文件。 */
 async function readAllKnowledgeDocuments(rootDir: string): Promise<KnowledgeDocument[]> {
   const fg = (await import("fast-glob")).default;
   const files = await fg("knowledge/**/*.md", {
@@ -158,6 +167,7 @@ async function readAllKnowledgeDocuments(rootDir: string): Promise<KnowledgeDocu
   return documents;
 }
 
+/** 返回批量晋升阻断原因；客户和自动会话必须经过精确 ID 人工批准。 */
 function promotionBlockedReason(document: KnowledgeDocument): string | null {
   if (document.frontmatter.actor_type === "customer") {
     return "customer_observation_requires_trusted_review";
@@ -168,6 +178,10 @@ function promotionBlockedReason(document: KnowledgeDocument): string | null {
   return null;
 }
 
+/**
+ * 在受信 replacement 激活时把被替代知识标为 deprecated 并设置 valid_until。
+ * 先保留旧 Markdown 供审计，而不是删除历史事实。
+ */
 async function invalidateSupersededDocuments(
   rootDir: string,
   supersededIds: string[],
@@ -198,6 +212,7 @@ async function invalidateSupersededDocuments(
   }
 }
 
+/** 汇总知识状态、类型、domain 和 inbox，供人工审阅流程选择精确候选 ID。 */
 export async function listKnowledge(rootDir: string): Promise<KnowledgeListSummary> {
   await initKnowledgeWorkspace(rootDir);
   const documents = await readAllKnowledgeDocuments(rootDir);
@@ -231,6 +246,12 @@ export async function listKnowledge(rootDir: string): Promise<KnowledgeListSumma
   return summary;
 }
 
+/**
+ * 预览或应用 inbox 晋升，并可用 `approvedIds` 把操作范围收窄为人工白名单。
+ *
+ * 不传白名单时，客户和 automated session 候选保持硬阻断；传入白名单表示人类已经审阅
+ * 对应证据，因此只允许这些 ID 越过批量阻断。所有 ID 必须在写入前一次性校验，避免半批生效。
+ */
 export async function organizeInbox(
   rootDir: string,
   options: { apply: boolean; rebuild: boolean; approvedIds?: string[] }
@@ -257,12 +278,12 @@ export async function organizeInbox(
   const blocked: OrganizeInboxResult["blocked"] = [];
 
   for (const document of documents) {
-    // Providing explicit IDs changes the operation from bulk organization to a human-reviewed
-    // allowlist. Unlisted candidates must remain untouched even when they are otherwise promotable.
+    // 提供显式 ID 后，本次操作从批量整理变为人工审阅白名单；未列出的候选即使本可晋升也必须保持不动。
     if (approvedIds && !approvedIds.has(document.frontmatter.id)) {
       continue;
     }
     const blockedReason = promotionBlockedReason(document);
+    // 只有精确列入人工白名单的候选才能越过不可信来源阻断，不能由状态或置信度隐式放行。
     if (blockedReason && !approvedIds?.has(document.frontmatter.id)) {
       blocked.push({
         id: document.frontmatter.id,
@@ -306,6 +327,7 @@ export async function organizeInbox(
   return { applied: options.apply, moved, blocked, indexed };
 }
 
+/** 把已结构化材料转换为 Markdown 文档，并复用候选治理决定初始状态。 */
 function documentFromMaterialInput(input: CandidateMemoryInput): KnowledgeDocument {
   const decision = decideCandidateStatus(input);
   const date = today();
@@ -351,6 +373,11 @@ ${input.summary}
   });
 }
 
+/**
+ * 把 Skill 已结构化的用户材料写入 active 或 inbox，并按需重建 lexical 索引。
+ *
+ * CLI 不理解自然语言，材料拆分和来源判断由上游 Skill 完成；本函数只执行 schema、治理和落盘边界。
+ */
 export async function captureMaterial(
   rootDir: string,
   inputs: CandidateMemoryInput[],

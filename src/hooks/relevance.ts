@@ -1,8 +1,8 @@
 /**
- * Hook relevance separates retrieval from model-context injection.
+ * Hook relevance 把检索结果和模型上下文注入分离。
  *
- * Query can return diagnostics and low-confidence candidates for humans, while automatic hooks must
- * remain conservative: no result and weak result both produce no stdout, which means no model context.
+ * Query 可以向人类返回诊断和低置信候选；自动 Hook 必须更保守：无结果和弱结果都不产生
+ * stdout，也就不会污染模型上下文。
  */
 import type { ContextPacket, RankedMemory } from "../core/types.js";
 import type { KnowledgeCatalog } from "../storage/catalog.js";
@@ -53,6 +53,7 @@ const CATALOG_STOP_TERMS = new Set([
   "sop"
 ]);
 
+/** 提取 catalog 浏览关键词，并移除“查看/知识/catalog”等意图词，减少全库泛匹配。 */
 function promptTerms(input: string): string[] {
   const lexical = input
     .toLowerCase()
@@ -65,10 +66,16 @@ function promptTerms(input: string): string[] {
   );
 }
 
+/** 检测用户是否明确要求浏览知识；普通任务不得收到知识菜单。 */
 export function isCatalogIntent(prompt: string): boolean {
   return CATALOG_INTENT_PATTERNS.some((pattern) => pattern.test(prompt));
 }
 
+/**
+ * 只返回与浏览 prompt 共享明确词项的 catalog 条目。
+ *
+ * 即使用户明确要求查看目录，也不能注入完整 aliases registry；全量词表会影响无关推理并浪费上下文。
+ */
 export function filterCatalogForPrompt(
   catalog: KnowledgeCatalog,
   prompt: string,
@@ -115,6 +122,11 @@ export function filterCatalogForPrompt(
   };
 }
 
+/**
+ * 在检索后执行保守的 Hook 注入门控。
+ *
+ * 空结果和低于阈值的结果刻意返回空上下文，而不是解释性消息，把模型上下文留给用户真实任务。
+ */
 export function decideHookInjection(input: {
   prompt: string;
   ranked: RankedMemory[];

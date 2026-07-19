@@ -1,8 +1,8 @@
 /**
- * Observation extraction turns detailed SubagentStop evidence into stable maintenance inputs.
+ * Observation extraction 把详细 SubagentStop 证据转换为稳定 maintenance 输入。
  *
- * Source logs remain intact for debugging. A separate source watermark makes extraction idempotent,
- * while append-only observations let proposal generation replay independently.
+ * 源日志保留用于调试；独立 source watermark 保证抽取幂等，append-only observation 允许 proposal
+ * 生成独立重放。
  */
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -22,7 +22,7 @@ type ObservationExtractionState = {
   updatedAt: string;
 };
 
-/** Extracts newly appended SubagentStop events and advances the source watermark. */
+/** 抽取新追加的 SubagentStop，并在完整扫描后推进 source watermark。 */
 export async function extractMaintenanceObservations(rootDir: string): Promise<{
   extracted: number;
   skipped: number;
@@ -55,7 +55,7 @@ export async function extractMaintenanceObservations(rootDir: string): Promise<{
   return { extracted, skipped, sourceWatermarkBefore, sourceWatermarkAfter };
 }
 
-/** Reads all extracted observations in append order. */
+/** 按追加顺序读取全部 observation，供 proposal worker 使用自己的独立水位消费。 */
 export async function readMaintenanceObservations(
   rootDir: string
 ): Promise<ExtractedMaintenanceObservation[]> {
@@ -69,7 +69,7 @@ export async function readMaintenanceObservations(
     .map((line) => JSON.parse(line) as ExtractedMaintenanceObservation);
 }
 
-/** Reports source-log and observation watermarks for operators. */
+/** 向运维者汇报源事件、水位、待抽取数量和 observation 总数。 */
 export async function getObservationStatus(rootDir: string): Promise<{
   sourceEvents: number;
   sourceWatermark: number;
@@ -89,8 +89,8 @@ export async function getObservationStatus(rootDir: string): Promise<{
 }
 
 /**
- * Prefers structured result fields and then common text fallbacks.
- * Events without reusable text are skipped instead of creating noisy long-term observations.
+ * 优先读取结构化 result 字段，再回退常见文本字段。
+ * 没有可复用文本的事件直接跳过，避免制造噪声 observation。
  */
 function observationFromSubagentStop(
   record: SubagentLogRecord
@@ -150,7 +150,7 @@ function observationFromSubagentStop(
   };
 }
 
-/** Appends one observation; the source watermark prevents duplicate extraction. */
+/** 追加单个 observation；source watermark 防止同一 Stop 被重复抽取。 */
 async function appendObservation(
   rootDir: string,
   observation: ExtractedMaintenanceObservation
@@ -160,12 +160,12 @@ async function appendObservation(
   await appendFile(target, `${JSON.stringify(observation)}\n`, "utf8");
 }
 
-/** Resolves the append-only observation log path. */
+/** 返回 append-only observation 日志路径。 */
 function observationPath(rootDir: string): string {
   return resolveWorkspacePath(rootDir, ".memory", "observations", "events.jsonl");
 }
 
-/** Reads the SubagentStop extraction watermark. */
+/** 读取 SubagentStop 抽取水位。 */
 async function readExtractionState(rootDir: string): Promise<ObservationExtractionState> {
   const target = resolveWorkspacePath(
     rootDir,
@@ -192,7 +192,7 @@ async function readExtractionState(rootDir: string): Promise<ObservationExtracti
   };
 }
 
-/** Persists extraction state only after the complete source batch has been examined. */
+/** 仅在完整检查源批次后持久化抽取水位，避免中途失败丢事件。 */
 async function writeExtractionState(
   rootDir: string,
   state: ObservationExtractionState
@@ -207,21 +207,21 @@ async function writeExtractionState(
   await writeFile(target, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
-/** Returns a plain object while rejecting arrays and null. */
+/** 只接受普通对象，拒绝数组和 null。 */
 function objectValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 }
 
-/** Returns a non-empty string. */
+/** 只返回 trim 后非空的字符串。 */
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : undefined;
 }
 
-/** Reads one string field from an optional object. */
+/** 从可选对象读取单个非空字符串字段。 */
 function stringField(
   object: Record<string, unknown> | null,
   field: string
@@ -229,7 +229,7 @@ function stringField(
   return object ? stringValue(object[field]) : undefined;
 }
 
-/** Restricts untrusted authority strings to supported values. */
+/** 把不可信 authority 字符串限制到受支持集合，未知值降级为 model_inferred。 */
 function normalizeAuthority(
   value: string | undefined
 ): MaintenanceObservation["sourceAuthority"] {
@@ -240,7 +240,7 @@ function normalizeAuthority(
     : "model_inferred";
 }
 
-/** Restricts untrusted memory type strings to supported proposal values. */
+/** 把不可信 memory type 字符串限制到 proposal 支持的类型集合。 */
 function normalizeMemoryType(
   value: string | undefined
 ): MaintenanceObservation["memoryType"] {
@@ -252,7 +252,7 @@ function normalizeMemoryType(
     : undefined;
 }
 
-/** Produces a stable short identifier for observation and episode records. */
+/** 为 observation 和 episode 记录生成稳定短标识。 */
 function hash(value: unknown): string {
   return createHash("sha256")
     .update(JSON.stringify(value))

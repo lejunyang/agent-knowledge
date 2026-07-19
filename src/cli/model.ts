@@ -7,8 +7,11 @@ import {
 } from "./prompts.js";
 
 export type ModelPrompter = InteractivePrompter;
+
+/** 在交互终端中复用统一 Inquirer adapter 选择模型类型。 */
 export class TerminalModelPrompter extends InquirerPrompter {}
 
+/** 未传 `--kind` 时，交互选择管理 Embedding 还是 Reranker。 */
 export async function promptForRetrievalModelKind(
   prompter: ModelPrompter,
   locale: SupportedLocale
