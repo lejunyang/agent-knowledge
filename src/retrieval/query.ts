@@ -69,7 +69,7 @@ export type QueryDebugInfo = {
   fallbackUsed: boolean;
   fallbackReason: "empty_fts_query" | "no_fts_matches" | null;
   fallbackSuppressedReason: "missing_domain_or_scenario" | null;
-  retrievalMode: "lexical" | "hybrid";
+  retrievalMode: "lexical" | "hybrid" | "graph" | "hybrid-graph";
   embeddingRecordCount: number;
   embeddingCandidateIds: string[];
   candidateRowCount: number;
@@ -87,6 +87,12 @@ export type QueryDebugInfo = {
     resultLimit: number;
     minScore: number;
   };
+  graphExpansion?: Array<{
+    id: string;
+    depth: number;
+    graphScore: number;
+    relation: string;
+  }>;
   resultScores: Array<{
     id: string;
     lexicalScore: number;
@@ -799,6 +805,48 @@ export async function queryMemoriesHybridWithDebug(
 
 export function queryMemories(rootDir: string, rawRequest: unknown, scoringOptions: QueryScoringOptions = {}): RankedMemory[] {
   return queryMemoriesWithDebug(rootDir, rawRequest, scoringOptions).ranked;
+}
+
+/**
+ * Loads graph-selected memory IDs through the same metadata and security policy as direct retrieval.
+ *
+ * Graph traversal can discover an ID, but it cannot grant access. This boundary deliberately reruns
+ * validity, visibility, sensitivity, project, and include-type checks. Domain/scenario are not
+ * repeated because an explicit trusted relation is allowed to cross those direct-query filters.
+ */
+export function loadAccessibleMemoriesByIds(
+  rootDir: string,
+  rawRequest: unknown,
+  ids: string[],
+  scoringOptions: QueryScoringOptions = {}
+): RankedMemory[] {
+  const request = MemoryQueryRequestSchema.parse(rawRequest);
+  const embeddingScorer = scoringOptions.embeddingScorer ?? defaultEmbeddingScorer;
+  const reranker = scoringOptions.reranker ?? defaultMemoryReranker;
+  return selectRowsByIds(rootDir, ids)
+    .filter(
+      (row) =>
+        rowIsAccessible(row, request) &&
+        request.includeTypes.includes(
+          row.type as MemoryQueryRequest["includeTypes"][number]
+        )
+    )
+    .map((row) => {
+      const document = loadDocument(rootDir, row.file_path);
+      return {
+        document,
+        ...scoreRow(
+          row,
+          document,
+          request,
+          0,
+          undefined,
+          0,
+          embeddingScorer,
+          reranker
+        )
+      };
+    });
 }
 
 export async function queryMemoriesRerankedWithDebug(

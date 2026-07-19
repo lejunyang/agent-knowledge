@@ -79,4 +79,12 @@ describe("CLI user configuration", () => {
     expect(english).toContain("Local human-readable memory toolkit for agents");
     expect(english).toContain("Interactively configure");
   });
+
+  it("documents graph retrieval modes and traversal controls in query help", async () => {
+    const chinese = await runCli(["query", "--help"]);
+
+    expect(chinese).toContain("lexical、hybrid、graph 或 hybrid-graph");
+    expect(chinese).toContain("--graph-depth");
+    expect(chinese).toContain("--graph-decay");
+  });
 });

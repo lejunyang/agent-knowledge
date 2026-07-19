@@ -67,6 +67,9 @@ describe("user configuration", () => {
     expect(loaded.embeddings.provider).toBe("local");
     expect(loaded.embeddings.profile).toBe(DEFAULT_USER_CONFIG.embeddings.profile);
     expect(loaded.embeddings.cacheDir).toContain("agent-knowledge");
+    expect(loaded.embeddings.retrieval).toBe("lexical");
+    expect(loaded.embeddings.graphDepth).toBe(1);
+    expect(loaded.embeddings.graphDecay).toBe(0.6);
     expect(loaded.embeddings.rerankerProfile).toBe("bge-reranker-large");
     expect(loaded.sync.provider).toBe("none");
     expect(loaded.locale).toBe("auto");
@@ -99,6 +102,8 @@ describe("user configuration", () => {
       "/tmp/agent-model-cache",
       "no",
       "hybrid",
+      "2",
+      "0.7",
       "30",
       "",
       "trae",
@@ -133,6 +138,8 @@ describe("user configuration", () => {
       profile: "bge-small-zh-v1.5",
       cacheDir: "/tmp/agent-model-cache",
       retrieval: "hybrid",
+      graphDepth: 2,
+      graphDecay: 0.7,
       embeddingTopK: 30
     });
     expect(configured.integration.mode).toBe("overwrite");

@@ -34,7 +34,11 @@ const EmbeddingsConfigSchema = z
     model: z.string().min(1).nullable().default(null),
     cacheDir: z.string().min(1).default(path.join(homedir(), ".cache", "agent-knowledge", "models")),
     allowRemoteModels: z.boolean().default(false),
-    retrieval: z.enum(["lexical", "hybrid"]).default("lexical"),
+    retrieval: z
+      .enum(["lexical", "hybrid", "graph", "hybrid-graph"])
+      .default("lexical"),
+    graphDepth: z.number().int().min(1).max(2).default(1),
+    graphDecay: z.number().positive().max(1).default(0.6),
     embeddingTopK: z.number().int().positive().default(20),
     rerankerProfile: z.enum(["bge-reranker-large"]).default("bge-reranker-large"),
     rerankerModel: z.string().min(1).nullable().default(null),

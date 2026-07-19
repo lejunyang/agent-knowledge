@@ -44,6 +44,7 @@ import {
   logMemoryFeedback,
   organizeInbox,
   queryKnowledgeGraph,
+  queryMemoriesGraphWithDebug,
   queryMemories,
   queryMemoriesHybridWithDebug,
   queryMemoriesRerankedWithDebug,
@@ -571,11 +572,13 @@ program
   .option("--project-id <id...>", t("允许的项目 ID", "allowed project IDs"))
   .option("--agent-role <role>", t("Agent 角色", "agent role"), "main")
   .option("--debug", t("在 JSON 中包含检索调试信息", "include retrieval debug details in JSON output"), false)
-  .option("--retrieval <mode>", t("lexical 或 hybrid；默认读取用户配置", "lexical or hybrid; defaults to user config"))
+  .option("--retrieval <mode>", t("lexical、hybrid、graph 或 hybrid-graph；默认读取用户配置", "lexical, hybrid, graph, or hybrid-graph; defaults to user config"))
   .option("--provider <provider>", t("混合检索的 embedding provider", "embedding provider for hybrid retrieval"))
   .option("--profile <profile>", t("Embedding profile", "embedding profile"))
   .option("--model <model>", t("混合检索模型 ID 或本地路径", "model id or local path for hybrid retrieval"))
   .option("--embedding-top-k <count>", t("混合检索 embedding topK", "embedding topK for hybrid retrieval"))
+  .option("--graph-depth <depth>", t("图遍历深度：1 或 2；默认读取用户配置", "graph traversal depth: 1 or 2; defaults to user config"))
+  .option("--graph-decay <decay>", t("图检索每跳衰减系数：(0, 1]；默认读取用户配置", "graph score decay per hop: (0, 1]; defaults to user config"))
   .option("--rerank", t("使用本地 cross-encoder 批量重排", "use local cross-encoder batch reranking"), false)
   .option("--allow-remote-models", t("允许远程下载模型", "allow remote model downloads"), false)
   .action(async (options: {
@@ -593,13 +596,22 @@ program
     profile?: string;
     model?: string;
     embeddingTopK?: string;
+    graphDepth?: string;
+    graphDecay?: string;
     rerank: boolean;
     allowRemoteModels: boolean;
   }) => {
     const configuredEmbeddings = userConfig().embeddings;
     const retrievalMode = options.retrieval ?? configuredEmbeddings.retrieval;
-    if (retrievalMode !== "lexical" && retrievalMode !== "hybrid") {
-      throw new Error("--retrieval must be lexical or hybrid");
+    if (
+      retrievalMode !== "lexical" &&
+      retrievalMode !== "hybrid" &&
+      retrievalMode !== "graph" &&
+      retrievalMode !== "hybrid-graph"
+    ) {
+      throw new Error(
+        "--retrieval must be lexical, hybrid, graph, or hybrid-graph"
+      );
     }
     const providerName = options.provider ?? configuredEmbeddings.provider;
     if (providerName !== "transformers" && providerName !== "local") {
@@ -617,23 +629,51 @@ program
       projectIds: options.projectId ?? []
     });
     const root = resolveCliRoot(options.root);
-    const baseResult =
-      retrievalMode === "hybrid"
-        ? await queryMemoriesHybridWithDebug(root, request, {
-            embeddingProvider: createEmbeddingProvider({
-              provider: providerName,
-              profile:
-                options.profile === "multilingual-e5-small" || options.profile === "bge-small-zh-v1.5"
-                  ? options.profile
-                  : configuredEmbeddings.profile,
-              model: options.model ?? configuredEmbeddings.model ?? undefined,
-              allowRemoteModels: options.allowRemoteModels || configuredEmbeddings.allowRemoteModels
-            }),
-            embeddingTopK: options.embeddingTopK
-              ? Number.parseInt(options.embeddingTopK, 10)
-              : configuredEmbeddings.embeddingTopK
-          })
-        : queryMemoriesWithDebug(root, request);
+    const embeddingProvider = createEmbeddingProvider({
+      provider: providerName,
+      profile:
+        options.profile === "multilingual-e5-small" ||
+        options.profile === "bge-small-zh-v1.5"
+          ? options.profile
+          : configuredEmbeddings.profile,
+      model: options.model ?? configuredEmbeddings.model ?? undefined,
+      allowRemoteModels:
+        options.allowRemoteModels || configuredEmbeddings.allowRemoteModels
+    });
+    const embeddingTopK = options.embeddingTopK
+      ? Number.parseInt(options.embeddingTopK, 10)
+      : configuredEmbeddings.embeddingTopK;
+    const graphDepth = options.graphDepth
+      ? Number.parseInt(options.graphDepth, 10)
+      : configuredEmbeddings.graphDepth;
+    const graphDecay = options.graphDecay
+      ? Number.parseFloat(options.graphDecay)
+      : configuredEmbeddings.graphDecay;
+    if (!Number.isInteger(graphDepth) || graphDepth < 1 || graphDepth > 2) {
+      throw new Error("--graph-depth must be 1 or 2");
+    }
+    if (!Number.isFinite(graphDecay) || graphDecay <= 0 || graphDecay > 1) {
+      throw new Error("--graph-decay must be greater than 0 and no more than 1");
+    }
+
+    let baseResult;
+    if (retrievalMode === "graph" || retrievalMode === "hybrid-graph") {
+      baseResult = await queryMemoriesGraphWithDebug(root, request, {
+        baseMode: retrievalMode === "hybrid-graph" ? "hybrid" : "lexical",
+        depth: graphDepth,
+        decay: graphDecay,
+        embeddingProvider:
+          retrievalMode === "hybrid-graph" ? embeddingProvider : undefined,
+        embeddingTopK
+      });
+    } else if (retrievalMode === "hybrid") {
+      baseResult = await queryMemoriesHybridWithDebug(root, request, {
+        embeddingProvider,
+        embeddingTopK
+      });
+    } else {
+      baseResult = queryMemoriesWithDebug(root, request);
+    }
     const { ranked, debug } = options.rerank
       ? await queryMemoriesRerankedWithDebug(root, request, {
           baseResult,

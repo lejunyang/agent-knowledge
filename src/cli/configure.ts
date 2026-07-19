@@ -145,11 +145,47 @@ export async function runConfigurationWizard(options: {
     prompter,
     t("检索模式", "Retrieval mode"),
     [
-      { name: t("词法检索", "Lexical"), value: "lexical", description: t("轻量 FTS/BM25 检索", "Lightweight FTS/BM25 retrieval") },
-      { name: t("混合检索", "Hybrid"), value: "hybrid", description: t("融合词法和 embedding 检索", "Fuse lexical and embedding retrieval") }
+      {
+        name: t("词法检索", "Lexical"),
+        value: "lexical",
+        description: t("轻量 FTS/BM25 检索；无需模型或图索引", "Lightweight FTS/BM25 retrieval; no model or graph index")
+      },
+      {
+        name: t("混合检索", "Hybrid"),
+        value: "hybrid",
+        description: t("融合词法和 embedding 检索；需要 embedding 缓存", "Fuse lexical and embedding retrieval; requires embedding cache")
+      },
+      {
+        name: t("图检索", "Graph"),
+        value: "graph",
+        description: t("先词法召回，再沿可信知识关系补充上下文", "Use lexical seeds, then expand trusted knowledge relations")
+      },
+      {
+        name: t("混合图检索", "Hybrid graph"),
+        value: "hybrid-graph",
+        description: t("先混合召回，再做有界图遍历；效果最全但开销最高", "Use hybrid seeds plus bounded graph traversal; broadest but most expensive")
+      }
     ],
     current.embeddings.retrieval
   );
+  const graphDepth = await promptNumber(
+    prompter,
+    t("图检索遍历深度 — 1 更保守，2 可补充多跳依赖", "Graph traversal depth — 1 is conservative; 2 includes multi-hop dependencies"),
+    current.embeddings.graphDepth,
+    1
+  );
+  if (graphDepth > 2) {
+    throw new Error(t("图检索遍历深度最大为 2", "Graph traversal depth cannot exceed 2"));
+  }
+  const graphDecayAnswer = await promptInput(
+    prompter,
+    t("图检索每跳衰减系数（0-1] — 越小越抑制远距离知识", "Graph decay per hop (0-1] — lower values suppress distant knowledge"),
+    String(current.embeddings.graphDecay)
+  );
+  const graphDecay = Number.parseFloat(graphDecayAnswer);
+  if (!Number.isFinite(graphDecay) || graphDecay <= 0 || graphDecay > 1) {
+    throw new Error(t("图检索衰减系数必须大于 0 且不超过 1", "Graph decay must be greater than 0 and no more than 1"));
+  }
   const embeddingTopK = await promptNumber(
     prompter,
     t("重排前的 Embedding 候选数量", "Embedding candidate count before reranking"),
@@ -333,6 +369,8 @@ export async function runConfigurationWizard(options: {
       cacheDir: embeddingCacheDir,
       allowRemoteModels,
       retrieval,
+      graphDepth,
+      graphDecay,
       embeddingTopK,
       rerankerProfile: current.embeddings.rerankerProfile,
       rerankerModel: rerankerModelAnswer.trim() || null
