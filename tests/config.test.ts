@@ -72,15 +72,14 @@ describe("user configuration", () => {
     expect(loaded.locale).toBe("auto");
   });
 
-  it("normalizes legacy system actor configuration to agent", () => {
-    const configured = resolveUserConfig({
-      identity: {
-        actorType: "system"
-      }
-    });
-
-    expect(configured.identity.actorType).toBe("agent");
-    expect(JSON.stringify(configured)).not.toContain('"system"');
+  it("rejects the removed system actor configuration", () => {
+    expect(() =>
+      resolveUserConfig({
+        identity: {
+          actorType: "system"
+        }
+      })
+    ).toThrow();
   });
 
   it("runs the full wizard and stores credential environment variable names only", async () => {

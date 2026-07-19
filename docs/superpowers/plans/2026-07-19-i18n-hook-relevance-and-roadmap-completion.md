@@ -25,9 +25,9 @@
 - Test: `tests/config.test.ts`
 - Test: `tests/inbox.test.ts`
 
-- [ ] Add failing tests proving legacy `system` parses as canonical `agent` and new serialization/config output never emits `system`.
+- [ ] Add failing tests proving removed `system` values are rejected and new serialization/config output uses `agent`.
 - [ ] Run `pnpm exec vitest run tests/schema.test.ts tests/config.test.ts tests/inbox.test.ts`; expect failure on canonical value assertions.
-- [ ] Add a Zod preprocess/transform for legacy `system`, change TypeScript unions and Inquirer choice to `agent`, and update examples.
+- [ ] Remove `system` from Zod/TypeScript unions, change Inquirer choice to `agent`, and update examples.
 - [ ] Run the focused tests and `pnpm typecheck`; expect pass.
 - [ ] Commit with `feat: rename system actor to agent`.
 

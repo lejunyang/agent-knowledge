@@ -121,8 +121,7 @@ describe("writeCandidateMemory", () => {
       summary: "单次客服会话中尝试成功的步骤。",
       evidence: ["session:hashed"],
       capture_mode: "automated_session",
-      // Keep one legacy value to verify read compatibility during the migration.
-      actor_type: "system",
+      actor_type: "agent",
       corroboration_count: 1,
       project_ids: ["project_support"]
     });

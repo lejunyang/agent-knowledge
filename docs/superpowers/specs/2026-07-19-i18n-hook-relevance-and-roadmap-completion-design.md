@@ -6,7 +6,7 @@
 
 完成以下互相关联但边界清晰的改进：
 
-1. 将 `ActorType` 的 `system` 迁移为语义更准确的 `agent`，兼容读取旧数据。
+1. 将 `ActorType` 的 `system` 替换为语义更准确的 `agent`，不保留旧值兼容。
 2. 为 CLI 普通输出、帮助信息、交互向导和 Hook 提示提供 `zh-CN` / `en` 多语言。
 3. 让 `UserPromptSubmit` 默认静默，只在可靠相关或用户明确查看知识菜单时注入最小上下文。
 4. 删除旧模板链接 CLI 和 TypeScript 兼容 API。
@@ -113,10 +113,10 @@ Canonical 值：
 - `customer`
 - `agent`
 
-兼容策略：
+迁移策略：
 
-- Schema 接受旧 `system`，解析后归一化为 `agent`。
-- 旧配置和 Markdown 无需手工迁移。
+- Schema 只接受 `owner`、`teammate`、`customer`、`agent`。
+- 旧配置和 Markdown 中的 `system` 必须显式修改。
 - 新序列化、新向导和示例只输出 `agent`。
 
 ### Sensitivity 帮助

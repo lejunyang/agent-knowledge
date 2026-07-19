@@ -45,7 +45,7 @@ agent-knowledge configure
 
 配置只保存凭据环境变量名，不保存 secret 值。
 
-`actorType` 可选 `owner`、`teammate`、`customer`、`agent`。其中 `agent` 表示 AI Agent 或自动化服务；旧配置中的 `system` 会自动兼容为 `agent`。
+`actorType` 可选 `owner`、`teammate`、`customer`、`agent`。其中 `agent` 表示 AI Agent 或自动化服务；`system` 已移除，出现时会直接校验失败。
 
 语言优先级是全局 `--locale` > 用户配置 > `LC_ALL` / `LC_MESSAGES` / `LANG` > 系统 locale。默认和未知系统语言都使用中文说明。
 

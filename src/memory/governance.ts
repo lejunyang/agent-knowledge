@@ -28,7 +28,7 @@ export type CandidateMemoryInput = {
   evidence: string[];
   related_knowledge?: RelatedKnowledge[];
   capture_mode?: CaptureMode;
-  actor_type?: ActorType | "system";
+  actor_type?: ActorType;
   corroboration_count?: number;
   project_ids?: string[];
   supersedes?: string[];

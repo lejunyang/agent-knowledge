@@ -56,23 +56,23 @@ describe("KnowledgeFrontmatterSchema", () => {
     expect(parsed.aliases).toEqual([]);
   });
 
-  it("normalizes the legacy system actor to agent", () => {
-    const parsed = KnowledgeFrontmatterSchema.parse({
-      id: "k_20260719_actor_compatibility",
-      type: "semantic",
-      title: "Actor compatibility",
-      domain: "agent/memory",
-      scenario: ["compatibility"],
-      status: "active",
-      confidence: 0.8,
-      source_authority: "documented",
-      actor_type: "system",
-      created_at: "2026-07-19",
-      updated_at: "2026-07-19",
-      valid_from: "2026-07-19"
-    });
-
-    expect(parsed.actor_type).toBe("agent");
+  it("rejects the removed system actor value", () => {
+    expect(() =>
+      KnowledgeFrontmatterSchema.parse({
+        id: "k_20260719_actor_compatibility",
+        type: "semantic",
+        title: "Actor compatibility",
+        domain: "agent/memory",
+        scenario: ["compatibility"],
+        status: "active",
+        confidence: 0.8,
+        source_authority: "documented",
+        actor_type: "system",
+        created_at: "2026-07-19",
+        updated_at: "2026-07-19",
+        valid_from: "2026-07-19"
+      })
+    ).toThrow();
   });
 
   it("rejects invalid confidence values", () => {

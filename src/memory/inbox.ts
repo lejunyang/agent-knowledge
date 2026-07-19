@@ -59,7 +59,7 @@ function idFromCandidate(input: CandidateMemoryInput): string {
  */
 export async function writeCandidateMemory(rootDir: string, input: CandidateMemoryInput): Promise<WriteCandidateResult> {
   const decision = decideCandidateStatus(input);
-  const actorType = input.actor_type === "system" ? "agent" : (input.actor_type ?? "owner");
+  const actorType = input.actor_type ?? "owner";
   const sourceAuthority =
     input.actor_type === "customer" ? "model_inferred" : input.source_authority;
   const id = idFromCandidate(input);

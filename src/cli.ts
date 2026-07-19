@@ -163,9 +163,7 @@ function applyCapturePolicyOverrides(input: CandidateMemoryInput): CandidateMemo
     configuredIdentity?.captureMode ?? process.env.AGENT_KNOWLEDGE_CAPTURE_MODE;
   return {
     ...input,
-    ...(actorType === "system"
-      ? { actor_type: "agent" as const }
-      : actorType === "owner" ||
+    ...(actorType === "owner" ||
     actorType === "teammate" ||
     actorType === "customer" ||
     actorType === "agent"
