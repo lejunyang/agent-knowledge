@@ -12,11 +12,16 @@
 - `.memory/embeddings/manifest.json` 保存 embedding profile/generation，不是事实源。
 - `.memory/logs/*.jsonl` 是可重建运行日志，只用于调试和审计摘要。
 - `.memory/staging/*.json*` 是脱敏 hook staging 与 watermark，不是事实源。
+- `.memory/subagents/*.jsonl` 是本地完整 Subagent 调试日志，不是事实源，不参与同步或上下文注入。
+- `.memory/observations/*.jsonl` 和 `.memory/proposals/*.json` 是自动维护的中间审阅产物，不是事实源。
+- `.memory/graph.json` 是从 Markdown/proposal 重建的知识关系图索引，不是事实源。
 - `agent-knowledge query` 输出主 agent 可注入的 `context packet`，`--debug` 附带 scorer/reranker 和分项分数。
 - `agent-knowledge embed-index` 使用本地 provider 生成 embedding 缓存；`agent-knowledge suggest-aliases` 只输出 dry-run JSON 建议。
 - `agent-knowledge write-candidate` 只写候选知识到 `knowledge/_inbox/`。
 - `agent-knowledge integration` 为 TRAE、TRAE CN 和 Claude Code 安装可选 hooks/agents/skills/plugin bundle，使用普通托管文件和结构化 merge，不创建 symlink。
-- `agent-knowledge sync webdav|s3` 只同步 Markdown 事实源，冲突不自动覆盖。
+- `agent-knowledge sync run|watch` 通过配置的 WebDAV/S3 backend 只同步正式 Markdown，冲突不自动覆盖。
+- `agent-knowledge maintenance` 从 SubagentStop 日志抽取 observation 并生成可审阅 proposal，不直接修改 active 知识。
+- `agent-knowledge graph` 构建、查询和导出轻量知识关系图；`query --retrieval graph|hybrid-graph` 才会让图遍历参与检索。
 - 知识 frontmatter 支持可选 `aliases`，用于查询别名扩展和 catalog registry 暴露，不替代规范 `domain` / `scenario`。
 
 不要把索引当成事实源。任何知识更新都应先落到 Markdown，再重建索引。
@@ -65,7 +70,7 @@ embedding 缓存固定在：
 <workspace root>/.memory/embeddings/manifest.json
 ```
 
-如果需要项目级隔离知识库，必须设置 `--root` 或 `AGENT_KNOWLEDGE_ROOT`。否则多个项目会共享 `~/.agent_knowledge`。
+如果需要项目级或租户级隔离知识库，必须设置 `--root`、用户配置中的 `knowledgeRoot` 或兼容环境变量 `AGENT_KNOWLEDGE_ROOT`。否则多个项目会共享 `~/.agent_knowledge`。
 
 ## 常用命令
 
@@ -76,13 +81,19 @@ pnpm build
 npm install -g .
 npm uninstall -g agent-knowledge
 node dist/cli.js --help
+node dist/cli.js configure --help
+node dist/cli.js config show
 node dist/cli.js catalog --root tests/fixtures/basic-knowledge --no-write
 node dist/cli.js embed-index --root tests/fixtures/basic-knowledge --provider local
 node dist/cli.js suggest-aliases --root tests/fixtures/basic-knowledge --provider local
 node dist/cli.js eval --root tests/fixtures/basic-knowledge --input eval/cases/retrieval-baseline.yaml
+node dist/cli.js graph build --root tests/fixtures/basic-knowledge
+node dist/cli.js graph export --root tests/fixtures/basic-knowledge --format html --output /tmp/agent-knowledge-graph.html
+node dist/cli.js maintenance run --root tests/fixtures/basic-knowledge
 node dist/cli.js integration install --product trae --scope project --target-dir /tmp/agent-knowledge-integration-smoke
 node dist/cli.js integration doctor --product trae --scope project --target-dir /tmp/agent-knowledge-integration-smoke
 node dist/cli.js project detect
+node dist/cli.js subagents status
 node dist/cli.js staging status
 ```
 
@@ -119,11 +130,13 @@ node dist/cli.js query \
 src/core/             稳定共享契约：types、Zod schema、路径和日志
 src/cli/              CLI 交互向导和命令辅助模块
 src/storage/          Markdown 事实源、workspace、SQLite 索引和 catalog
-src/retrieval/        CJK 召回、query、scoring、embedding、context packet、eval 和 feedback
-src/memory/           候选治理、inbox 写入和主动整理
+src/retrieval/        CJK 召回、query、scoring、embedding、reranker、graph retrieval、context packet、eval 和 feedback
+src/memory/           候选治理、inbox 写入、主动整理、observation、maintenance proposal 和审阅动作
+src/graph/            可重建知识关系图的类型、构建、查询、导出和 HTML 可视化
 src/integration/      产品安装、模板兼容入口和 Git project registry
 src/sync/             Markdown 三方同步及 WebDAV/S3 backend
-src/hooks/            Hook runtime context、输出裁剪和脱敏 staging
+src/hooks/            Hook runtime context、静默相关性门控、脱敏 staging 和详细 Subagent 日志
+src/i18n/             中文默认、英文可选的 CLI/Hook 文案
 src/index.ts          公共 TypeScript API re-export
 src/cli.ts            命令行入口和各模块编排
 ```
@@ -134,7 +147,7 @@ src/cli.ts            命令行入口和各模块编排
 - 新增行为必须优先加测试。
 - 每完成一个可独立验证的功能或重构项，先运行对应聚焦测试和必要的 typecheck/build，再立即创建一个只包含该项的 Git commit；不要把多个无关改动堆到会话末尾一次提交。
 - 提交前检查 `git diff --cached`，确保暂存区只包含当前功能；提交信息使用 `feat:`、`fix:`、`refactor:`、`docs:`、`test:` 或 `chore:` 前缀。
-- 修改代码时优先补充解释“设计意图、兼容性原因、安全边界、失败策略和非显然算法”的注释。不要给直白赋值、简单循环或已经由函数名完整表达的行为添加重复注释。
+- 修改代码时必须同步补充解释“设计意图、兼容性原因、安全边界、失败策略和非显然算法”的注释；详细要求见文末“注释约定”。
 - 新增对外 CLI 命令、配置项、同步策略或治理规则时，入口模块应说明优先级、默认值和为什么不能绕过对应边界；复杂模块的文件头注释应说明职责和明确非职责。
 - 用户配置 schema 变化时同步更新 `src/core/config.ts`、配置向导、README、AGENTS 和配置测试；配置不得持久化 secret 值。
 - CLI/Hook 人类文案统一通过 `src/i18n/`；首发支持 `zh-CN` 和 `en`，默认 `auto`，未知系统语言回退中文。JSON 字段、frontmatter key 和知识 ID 不翻译。
@@ -158,12 +171,20 @@ src/cli.ts            命令行入口和各模块编排
 - `sync.intervalMinutes: 0` 表示禁用定时同步；`sync watch` 要求正数间隔，并在单次失败后记录错误、等待下一周期重试。
 - Maintenance worker 只能写 `.memory/proposals` 和 watermark/lock，禁止直接修改 active Markdown。Skill proposal 必须满足至少 3 个独立 session、trusted authority、positive feedback、无 unresolved conflict，并且不得自动写入或安装 `.trae/skills`。
 - Proposal accept 默认只写知识 `_inbox` 或 Skill `_inbox-skills`；项目/用户 Skill 安装必须显式指定 target，并拒绝覆盖已有文件。
+- 自动/客户 candidate 默认不得批量晋升；只有人工审阅后通过 `organize-inbox --approve <id...> --apply` 明确列出的 ID 才能激活。指定未知 ID 时必须在任何写入前失败。
+- Skill 推荐使用两阶段流程：先 `maintenance accept` 写 `_inbox-skills`，审阅后再 `maintenance install-skill --skill-target project|user`；不得自动安装或覆盖已有 Skill。
 - 正常 maintenance 流程必须能从 `.memory/subagents` 自动抽取 `.memory/observations/events.jsonl`；不得要求普通用户手写 `observations.json`。`--input` 仅保留为高级导入模式。
-- 任何会影响对外 agent 使用流程的改动，都必须 review `templates/trae/`：
-  - Hook 行为、事件、命令或注入上下文变化时，检查 `templates/trae/hooks.json` 和 `templates/trae/README.md`。
-  - Subagent 输入、输出、frontmatter、工具权限或候选 JSON 字段变化时，检查 `templates/trae/agents/memory-writer.md`。
-  - 模板必须遵循 TRAE 官方 Subagent Markdown + YAML frontmatter 格式和 Hook `version: 1` JSON 配置格式。
-- `UserPromptSubmit` 无命中、低于阈值或异常时默认静默；普通命中只能注入最小 `context_packet`。禁止恢复全量 catalog、runtime context 或无命中说明。知识目录仅在显式 catalog intent 下返回相关 top 5。
+- 任何流程变动、行为优化、默认值调整或推荐方式变化，都必须完成“流程联动审视”，不能只改实现：
+  - 检查主 README 的首次、日常、周期维护、机器人和人工审阅推荐流程。
+  - 检查 `docs/guides/configuration.md`、`retrieval.md`、`memory-governance.md`、`integrations.md` 和 `synchronization.md` 中受影响的说明。
+  - Hook 行为、事件、命令或注入上下文变化时，检查 TRAE、TRAE plugin、Claude Code 及 Windows Hook 模板。
+  - 检查 `templates/trae/agents/*.md` 和 `templates/claude-code/agents/*.md` 的触发条件、输入输出、工具权限和命令。
+  - 检查项目 `.trae/skills/*/SKILL.md`，确保 Skill 使用真实且推荐的 CLI 流程。
+  - 检查 `templates/trae/plugin/agents/*.md` 和 `templates/trae/plugin/skills/*/SKILL.md`，避免 plugin bundle 落后于散装模板。
+  - 检查 `templates/trae/README.md` 和 integration 安装/卸载/merge 测试。
+  - 审视后确实无需修改某类模板时保持文件不动，并在进度或提交说明中明确“已检查、无需变化”，不要制造无意义 churn。
+  - Subagent 模板必须遵循宿主要求的 Markdown + YAML frontmatter；TRAE Hook 必须保持 `version: 1` JSON 格式。
+- `UserPromptSubmit` 无命中、低于阈值或异常时默认静默；普通命中只能注入最小 `context_packet`。禁止恢复全量 catalog、runtime context 或无命中说明。知识目录仅在显式 catalog intent 下返回配置上限内的相关条目（默认 5）。
 - `SubagentStart` / `SubagentStop` 可记录本地完整 payload 到 `.memory/subagents/`，但不得同步、注入模型上下文或作为 active 事实；其他 Hook 继续使用脱敏 staging。
 - 修改产品安装时同时 review `templates/claude-code/`、`templates/trae/plugin/` 和 integration merge/uninstall 测试。
 - `trae` 项目/用户资源根是 `.trae`，必须同时管理 `.trae/hooks.json` 和 `.trae/cli/hooks.json`；`trae-cn` 使用 `.trae-cn/hooks.json`；Claude Code 使用 `.claude/settings.json`。
@@ -177,14 +198,14 @@ src/cli.ts            命令行入口和各模块编排
 1. 生成 candidate JSON。
 2. 调用 `agent-knowledge write-candidate`。
 3. 写入 `knowledge/_inbox/`。
-4. 人类审阅后再移动到正式目录并改成 `status: active`。
+4. 人类审阅后使用 `organize-inbox`；自动/客户候选必须通过 `--approve <id...>` 明确批准。
 5. 运行 `agent-knowledge index`。
 
 主动整理流程：
 
 1. `agent-knowledge list` 查看知识库状态。
 2. `agent-knowledge organize-inbox` 预览 `_inbox` 归档。
-3. `agent-knowledge organize-inbox --apply` 应用移动、激活并重建索引。
+3. 普通受信候选用 `agent-knowledge organize-inbox --apply`；自动/客户候选用 `agent-knowledge organize-inbox --approve <id...> --apply`。
 4. 用户直接提供材料时，由 `.trae/skills/knowledge-organizer/SKILL.md` 拆分成 JSON，再运行 `agent-knowledge capture-material --input material.json --target active`。
 
 禁止保存：
@@ -206,12 +227,17 @@ src/cli.ts            命令行入口和各模块编排
 
 ## 给其他 agent 的接入建议
 
-任务开始前：
+任务开始前通常不需要每次重建全部索引。Markdown 发生变化时运行 `index`；启用 hybrid/graph 时分别维护对应可重建索引：
 
 ```bash
 agent-knowledge index --root "$AGENT_KNOWLEDGE_ROOT"
-# 需要 alias 建议或离线 embedding 分析时再运行；自动化测试必须使用 --provider local。
-agent-knowledge embed-index --root "$AGENT_KNOWLEDGE_ROOT" --provider local
+agent-knowledge embed-index --root "$AGENT_KNOWLEDGE_ROOT"
+agent-knowledge graph build --root "$AGENT_KNOWLEDGE_ROOT"
+```
+
+普通任务让 Hook 高相关时自动注入；Hook 不足或任务依赖历史/业务知识时调用 `memory-reader`，其基础查询为：
+
+```bash
 agent-knowledge query \
   --root "$AGENT_KNOWLEDGE_ROOT" \
   --task "$CURRENT_TASK" \
@@ -230,11 +256,11 @@ agent-knowledge query \
   --model /path/to/local/model
 ```
 
-Hook 模板不默认运行本地模型，避免会话启动或提交 prompt 时加载模型导致延迟和权限问题。
+依赖显式知识关系时可使用 `--retrieval graph`；只有复杂人工查询才升级为 `hybrid-graph` 或 `--rerank`。Hook 模板不默认运行本地模型、graph 或 reranker，避免会话启动或提交 prompt 时增加延迟和权限问题。
 
 Hook 命令会探测 runtime context：`process.cwd()`、是否处于 Git 工作树、Git root 和 `remote.origin.url`。可用 `agent-knowledge hook doctor` 在当前环境中确认 TRAE 实际执行 hook 的目录。Hook 安装按平台选择模板：macOS/Linux 使用 `bash -lc 'agent-knowledge hook ...'`，Windows 使用 `agent-knowledge.cmd hook ...`，避免 Windows 依赖 Bash，也避免写死 Node 绝对路径。
 
-`UserPromptSubmit` 未命中可注入知识时只应返回粗粒度 catalog（total、status/type、domains、scenarios），不要返回 aliases/items；只有命中并注入 context packet 时才返回细粒度 catalog，避免无关 prompt 被知识库词表污染。
+`UserPromptSubmit` 无命中、低于阈值或异常时必须完全静默。可靠命中只注入最小 `context_packet`；只有显式 catalog intent 才返回与 prompt 相关的有限知识菜单，避免无关 prompt 被知识库词表污染。
 
 别名建议只看 dry-run JSON，不会修改 Markdown：
 
@@ -261,24 +287,35 @@ agent-knowledge write-candidate \
 ```
 
 候选知识被人类审阅并激活后，重新运行 `agent-knowledge index`；如果使用 embedding 缓存，也重新运行 `agent-knowledge embed-index`。
+如果使用 graph 浏览或 graph retrieval，也重新运行 `agent-knowledge graph build`。
 
 使用 `agent-knowledge integration install --product trae|trae-cn|claude-code --scope user|project` 安装产品接入。安装器不使用 symlink；hooks 结构化 merge 且只管理 `agent-knowledge hook` handler，agents/skills/plugin bundle 由本地 manifest 记录所有权。
-`knowledge-organizer` 和 `memory-maintainer` Skills 位于 `.trae/skills/`。前者整理 inbox/直接材料，后者审阅 staging/log 并提出保守候选。
+`knowledge-organizer` 和 `memory-maintainer` Skills 位于项目 `.trae/skills/`，这是本仓库自身的开发/测试资源，不代表已安装到用户产品目录。前者整理 inbox/直接材料，后者审阅 Subagent 日志、observations 和 proposals。
 
 Hook 主动记忆边界：
 
-- `SubagentStart` / `SubagentStop` / `Stop` / `SessionEnd` 只异步写脱敏 staging。
+- `SubagentStart` / `SubagentStop` 同时写本地完整 `.memory/subagents` 调试日志和脱敏 staging；`Stop` / `SessionEnd` 只写脱敏 staging。
+- 详细 Subagent 日志默认不脱敏，供本机所有者调试；不得同步、注入模型上下文或直接作为事实。
 - Staging 只保存 hash、长度、agent type、reason、project ID，不保存完整文本。
 - 当前 command hook 不直接调用 Subagent；语义抽取由主 Agent 委派 `memory-writer` 或触发 `memory-maintainer`。
 - 不在 Stop hook 中强制续跑模型。
 
-这些模板是官方格式，仓库内不直接放 `.trae/`，避免把模板误认为当前项目已安装配置。
+`templates/` 是对外安装源；项目 `.trae/skills/` 是本仓库开发时实际启用的 Skills。不要把模板目录误认为已安装用户配置，也不要删除项目 Skills。
 
 ## 注释约定
 
-源码注释应解释“背景和意图”，不要重复代码表面含义。优先说明：
+源码注释应解释“背景、意图和约束”，不要只翻译代码表面含义。
 
-- 为什么某个模块存在。
-- 为什么某个边界不能被绕过。
-- 为什么某种安全或治理规则必要。
-- 为什么某处是确定性 fallback，而不是完整智能能力。
+- 每个 exported function、class 和承担公共契约的 type/interface 应有 JSDoc，说明用途、调用背景、重要边界和外部副作用。
+- 每个非平凡内部函数应有注释。优先说明“为什么存在、输入为何可信或不可信、返回值如何被下游使用”，而不只是复述函数名。
+- 简单 getter、纯字段映射、显然的一行 wrapper 可以不写重复注释；但一旦涉及策略或边界就必须说明。
+- 函数内部的关键操作和判断必须在附近说明“为什么”，尤其是：
+  - 安全过滤、权限、visibility、sensitivity、project/tenant 隔离。
+  - fallback、阈值、token budget、abstention 和静默失败。
+  - lock、watermark、幂等、去重、原子写入和冲突处理。
+  - temporal invalidation、`supersedes`、`conflicts_with` 和有效期。
+  - lexical/dense/metadata/RRF/reranker/graph 的排序融合、深度和衰减。
+  - symlink、覆盖、网络、模型下载、远端同步和其他外部副作用。
+- 模块文件头应说明职责与非职责，特别是 `.memory` 产物为何不是事实源、自动流程为何不能绕过 inbox/人工审阅。
+- 新增或修改函数时必须同步检查注释；不能以“以后统一补注释”为由留下无说明的关键逻辑。
+- 注释审计脚本只做最低限度提示，不能替代人工判断；通过审计不代表注释质量充分。
