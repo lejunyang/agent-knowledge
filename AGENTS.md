@@ -135,6 +135,10 @@ src/cli.ts            命令行入口
 
 - 优先保持小文件和清晰边界，不要把多个职责合并到一个模块。
 - 新增行为必须优先加测试。
+- 每完成一个可独立验证的功能或重构项，先运行对应聚焦测试和必要的 typecheck/build，再立即创建一个只包含该项的 Git commit；不要把多个无关改动堆到会话末尾一次提交。
+- 提交前检查 `git diff --cached`，确保暂存区只包含当前功能；提交信息使用 `feat:`、`fix:`、`refactor:`、`docs:`、`test:` 或 `chore:` 前缀。
+- 修改代码时优先补充解释“设计意图、兼容性原因、安全边界、失败策略和非显然算法”的注释。不要给直白赋值、简单循环或已经由函数名完整表达的行为添加重复注释。
+- 新增对外 CLI 命令、配置项、同步策略或治理规则时，入口模块应说明优先级、默认值和为什么不能绕过对应边界；复杂模块的文件头注释应说明职责和明确非职责。
 - 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。`related_knowledge` 只有能指向明确已有或同批可生成的知识 ID 时才填写。`project_ids`、`capture_mode`、`actor_type`、`corroboration_count` 用于适用范围和来源治理，旧 Markdown 依赖 schema 默认值保持兼容。
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - active 知识落盘目录必须保留 domain 的层级结构，例如 `bytedance/business/account` 写到 `knowledge/semantic/bytedance/business/account/`，不要压平成 `bytedance-business-account`。
