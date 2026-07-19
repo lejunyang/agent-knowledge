@@ -35,7 +35,9 @@ agent-knowledge configure
 | `identity.sensitivityClearance` | `internal` | 查询允许读取的最高敏感级别 |
 | `embeddings.provider` | `transformers` | `transformers` 使用语义模型；`local` 用于确定性测试 |
 | `embeddings.profile` | `multilingual-e5-small` | 默认 multilingual embedding profile |
+| `embeddings.cacheDir` | `~/.cache/agent-knowledge/models` | Agent Knowledge 自有 Transformers.js 模型缓存 |
 | `embeddings.retrieval` | `lexical` | `hybrid` 会合并 lexical 与 dense retrieval |
+| `embeddings.rerankerProfile` | `bge-reranker-large` | Cross-encoder reranker profile |
 | `integration.product` | `trae` | 默认安装产品 |
 | `integration.mode` | `merge` | `merge` 保留外部配置；`overwrite` 替换目标 |
 | `sync.provider` | `none` | `webdav` 或 `s3` 启用远端同步 |

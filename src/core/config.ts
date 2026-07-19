@@ -32,9 +32,12 @@ const EmbeddingsConfigSchema = z
     provider: z.enum(["transformers", "local"]).default("transformers"),
     profile: EmbeddingProfileSchema.default("multilingual-e5-small"),
     model: z.string().min(1).nullable().default(null),
+    cacheDir: z.string().min(1).default(path.join(homedir(), ".cache", "agent-knowledge", "models")),
     allowRemoteModels: z.boolean().default(false),
     retrieval: z.enum(["lexical", "hybrid"]).default("lexical"),
-    embeddingTopK: z.number().int().positive().default(20)
+    embeddingTopK: z.number().int().positive().default(20),
+    rerankerProfile: z.enum(["bge-reranker-large"]).default("bge-reranker-large"),
+    rerankerModel: z.string().min(1).nullable().default(null)
   })
   .default({});
 

@@ -144,6 +144,7 @@ src/cli.ts            命令行入口和各模块编排
 - 修改检索排序时同步更新 eval case 或增加新的 eval case。
 - 测试不得依赖网络或远程模型；embedding 相关测试必须使用 `DeterministicLocalEmbeddingProvider` 或 CLI `--provider local`。
 - Transformers.js provider 默认禁止远程模型下载；只有人工 CLI 调试时才显式传 `--allow-remote-models`。
+- 普通检索、Hook、`embed-index` 和 model status 禁止自动联网；`agent-knowledge embedding download` 是显式模型下载入口。模型缓存默认位于 `~/.cache/agent-knowledge/models`，可由用户配置覆盖。
 - `query` 不应在缺少 domain/scenario 且 FTS 无命中时回退全表；如修改 fallback 策略，必须更新 debug 输出和测试。
 - direct result 和 related expansion 必须执行相同的 validity、visibility、sensitivity、project 和 type 过滤。
 - `_inbox` / `_archive` 必须按路径硬排除，不能只依赖 status。

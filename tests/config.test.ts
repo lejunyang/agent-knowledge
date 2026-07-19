@@ -66,6 +66,8 @@ describe("user configuration", () => {
     expect(loaded.identity.captureMode).toBe(DEFAULT_USER_CONFIG.identity.captureMode);
     expect(loaded.embeddings.provider).toBe("local");
     expect(loaded.embeddings.profile).toBe(DEFAULT_USER_CONFIG.embeddings.profile);
+    expect(loaded.embeddings.cacheDir).toContain("agent-knowledge");
+    expect(loaded.embeddings.rerankerProfile).toBe("bge-reranker-large");
     expect(loaded.sync.provider).toBe("none");
     expect(loaded.locale).toBe("auto");
   });
@@ -95,9 +97,11 @@ describe("user configuration", () => {
       "transformers",
       "bge-small-zh-v1.5",
       "",
+      "/tmp/agent-model-cache",
       "no",
       "hybrid",
       "30",
+      "",
       "trae",
       "user",
       "hooks,agents,skills",
@@ -128,6 +132,7 @@ describe("user configuration", () => {
     expect(configured.embeddings).toMatchObject({
       provider: "transformers",
       profile: "bge-small-zh-v1.5",
+      cacheDir: "/tmp/agent-model-cache",
       retrieval: "hybrid",
       embeddingTopK: 30
     });

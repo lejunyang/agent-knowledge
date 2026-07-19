@@ -15,11 +15,20 @@ agent-knowledge query \
 ## Hybrid
 
 ```bash
+agent-knowledge embedding status
+agent-knowledge embedding download
 agent-knowledge embed-index
 agent-knowledge query --task "自然语言问题" --retrieval hybrid --debug
 ```
 
 默认 profile 是 `multilingual-e5-small` q8；中文资源优先可选 `bge-small-zh-v1.5`。自动化测试使用 `--provider local`。
+
+`embedding status` 只检查本地缓存，不联网；`embedding download` 是普通工作流中唯一默认允许显式下载模型的命令。Reranker 可使用：
+
+```bash
+agent-knowledge embedding status --kind reranker
+agent-knowledge embedding download --kind reranker
+```
 
 Embedding manifest 会校验 model、revision、dtype、dimensions、pooling 和 prefix，避免不兼容向量静默混用。
 

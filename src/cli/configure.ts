@@ -131,6 +131,11 @@ export async function runConfigurationWizard(options: {
     current.embeddings.model ?? ""
   );
   const embeddingModel = withDefault(embeddingModelAnswer, current.embeddings.model ?? "");
+  const embeddingCacheDir = await promptInput(
+    prompter,
+    t("模型缓存目录", "Model cache directory"),
+    current.embeddings.cacheDir
+  );
   const allowRemoteModels = await promptConfirm(
     prompter,
     t("允许 Transformers.js 远程下载模型？", "Allow Transformers.js remote model downloads?"),
@@ -150,6 +155,14 @@ export async function runConfigurationWizard(options: {
     t("重排前的 Embedding 候选数量", "Embedding candidate count before reranking"),
     current.embeddings.embeddingTopK,
     1
+  );
+  const rerankerModelAnswer = await promptInput(
+    prompter,
+    t(
+      "Reranker 模型 — 留空使用 Xenova/bge-reranker-large",
+      "Reranker model — blank uses Xenova/bge-reranker-large"
+    ),
+    current.embeddings.rerankerModel ?? ""
   );
 
   const integrationProduct = await promptSelect(
@@ -317,9 +330,12 @@ export async function runConfigurationWizard(options: {
       provider: embeddingProvider,
       profile: embeddingProfile,
       model: embeddingModel || null,
+      cacheDir: embeddingCacheDir,
       allowRemoteModels,
       retrieval,
-      embeddingTopK
+      embeddingTopK,
+      rerankerProfile: current.embeddings.rerankerProfile,
+      rerankerModel: rerankerModelAnswer.trim() || null
     },
     integration: {
       product: integrationProduct,

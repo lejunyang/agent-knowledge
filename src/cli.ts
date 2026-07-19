@@ -24,7 +24,9 @@ import {
   createEmbeddingProvider,
   createConfiguredSyncBackend,
   decideHookInjection,
+  downloadRetrievalModel,
   getDefaultUserConfigPath,
+  getRetrievalModelStatus,
   embedKnowledgeIndex,
   loadEvalSuite,
   initKnowledgeWorkspace,
@@ -37,6 +39,7 @@ import {
   rebuildIndex,
   runEvalSuite,
   runScheduledSync,
+  resolveRetrievalModelDescriptor,
   S3HttpObjectClient,
   S3SyncBackend,
   stageHookEvent,
@@ -241,6 +244,85 @@ configCommand.command("path").action(() => {
 configCommand.command("show").action(() => {
   console.log(JSON.stringify(loadUserConfig(resolveConfigPath()), null, 2));
 });
+
+const embeddingCommand = program
+  .command("embedding")
+  .description(t("检查和下载本地检索模型", "Inspect and download local retrieval models"));
+
+embeddingCommand
+  .command("status")
+  .description(t("离线检查当前模型是否已完整缓存", "Check whether the configured model is fully cached"))
+  .option("--kind <kind>", t("模型类型：embedding 或 reranker", "model kind: embedding or reranker"), "embedding")
+  .option("--model <model>", t("临时覆盖模型 ID", "override the configured model ID"))
+  .option("--cache-dir <dir>", t("临时覆盖模型缓存目录", "override the model cache directory"))
+  .option("--json", t("输出完整 JSON", "emit full JSON"), false)
+  .action(async (options: { kind: string; model?: string; cacheDir?: string; json: boolean }) => {
+    if (options.kind !== "embedding" && options.kind !== "reranker") {
+      throw new Error(t("--kind 必须是 embedding 或 reranker", "--kind must be embedding or reranker"));
+    }
+    const descriptor = resolveRetrievalModelDescriptor(userConfig().embeddings, options.kind);
+    const status = await getRetrievalModelStatus({
+      ...descriptor,
+      model: options.model ?? descriptor.model,
+      cacheDir: options.cacheDir ? path.resolve(options.cacheDir) : descriptor.cacheDir
+    });
+    const machineOutput = program.opts<{ json: boolean }>().json || options.json;
+    if (machineOutput) {
+      console.log(JSON.stringify(status, null, 2));
+      return;
+    }
+    console.log(
+      t(
+        `${status.kind === "embedding" ? "Embedding" : "Reranker"} 模型：${status.model}`,
+        `${status.kind === "embedding" ? "Embedding" : "Reranker"} model: ${status.model}`
+      )
+    );
+    console.log(t(`缓存目录：${status.cacheDir}`, `Cache directory: ${status.cacheDir}`));
+    console.log(
+      status.cached
+        ? t("状态：已完整下载", "Status: fully cached")
+        : t(
+            `状态：未完整下载；缺失 ${status.missingFiles.length} 个文件`,
+            `Status: incomplete; ${status.missingFiles.length} file(s) missing`
+          )
+    );
+    for (const file of status.missingFiles) {
+      console.log(`- ${file}`);
+    }
+  });
+
+embeddingCommand
+  .command("download")
+  .description(t("显式下载当前配置的检索模型", "Explicitly download the configured retrieval model"))
+  .option("--kind <kind>", t("模型类型：embedding 或 reranker", "model kind: embedding or reranker"), "embedding")
+  .option("--model <model>", t("临时覆盖模型 ID", "override the configured model ID"))
+  .option("--cache-dir <dir>", t("临时覆盖模型缓存目录", "override the model cache directory"))
+  .option("--json", t("完成后输出完整 JSON", "emit full JSON after completion"), false)
+  .action(async (options: { kind: string; model?: string; cacheDir?: string; json: boolean }) => {
+    if (options.kind !== "embedding" && options.kind !== "reranker") {
+      throw new Error(t("--kind 必须是 embedding 或 reranker", "--kind must be embedding or reranker"));
+    }
+    const descriptor = resolveRetrievalModelDescriptor(userConfig().embeddings, options.kind);
+    const selected = {
+      ...descriptor,
+      model: options.model ?? descriptor.model,
+      cacheDir: options.cacheDir ? path.resolve(options.cacheDir) : descriptor.cacheDir
+    };
+    console.log(t(`开始下载：${selected.model}`, `Downloading: ${selected.model}`));
+    const status = await downloadRetrievalModel(selected, undefined, (event) => {
+      if (event.file && typeof event.progress === "number") {
+        console.log(`${event.file}: ${Math.round(event.progress)}%`);
+      } else if (event.file) {
+        console.log(`${event.status ?? "progress"}: ${event.file}`);
+      }
+    });
+    const machineOutput = program.opts<{ json: boolean }>().json || options.json;
+    console.log(
+      machineOutput
+        ? JSON.stringify(status, null, 2)
+        : t(`下载完成：${status.model}`, `Download completed: ${status.model}`)
+    );
+  });
 
 function hookContext(hookEventName: "SessionStart" | "UserPromptSubmit", additionalContext: string): void {
   const output = hookContextJson(hookEventName, additionalContext);
