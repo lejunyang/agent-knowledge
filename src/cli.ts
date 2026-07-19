@@ -23,6 +23,7 @@ import {
   captureMaterial,
   createEmbeddingProvider,
   embedKnowledgeIndex,
+  loadEvalSuite,
   initKnowledgeWorkspace,
   listKnowledge,
   logMemoryFeedback,
@@ -31,8 +32,20 @@ import {
   queryMemoriesHybridWithDebug,
   queryMemoriesWithDebug,
   rebuildIndex,
+  runEvalSuite,
+  S3HttpObjectClient,
+  S3SyncBackend,
+  stageHookEvent,
+  getStagingStatus,
+  drainStagedEvents,
   suggestAliases,
-  linkTraeTemplates,
+  syncKnowledge,
+  WebDavSyncBackend,
+  doctorIntegration,
+  detectProject,
+  installIntegration,
+  listIntegrationProducts,
+  uninstallIntegration,
   writeCandidateMemory,
   type CandidateMemoryInput
 } from "./index.js";
@@ -46,6 +59,50 @@ program.name("agent-knowledge").description("Local human-readable memory toolkit
 
 function resolveCliRoot(root?: string): string {
   return root ?? process.env.AGENT_KNOWLEDGE_ROOT ?? getDefaultKnowledgeRoot();
+}
+
+function resolveVisibilityScopes(explicit?: string[]): Array<"private" | "project" | "team"> {
+  const values =
+    explicit ??
+    process.env.AGENT_KNOWLEDGE_VISIBILITY_SCOPES?.split(",")
+      .map((value) => value.trim())
+      .filter(Boolean) ??
+    ["private", "project", "team"];
+  const allowed = new Set(["private", "project", "team"]);
+  if (values.some((scope) => !allowed.has(scope))) {
+    throw new Error("visibility scopes must be private, project, or team");
+  }
+  return values as Array<"private" | "project" | "team">;
+}
+
+function resolveSensitivityClearance(
+  explicit?: string
+): "public" | "internal" | "confidential" | "secret" {
+  const value = explicit ?? process.env.AGENT_KNOWLEDGE_SENSITIVITY_CLEARANCE ?? "internal";
+  if (value !== "public" && value !== "internal" && value !== "confidential" && value !== "secret") {
+    throw new Error("sensitivity clearance must be public, internal, confidential, or secret");
+  }
+  return value;
+}
+
+function applyCapturePolicyOverrides(input: CandidateMemoryInput): CandidateMemoryInput {
+  const actorType = process.env.AGENT_KNOWLEDGE_ACTOR_TYPE;
+  const captureMode = process.env.AGENT_KNOWLEDGE_CAPTURE_MODE;
+  return {
+    ...input,
+    ...(actorType === "owner" ||
+    actorType === "teammate" ||
+    actorType === "customer" ||
+    actorType === "system"
+      ? { actor_type: actorType }
+      : {}),
+    ...(captureMode === "explicit_remember" ||
+    captureMode === "verified_task" ||
+    captureMode === "automated_session" ||
+    captureMode === "direct_material"
+      ? { capture_mode: captureMode }
+      : {})
+  };
 }
 
 function findPackageRoot(startDir = dirname(fileURLToPath(import.meta.url))): string {
@@ -119,19 +176,42 @@ program
   .description("Build .memory/embeddings/index.jsonl from active Markdown knowledge")
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
   .option("--provider <provider>", "transformers or local", "transformers")
+  .option("--profile <profile>", "embedding profile: multilingual-e5-small or bge-small-zh-v1.5")
   .option("--model <model>", "Transformers.js model id or local model path")
   .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
-  .action(async (options: { root?: string; provider: string; model?: string; allowRemoteModels: boolean }) => {
+  .action(async (options: {
+    root?: string;
+    provider: string;
+    profile?: string;
+    model?: string;
+    allowRemoteModels: boolean;
+  }) => {
     if (options.provider !== "transformers" && options.provider !== "local") {
       throw new Error("--provider must be transformers or local");
     }
     const provider = createEmbeddingProvider({
       provider: options.provider,
+      profile:
+        options.profile === "multilingual-e5-small" || options.profile === "bge-small-zh-v1.5"
+          ? options.profile
+          : undefined,
       model: options.model,
       allowRemoteModels: options.allowRemoteModels
     });
     const result = await embedKnowledgeIndex(resolveCliRoot(options.root), { provider });
     console.log(JSON.stringify(result, null, 2));
+  });
+
+program
+  .command("eval")
+  .description("Run a retrieval eval suite from YAML")
+  .requiredOption("--input <file>", "eval YAML containing one case or a cases array")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .action(async (options: { input: string; root?: string }) => {
+    const root = resolveCliRoot(options.root);
+    rebuildIndex(root);
+    const suite = await loadEvalSuite(options.input);
+    console.log(JSON.stringify(await runEvalSuite(root, suite), null, 2));
   });
 
 program
@@ -175,10 +255,14 @@ program
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
   .option("--domain <domain...>", "domains")
   .option("--scenario <scenario...>", "scenarios")
+  .option("--visibility <scope...>", "allowed visibility scopes: private, project, team")
+  .option("--sensitivity-clearance <level>", "public, internal, confidential, or secret")
+  .option("--project-id <id...>", "allowed project IDs")
   .option("--agent-role <role>", "agent role", "main")
   .option("--debug", "include retrieval debug details in JSON output", false)
   .option("--retrieval <mode>", "lexical or hybrid", "lexical")
   .option("--provider <provider>", "embedding provider for hybrid retrieval: transformers or local", "transformers")
+  .option("--profile <profile>", "embedding profile: multilingual-e5-small or bge-small-zh-v1.5")
   .option("--model <model>", "Transformers.js model id or local model path for hybrid retrieval")
   .option("--embedding-top-k <count>", "embedding topK for hybrid retrieval", "20")
   .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
@@ -187,10 +271,14 @@ program
     root?: string;
     domain?: string[];
     scenario?: string[];
+    visibility?: string[];
+    sensitivityClearance?: string;
+    projectId?: string[];
     agentRole: string;
     debug: boolean;
     retrieval: string;
     provider: string;
+    profile?: string;
     model?: string;
     embeddingTopK: string;
     allowRemoteModels: boolean;
@@ -198,11 +286,16 @@ program
     if (options.retrieval !== "lexical" && options.retrieval !== "hybrid") {
       throw new Error("--retrieval must be lexical or hybrid");
     }
+    const visibilityScopes = resolveVisibilityScopes(options.visibility);
+    const sensitivityClearance = resolveSensitivityClearance(options.sensitivityClearance);
     const request = MemoryQueryRequestSchema.parse({
       task: options.task,
       agentRole: options.agentRole,
       domains: options.domain ?? [],
-      scenarios: options.scenario ?? []
+      scenarios: options.scenario ?? [],
+      visibilityScopes,
+      sensitivityClearance,
+      projectIds: options.projectId ?? []
     });
     const root = resolveCliRoot(options.root);
     const { ranked, debug } =
@@ -210,6 +303,10 @@ program
         ? await queryMemoriesHybridWithDebug(root, request, {
             embeddingProvider: createEmbeddingProvider({
               provider: options.provider === "local" ? "local" : "transformers",
+              profile:
+                options.profile === "multilingual-e5-small" || options.profile === "bge-small-zh-v1.5"
+                  ? options.profile
+                  : undefined,
               model: options.model,
               allowRemoteModels: options.allowRemoteModels
             }),
@@ -265,7 +362,7 @@ program
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
   .action(async (options: { input: string; root?: string }) => {
     const input = JSON.parse(await readFile(options.input, "utf8")) as CandidateMemoryInput;
-    const result = await writeCandidateMemory(resolveCliRoot(options.root), input);
+    const result = await writeCandidateMemory(resolveCliRoot(options.root), applyCapturePolicyOverrides(input));
     console.log(JSON.stringify(result, null, 2));
   });
 
@@ -304,12 +401,251 @@ program
       throw new Error("--target must be either active or inbox");
     }
     const rawInput = JSON.parse(await readFile(options.input, "utf8")) as CandidateMemoryInput | CandidateMemoryInput[];
-    const inputs = Array.isArray(rawInput) ? rawInput : [rawInput];
+    const inputs = (Array.isArray(rawInput) ? rawInput : [rawInput]).map(applyCapturePolicyOverrides);
     const result = await captureMaterial(resolveCliRoot(options.root), inputs, {
       target: options.target,
       rebuild: options.rebuild
     });
     console.log(JSON.stringify(result, null, 2));
+  });
+
+program
+  .command("sync")
+  .description("Synchronize Markdown knowledge with WebDAV or S3");
+
+const sync = program.commands.find((command) => command.name() === "sync")!;
+
+sync
+  .command("webdav")
+  .requiredOption("--url <url>", "WebDAV collection URL")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--username <username>", "WebDAV username; defaults to WEBDAV_USERNAME")
+  .option("--password-env <name>", "environment variable containing WebDAV password", "WEBDAV_PASSWORD")
+  .option("--visibility <scope...>", "visibility scopes to sync", ["project", "team"])
+  .option("--sensitivity-clearance <level>", "maximum sensitivity to sync", "internal")
+  .action(
+    async (options: {
+      url: string;
+      root?: string;
+      username?: string;
+      passwordEnv: string;
+      visibility: string[];
+      sensitivityClearance: string;
+    }) => {
+      const backend = new WebDavSyncBackend({
+        baseUrl: options.url,
+        username: options.username ?? process.env.WEBDAV_USERNAME,
+        password: process.env[options.passwordEnv]
+      });
+      console.log(
+        JSON.stringify(
+          await syncKnowledge(resolveCliRoot(options.root), backend, {
+            visibilityScopes: resolveVisibilityScopes(options.visibility),
+            sensitivityClearance: resolveSensitivityClearance(options.sensitivityClearance)
+          }),
+          null,
+          2
+        )
+      );
+    }
+  );
+
+sync
+  .command("s3")
+  .requiredOption("--bucket <bucket>", "S3 bucket")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--region <region>", "AWS region; defaults to AWS_REGION or us-east-1")
+  .option("--prefix <prefix>", "object prefix", "")
+  .option("--endpoint <url>", "S3-compatible endpoint")
+  .option("--force-path-style", "use path-style bucket addressing", false)
+  .option("--visibility <scope...>", "visibility scopes to sync", ["project", "team"])
+  .option("--sensitivity-clearance <level>", "maximum sensitivity to sync", "internal")
+  .action(
+    async (options: {
+      bucket: string;
+      root?: string;
+      region?: string;
+      prefix: string;
+      endpoint?: string;
+      forcePathStyle: boolean;
+      visibility: string[];
+      sensitivityClearance: string;
+    }) => {
+      const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+      const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+      if (!accessKeyId || !secretAccessKey) {
+        throw new Error("S3 sync requires AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY");
+      }
+      const region = options.region ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "us-east-1";
+      const client = new S3HttpObjectClient({
+        bucket: options.bucket,
+        region,
+        endpoint: options.endpoint,
+        forcePathStyle: options.forcePathStyle,
+        accessKeyId,
+        secretAccessKey,
+        sessionToken: process.env.AWS_SESSION_TOKEN
+      });
+      const backend = new S3SyncBackend({
+        client,
+        prefix: options.prefix,
+        id: `s3:${options.endpoint ?? "aws"}:${region}:${options.bucket}:${options.prefix}`
+      });
+      console.log(
+        JSON.stringify(
+          await syncKnowledge(resolveCliRoot(options.root), backend, {
+            visibilityScopes: resolveVisibilityScopes(options.visibility),
+            sensitivityClearance: resolveSensitivityClearance(options.sensitivityClearance)
+          }),
+          null,
+          2
+        )
+      );
+    }
+  );
+
+program
+  .command("staging")
+  .description("Inspect and drain proactive-memory staging events");
+
+const staging = program.commands.find((command) => command.name() === "staging")!;
+
+staging
+  .command("status")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .action(async (options: { root?: string }) => {
+    console.log(JSON.stringify(await getStagingStatus(resolveCliRoot(options.root)), null, 2));
+  });
+
+staging
+  .command("drain")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--limit <count>", "maximum events to consume", "100")
+  .action(async (options: { root?: string; limit: string }) => {
+    console.log(
+      JSON.stringify(
+        await drainStagedEvents(resolveCliRoot(options.root), {
+          limit: Number.parseInt(options.limit, 10)
+        }),
+        null,
+        2
+      )
+    );
+  });
+
+program
+  .command("project")
+  .description("Detect and register the current Git project");
+
+const project = program.commands.find((command) => command.name() === "project")!;
+
+project
+  .command("detect")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .option("--cwd <dir>", "directory to inspect", process.cwd())
+  .action(async (options: { root?: string; cwd: string }) => {
+    console.log(JSON.stringify(await detectProject(resolveCliRoot(options.root), options.cwd), null, 2));
+  });
+
+program
+  .command("integration")
+  .description("Manage Agent Knowledge integrations for supported agent products");
+
+const integration = program.commands.find((command) => command.name() === "integration")!;
+
+integration
+  .command("list")
+  .description("List supported products and optional components")
+  .action(() => {
+    console.log(JSON.stringify({ products: listIntegrationProducts() }, null, 2));
+  });
+
+integration
+  .command("install")
+  .requiredOption("--product <product>", "trae or claude-code")
+  .option("--scope <scope>", "user or project", "user")
+  .option("--components <components>", "comma-separated hooks,agents,skills,plugin-bundle", "hooks,agents,skills")
+  .option("--target-dir <dir>", "override product config root; primarily for project installs and testing")
+  .action(
+    async (options: {
+      product: string;
+      scope: string;
+      components: string;
+      targetDir?: string;
+    }) => {
+      if (options.product !== "trae" && options.product !== "claude-code") {
+        throw new Error("--product must be trae or claude-code");
+      }
+      if (options.scope !== "user" && options.scope !== "project") {
+        throw new Error("--scope must be user or project");
+      }
+      const components = options.components
+        .split(",")
+        .map((component) => component.trim())
+        .filter(Boolean);
+      const allowed = new Set(["hooks", "agents", "skills", "plugin-bundle"]);
+      if (components.some((component) => !allowed.has(component))) {
+        throw new Error("--components contains an unsupported component");
+      }
+      const result = await installIntegration({
+        packageRoot: findPackageRoot(),
+        product: options.product,
+        scope: options.scope,
+        targetDir: options.targetDir,
+        components: components as Array<"hooks" | "agents" | "skills" | "plugin-bundle">
+      });
+      console.log(JSON.stringify(result, null, 2));
+    }
+  );
+
+integration
+  .command("uninstall")
+  .requiredOption("--product <product>", "trae or claude-code")
+  .option("--scope <scope>", "user or project", "user")
+  .option("--target-dir <dir>", "override product config root")
+  .action(async (options: { product: string; scope: string; targetDir?: string }) => {
+    if (options.product !== "trae" && options.product !== "claude-code") {
+      throw new Error("--product must be trae or claude-code");
+    }
+    if (options.scope !== "user" && options.scope !== "project") {
+      throw new Error("--scope must be user or project");
+    }
+    console.log(
+      JSON.stringify(
+        await uninstallIntegration({
+          product: options.product,
+          scope: options.scope,
+          targetDir: options.targetDir
+        }),
+        null,
+        2
+      )
+    );
+  });
+
+integration
+  .command("doctor")
+  .requiredOption("--product <product>", "trae or claude-code")
+  .option("--scope <scope>", "user or project", "user")
+  .option("--target-dir <dir>", "override product config root")
+  .action(async (options: { product: string; scope: string; targetDir?: string }) => {
+    if (options.product !== "trae" && options.product !== "claude-code") {
+      throw new Error("--product must be trae or claude-code");
+    }
+    if (options.scope !== "user" && options.scope !== "project") {
+      throw new Error("--scope must be user or project");
+    }
+    console.log(
+      JSON.stringify(
+        await doctorIntegration({
+          product: options.product,
+          scope: options.scope,
+          targetDir: options.targetDir
+        }),
+        null,
+        2
+      )
+    );
   });
 
 program
@@ -328,20 +664,65 @@ program
 
 program
   .command("link-trae-templates")
-  .description("Symlink templates/trae agents and hooks.json into ~/.trae-cn for TRAE")
-  .option("--target-dir <dir>", "TRAE config directory", "~/.trae-cn")
-  .option("--force", "replace existing target files or links", false)
-  .action(async (options: { targetDir: string; force: boolean }) => {
-    const targetDir = options.targetDir === "~/.trae-cn" ? undefined : options.targetDir;
-    const result = await linkTraeTemplates({
+  .description("Deprecated compatibility wrapper for integration install --product trae")
+  .option("--target-dir <dir>", "TRAE config directory override")
+  .option("--force", "deprecated and ignored; managed resources are merged safely", false)
+  .action(async (options: { targetDir?: string; force: boolean }) => {
+    const result = await installIntegration({
       packageRoot: findPackageRoot(),
-      targetDir,
-      force: options.force
+      product: "trae",
+      scope: "user",
+      targetDir: options.targetDir,
+      components: ["hooks", "agents", "skills"]
     });
-    console.log(JSON.stringify(result, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          deprecated: "Use `agent-knowledge integration install --product trae --scope user`.",
+          forceIgnored: options.force,
+          ...result
+        },
+        null,
+        2
+      )
+    );
   });
 
 const hook = program.command("hook").description("Commands intended to be called from TRAE hooks.json templates");
+
+async function stageCurrentHook(root: string): Promise<void> {
+  const input = await readHookInput();
+  const runtimeContext = getGitRuntimeContext(
+    typeof input.cwd === "string" ? input.cwd : process.cwd()
+  );
+  const detectedProject = runtimeContext.isGit
+    ? await detectProject(root, runtimeContext.cwd).catch(() => undefined)
+    : undefined;
+  const staged = await stageHookEvent(root, {
+    ...input,
+    project_id: detectedProject?.id
+  });
+  appendJsonlLog(root, {
+    event: "hook.lifecycle_staged",
+    hookEventName:
+      typeof (input.hook_event_name ?? input.event_type) === "string"
+        ? String(input.hook_event_name ?? input.event_type).slice(0, 80)
+        : "unknown",
+    agentType: typeof input.agent_type === "string" ? input.agent_type.slice(0, 80) : undefined,
+    projectId: detectedProject?.id,
+    stagingSequence: staged.sequence
+  });
+}
+
+hook
+  .command("stage-event")
+  .description("Stage a bounded, redacted lifecycle event for later memory maintenance")
+  .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
+  .action(async (options: { root?: string }) => {
+    const root = resolveCliRoot(options.root);
+    await initKnowledgeWorkspace(root);
+    await stageCurrentHook(root);
+  });
 
 hook
   .command("session-start")
@@ -351,17 +732,21 @@ hook
     const root = resolveCliRoot(options.root);
     const runtimeContext = getGitRuntimeContext();
     await initKnowledgeWorkspace(root);
+    const detectedProject = runtimeContext.isGit
+      ? await detectProject(root, runtimeContext.cwd).catch(() => undefined)
+      : undefined;
     if (process.env.TRAE_ENV_FILE) {
       await appendFile(process.env.TRAE_ENV_FILE, `AGENT_KNOWLEDGE_ROOT="${root}"\n`, "utf8");
     }
     appendJsonlLog(root, {
       event: "hook.session_start",
       root,
-      runtimeContext
+      runtimeContext,
+      projectId: detectedProject?.id
     });
     hookContext(
       "SessionStart",
-      `Agent Knowledge 已启用。默认知识库 workspace root：${root}。知识文件位于 ${root}/knowledge，索引位于 ${root}/.memory/index.sqlite。\n\nHook runtime context:\n\n${formatRuntimeContext(runtimeContext)}`
+      `Agent Knowledge 已启用。默认知识库 workspace root：${root}。知识文件位于 ${root}/knowledge，索引位于 ${root}/.memory/index.sqlite。${detectedProject ? ` 当前 project ID：${detectedProject.id}。` : ""}\n\nHook runtime context:\n\n${formatRuntimeContext(runtimeContext)}`
     );
   });
 
@@ -389,6 +774,9 @@ hook
   .action(async (options: { root?: string }) => {
     const root = resolveCliRoot(options.root);
     const runtimeContext = getGitRuntimeContext();
+    const detectedProject = runtimeContext.isGit
+      ? await detectProject(root, runtimeContext.cwd).catch(() => undefined)
+      : undefined;
     const input = await readHookInput();
     const prompt = typeof input.prompt === "string" ? input.prompt : "";
     if (prompt.trim().length === 0) {
@@ -402,7 +790,10 @@ hook
       const catalog = await catalogKnowledge(root, { write: false });
       const request = MemoryQueryRequestSchema.parse({
         task: prompt,
-        agentRole: "main"
+        agentRole: "main",
+        visibilityScopes: resolveVisibilityScopes(),
+        sensitivityClearance: resolveSensitivityClearance(),
+        projectIds: detectedProject ? [detectedProject.id] : []
       });
       const { ranked, debug } = queryMemoriesWithDebug(root, request);
       const packet = buildContextPacket({ request, ranked });
@@ -421,7 +812,8 @@ hook
         resultIds: debug.resultIds,
         fallbackUsed: debug.fallbackUsed,
         fallbackSuppressedReason: debug.fallbackSuppressedReason,
-        runtimeContext
+        runtimeContext,
+        projectId: detectedProject?.id
       });
 
       hookContext(

@@ -9,10 +9,14 @@
 - `knowledge/**/*.md` 是人类可读事实源。
 - `.memory/index.sqlite` 是可重建索引。
 - `.memory/embeddings/index.jsonl` 是可重建本地 embedding 缓存，不是事实源。
+- `.memory/embeddings/manifest.json` 保存 embedding profile/generation，不是事实源。
 - `.memory/logs/*.jsonl` 是可重建运行日志，只用于调试和审计摘要。
+- `.memory/staging/*.json*` 是脱敏 hook staging 与 watermark，不是事实源。
 - `agent-knowledge query` 输出主 agent 可注入的 `context packet`，`--debug` 附带 scorer/reranker 和分项分数。
 - `agent-knowledge embed-index` 使用本地 provider 生成 embedding 缓存；`agent-knowledge suggest-aliases` 只输出 dry-run JSON 建议。
 - `agent-knowledge write-candidate` 只写候选知识到 `knowledge/_inbox/`。
+- `agent-knowledge integration` 为 TRAE/Claude Code 安装可选 hooks/agents/skills/plugin bundle，使用普通托管文件和结构化 merge，不创建 symlink。
+- `agent-knowledge sync webdav|s3` 只同步 Markdown 事实源，冲突不自动覆盖。
 - 知识 frontmatter 支持可选 `aliases`，用于查询别名扩展和 catalog registry 暴露，不替代规范 `domain` / `scenario`。
 
 不要把索引当成事实源。任何知识更新都应先落到 Markdown，再重建索引。
@@ -47,6 +51,7 @@ embedding 缓存固定在：
 
 ```text
 <workspace root>/.memory/embeddings/index.jsonl
+<workspace root>/.memory/embeddings/manifest.json
 ```
 
 如果需要项目级隔离知识库，必须设置 `--root` 或 `AGENT_KNOWLEDGE_ROOT`。否则多个项目会共享 `~/.agent_knowledge`。
@@ -63,7 +68,11 @@ node dist/cli.js --help
 node dist/cli.js catalog --root tests/fixtures/basic-knowledge --no-write
 node dist/cli.js embed-index --root tests/fixtures/basic-knowledge --provider local
 node dist/cli.js suggest-aliases --root tests/fixtures/basic-knowledge --provider local
-node dist/cli.js link-trae-templates --target-dir /tmp/agent-knowledge-link-smoke
+node dist/cli.js eval --root tests/fixtures/basic-knowledge --input eval/cases/retrieval-baseline.yaml
+node dist/cli.js integration install --product trae --scope project --target-dir /tmp/agent-knowledge-integration-smoke
+node dist/cli.js integration doctor --product trae --scope project --target-dir /tmp/agent-knowledge-integration-smoke
+node dist/cli.js project detect
+node dist/cli.js staging status
 ```
 
 CLI smoke test：
@@ -104,6 +113,7 @@ src/indexer.ts        从 Markdown 重建 SQLite/FTS5 索引
 src/query.ts          查询、过滤、排序和一跳关联扩展
 src/scoring.ts        可插拔 embedding scorer 和默认 reranker
 src/embeddings.ts     本地 embedding provider、JSONL store 和 aliases dry-run 建议
+src/cjk.ts            中文 2/3-gram lexical 辅助召回
 src/contextPacket.ts  将检索结果组装成 context packet
 src/catalog.ts        生成 catalog API 和 knowledge/_catalog.md
 src/logging.ts        写入 .memory/logs JSONL 运行摘要
@@ -112,6 +122,12 @@ src/inbox.ts          写入 knowledge/_inbox
 src/feedback.ts       记录 memory usefulness 反馈到 JSONL 日志
 src/organizer.ts      主动整理 inbox 和用户直接提供的材料
 src/eval.ts           检索评估 harness
+src/integrations.ts   多产品托管安装、结构化 hook merge、uninstall 和 doctor
+src/projects.ts       Git project ID 和 AGENTS hash-only registry
+src/sync.ts           Markdown 三方同步、tombstone 和冲突
+src/syncWebdav.ts     WebDAV backend
+src/syncS3.ts         S3/S3-compatible SigV4 backend
+src/staging.ts        脱敏 hook staging、watermark 和 lock
 src/cli.ts            命令行入口
 ```
 
@@ -119,17 +135,22 @@ src/cli.ts            命令行入口
 
 - 优先保持小文件和清晰边界，不要把多个职责合并到一个模块。
 - 新增行为必须优先加测试。
-- 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。`related_knowledge` 可用于候选输入和直接材料捕获，只有能指向明确已有或同批可生成的知识 ID 时才填写。
+- 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。`related_knowledge` 只有能指向明确已有或同批可生成的知识 ID 时才填写。`project_ids`、`capture_mode`、`actor_type`、`corroboration_count` 用于适用范围和来源治理，旧 Markdown 依赖 schema 默认值保持兼容。
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - active 知识落盘目录必须保留 domain 的层级结构，例如 `bytedance/business/account` 写到 `knowledge/semantic/bytedance/business/account/`，不要压平成 `bytedance-business-account`。
 - 修改检索排序时同步更新 eval case 或增加新的 eval case。
 - 测试不得依赖网络或远程模型；embedding 相关测试必须使用 `DeterministicLocalEmbeddingProvider` 或 CLI `--provider local`。
 - Transformers.js provider 默认禁止远程模型下载；只有人工 CLI 调试时才显式传 `--allow-remote-models`。
 - `query` 不应在缺少 domain/scenario 且 FTS 无命中时回退全表；如修改 fallback 策略，必须更新 debug 输出和测试。
+- direct result 和 related expansion 必须执行相同的 validity、visibility、sensitivity、project 和 type 过滤。
+- `_inbox` / `_archive` 必须按路径硬排除，不能只依赖 status。
+- embedding query 必须校验 manifest/profile，不能对不同模型、维度、pooling 或 prefix 的向量静默 cosine。
+- 共享同步默认不包含 `private` 或高于 `internal` 的知识；如修改默认策略，必须更新威胁模型和测试。
 - 任何会影响对外 agent 使用流程的改动，都必须 review `templates/trae/`：
   - Hook 行为、事件、命令或注入上下文变化时，检查 `templates/trae/hooks.json` 和 `templates/trae/README.md`。
   - Subagent 输入、输出、frontmatter、工具权限或候选 JSON 字段变化时，检查 `templates/trae/agents/memory-writer.md`。
   - 模板必须遵循 TRAE 官方 Subagent Markdown + YAML frontmatter 格式和 Hook `version: 1` JSON 配置格式。
+- 修改产品安装时同时 review `templates/claude-code/`、`templates/trae/plugin/` 和 integration merge/uninstall 测试。
 - 不要提交 `dist/`、`.memory/`、`node_modules/` 或 `.superpowers/`。
 
 ## 知识写入规则
@@ -156,6 +177,15 @@ src/cli.ts            命令行入口
 - 未授权敏感全文。
 - 临时路径、一次性命令输出。
 - 未验证的模型推断作为 active 事实。
+- 完整客服对话、完整 prompt/tool response/transcript 到 staging 或同步远端。
+
+客服/机器人自动知识：
+
+- `actor_type: customer` 或 `capture_mode: automated_session` 永远是 proposed。
+- 客户不能通过“请记住”把来源提升为 `user_confirmed`。
+- 同一 actor/session 的重复内容不能当作独立 corroboration。
+- 需要 owner、受信文档、可复现验证或多个真正独立证据后再人工晋升。
+- 机器人进程应固定 `AGENT_KNOWLEDGE_ACTOR_TYPE=customer`、`AGENT_KNOWLEDGE_CAPTURE_MODE=automated_session`、`AGENT_KNOWLEDGE_VISIBILITY_SCOPES=project,team` 和合适的 `AGENT_KNOWLEDGE_SENSITIVITY_CLEARANCE`。
 
 ## 给其他 agent 的接入建议
 
@@ -215,11 +245,15 @@ agent-knowledge write-candidate \
 
 候选知识被人类审阅并激活后，重新运行 `agent-knowledge index`；如果使用 embedding 缓存，也重新运行 `agent-knowledge embed-index`。
 
-将 `templates/trae/agents/memory-reader.md` 复制到目标项目的 `.trae/agents/memory-reader.md`，用于任务中途按需检索、调试召回、hybrid 查询和反馈记录建议。
-将 `templates/trae/agents/memory-writer.md` 复制到目标项目的 `.trae/agents/memory-writer.md`，用于任务结束或显式记忆时生成候选知识 JSON。
-将 `templates/trae/hooks.json` 复制到目标项目的 `.trae/hooks.json`。
-用户级安装可运行 `agent-knowledge link-trae-templates`，它会把 `templates/trae/agents/*.md` 以符号链接写入 `~/.trae-cn/agents/`，把 `templates/trae/hooks.json` 写入 `~/.trae-cn/hooks.json`，并把本项目 `.trae/skills/*` 链接到 `~/.trae-cn/skills/*`。如果用户写成 `~/.tran-cn`，优先按笔误处理为官方目录 `~/.trae-cn`；确实要写其他目录时使用 `--target-dir`。
-`knowledge-organizer` Skill 已放在 `.trae/skills/knowledge-organizer/SKILL.md`，用于用户主动要求整理知识库或整理输入材料时触发。
+使用 `agent-knowledge integration install --product trae|claude-code --scope user|project` 安装产品接入。安装器不使用 symlink；hooks 结构化 merge 且只管理 `agent-knowledge hook` handler，agents/skills/plugin bundle 由本地 manifest 记录所有权。旧 `link-trae-templates` 仅保留为 deprecated 包装。
+`knowledge-organizer` 和 `memory-maintainer` Skills 位于 `.trae/skills/`。前者整理 inbox/直接材料，后者审阅 staging/log 并提出保守候选。
+
+Hook 主动记忆边界：
+
+- `SubagentStart` / `SubagentStop` / `Stop` / `SessionEnd` 只异步写脱敏 staging。
+- Staging 只保存 hash、长度、agent type、reason、project ID，不保存完整文本。
+- 当前 command hook 不直接调用 Subagent；语义抽取由主 Agent 委派 `memory-writer` 或触发 `memory-maintainer`。
+- 不在 Stop hook 中强制续跑模型。
 
 这些模板是官方格式，仓库内不直接放 `.trae/`，避免把模板误认为当前项目已安装配置。
 
