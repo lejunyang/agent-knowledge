@@ -1,4 +1,4 @@
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,6 +39,27 @@ describe("runEvalCase", () => {
     expect(result.passed).toBe(true);
     expect(result.missingExpected).toEqual([]);
     expect(result.presentForbidden).toEqual([]);
+  });
+
+  it("does not write synthetic eval queries into runtime logs", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-eval-no-log-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+    await rm(path.join(root, ".memory", "logs"), {
+      recursive: true,
+      force: true
+    });
+
+    await runEvalCase(root, {
+      task: "审查 Vue SFC lint 迁移方案",
+      domains: ["frontend/lint"],
+      scenarios: ["lint-migration"],
+      expected_memories: ["k_20260705_frontend_lint_vue_sfc"],
+      forbidden_memories: []
+    });
+
+    await expect(access(path.join(root, ".memory", "logs"))).rejects.toThrow();
   });
 
   it("reports rank-aware retrieval, abstention, latency, and packet token metrics", async () => {

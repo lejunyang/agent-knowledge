@@ -115,6 +115,7 @@ export type QueryMemoriesDebugResult = {
 export type QueryScoringOptions = {
   embeddingScorer?: EmbeddingScorer;
   reranker?: MemoryReranker;
+  log?: boolean;
 };
 
 export type QueryHybridOptions = QueryScoringOptions & {
@@ -850,14 +851,16 @@ export function queryMemoriesWithDebug(
   const selection = selectCandidateRows(rootDir, request);
   const result = rankSelectedRows(rootDir, request, selection, scoringOptions);
 
-  appendJsonlLog(rootDir, {
-    event: "query",
-    queryRunId: result.debug.queryRunId,
-    taskLength: request.task.length,
-    domains: request.domains,
-    scenarios: request.scenarios,
-    debug: result.debug
-  });
+  if (scoringOptions.log !== false) {
+    appendJsonlLog(rootDir, {
+      event: "query",
+      queryRunId: result.debug.queryRunId,
+      taskLength: request.task.length,
+      domains: request.domains,
+      scenarios: request.scenarios,
+      debug: result.debug
+    });
+  }
 
   return result;
 }
@@ -900,14 +903,16 @@ export async function queryMemoriesHybridWithDebug(
   };
   const result = rankSelectedRows(rootDir, request, selection, options);
 
-  appendJsonlLog(rootDir, {
-    event: "query",
-    queryRunId: result.debug.queryRunId,
-    taskLength: MemoryQueryRequestSchema.parse(rawRequest).task.length,
-    domains: MemoryQueryRequestSchema.parse(rawRequest).domains,
-    scenarios: MemoryQueryRequestSchema.parse(rawRequest).scenarios,
-    debug: result.debug
-  });
+  if (options.log !== false) {
+    appendJsonlLog(rootDir, {
+      event: "query",
+      queryRunId: result.debug.queryRunId,
+      taskLength: request.task.length,
+      domains: request.domains,
+      scenarios: request.scenarios,
+      debug: result.debug
+    });
+  }
 
   return result;
 }

@@ -207,6 +207,8 @@ agent-knowledge eval-calibrate --input calibration-observations.json
 
 评测 case 可用 `project_ids` 声明调用方项目作用域，用 `max_tokens` 复现 Hook 或其他调用方的 context packet 预算；完整 fixture 的 document 也可用 `project_ids` 绑定项目。`expected_memories`、`forbidden_memories` 和 abstain 按最终 `injectedIds` 判断，`matchedIds`、`rankById` 继续用于候选召回与排序诊断，避免把“进入候选池但因 token 预算未注入”误判为上下文污染。
 
+Eval pipeline 默认不写 `.memory/logs`，避免合成 query 污染真实 alias 建议、反馈分析和运行指标。普通 `query`、Hook 和人工调试仍保留 query 日志。
+
 如果主 Agent 实际使用或拒绝了某条结果，建议记录反馈：
 
 ```bash

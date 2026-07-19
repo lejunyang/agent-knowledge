@@ -294,13 +294,15 @@ export async function runEvalCase(
     ranked = (
       await queryMemoriesHybridWithDebug(rootDir, request, {
         embeddingProvider: pipelineOptions.embeddingProvider,
-        embeddingTopK: pipelineOptions.embeddingTopK
+        embeddingTopK: pipelineOptions.embeddingTopK,
+        log: false
       })
     ).ranked;
   } else if (pipelineOptions.pipeline === "reranked") {
     const baseResult = await queryMemoriesHybridWithDebug(rootDir, request, {
       embeddingProvider: pipelineOptions.embeddingProvider,
-      embeddingTopK: pipelineOptions.embeddingTopK
+      embeddingTopK: pipelineOptions.embeddingTopK,
+      log: false
     });
     ranked = (
       await queryMemoriesRerankedWithDebug(rootDir, request, {
@@ -312,7 +314,7 @@ export async function runEvalCase(
       })
     ).ranked;
   } else {
-    ranked = queryMemories(rootDir, request);
+    ranked = queryMemories(rootDir, request, { log: false });
   }
   const packet = buildContextPacket({ request, ranked });
   const matchedIds = ranked.map((item) => item.document.frontmatter.id);
