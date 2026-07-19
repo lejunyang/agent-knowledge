@@ -28,4 +28,6 @@ export * from "./integration/projects.js";
 export * from "./sync/core.js";
 export * from "./sync/webdav.js";
 export * from "./sync/s3.js";
+export * from "./sync/configured.js";
+export * from "./sync/scheduler.js";
 export * from "./hooks/staging.js";

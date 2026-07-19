@@ -22,6 +22,7 @@ import {
   catalogKnowledge,
   captureMaterial,
   createEmbeddingProvider,
+  createConfiguredSyncBackend,
   getDefaultUserConfigPath,
   embedKnowledgeIndex,
   loadEvalSuite,
@@ -34,6 +35,7 @@ import {
   queryMemoriesWithDebug,
   rebuildIndex,
   runEvalSuite,
+  runScheduledSync,
   S3HttpObjectClient,
   S3SyncBackend,
   stageHookEvent,
@@ -501,6 +503,74 @@ program
   .description("Synchronize Markdown knowledge with WebDAV or S3");
 
 const sync = program.commands.find((command) => command.name() === "sync")!;
+
+function configuredSyncPolicy(config: UserConfig["sync"]): {
+  visibilityScopes: Array<"private" | "project" | "team">;
+  sensitivityClearance: "public" | "internal" | "confidential" | "secret";
+} {
+  return {
+    visibilityScopes: config.visibilityScopes,
+    sensitivityClearance: config.sensitivityClearance
+  };
+}
+
+sync
+  .command("run")
+  .description("Run one synchronization using the user config")
+  .option("--root <dir>", "workspace root override")
+  .option("--json", "emit the full JSON result", false)
+  .action(async (options: { root?: string; json: boolean }) => {
+    const configuredSync = userConfig().sync;
+    const backend = createConfiguredSyncBackend(configuredSync);
+    const result = await syncKnowledge(
+      resolveCliRoot(options.root),
+      backend,
+      configuredSyncPolicy(configuredSync)
+    );
+    const machineOutput = program.opts<{ json: boolean }>().json || options.json;
+    console.log(
+      machineOutput
+        ? JSON.stringify(result, null, 2)
+        : `Sync completed: ${result.pushed.length} pushed, ${result.pulled.length} pulled, ${result.conflicts.length} conflicts.`
+    );
+  });
+
+sync
+  .command("watch")
+  .description("Run synchronization immediately and repeat at a configured interval")
+  .option("--root <dir>", "workspace root override")
+  .option("--interval-minutes <minutes>", "override the configured sync interval")
+  .action(async (options: { root?: string; intervalMinutes?: string }) => {
+    const configuredSync = userConfig().sync;
+    const intervalMinutes = options.intervalMinutes
+      ? Number.parseInt(options.intervalMinutes, 10)
+      : configuredSync.intervalMinutes;
+    const root = resolveCliRoot(options.root);
+    const controller = new AbortController();
+    const stop = (): void => controller.abort();
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+    console.log(
+      `Starting scheduled ${configuredSync.provider} sync every ${intervalMinutes} minute(s). Press Ctrl+C to stop.`
+    );
+    await runScheduledSync({
+      intervalMinutes,
+      signal: controller.signal,
+      run: async () => {
+        const result = await syncKnowledge(
+          root,
+          createConfiguredSyncBackend(configuredSync),
+          configuredSyncPolicy(configuredSync)
+        );
+        console.log(
+          `[${new Date().toISOString()}] Sync completed: ${result.pushed.length} pushed, ${result.pulled.length} pulled, ${result.conflicts.length} conflicts.`
+        );
+      },
+      onError: (error) => {
+        console.error(`[${new Date().toISOString()}] Sync failed: ${error.message}`);
+      }
+    });
+  });
 
 sync
   .command("webdav")
