@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-knowledge.cmd hook session-start",
+            "command": "bash -lc 'agent-knowledge hook session-start'",
             "timeout": 30
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-knowledge.cmd hook user-prompt-submit",
+            "command": "bash -lc 'agent-knowledge hook user-prompt-submit'",
             "timeout": 30
           }
         ]
@@ -28,10 +28,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-knowledge.cmd hook stage-event",
+            "command": "bash -lc 'agent-knowledge hook stage-event'",
             "timeout": 10,
-            "async": true,
-            "statusMessage": "recording memory subagent start"
+            "async": true
           }
         ]
       }
@@ -41,10 +40,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-knowledge.cmd hook stage-event",
+            "command": "bash -lc 'agent-knowledge hook stage-event'",
             "timeout": 10,
-            "async": true,
-            "statusMessage": "recording memory subagent result"
+            "async": true
           }
         ]
       }
@@ -54,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-knowledge.cmd hook stage-event",
+            "command": "bash -lc 'agent-knowledge hook stage-event'",
             "timeout": 10,
             "async": true
           }
@@ -66,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-knowledge.cmd hook stage-event",
+            "command": "bash -lc 'agent-knowledge hook stage-event'",
             "timeout": 10,
             "async": true
           }

@@ -1,0 +1,31 @@
+{
+  "name": "agent-knowledge",
+  "version": "0.1.0",
+  "description": "Local governed knowledge retrieval and candidate memory for agents",
+  "author": {
+    "name": "Agent Knowledge"
+  },
+  "license": "UNLICENSED",
+  "keywords": [
+    "memory",
+    "knowledge",
+    "hooks"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Agent Knowledge",
+    "shortDescription": "Governed local knowledge for agents",
+    "longDescription": "Injects active local knowledge and stages conservative memory candidates without capturing complete conversations.",
+    "developerName": "Agent Knowledge",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Search my active Agent Knowledge for this task.",
+      "Review candidate memories without promoting them."
+    ],
+    "brandColor": "#4F46E5"
+  }
+}

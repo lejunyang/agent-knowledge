@@ -22,6 +22,56 @@
           }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'agent-knowledge hook stage-event'",
+            "timeout": 10,
+            "async": true,
+            "statusMessage": "recording memory subagent start"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'agent-knowledge hook stage-event'",
+            "timeout": 10,
+            "async": true,
+            "statusMessage": "recording memory subagent result"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'agent-knowledge hook stage-event'",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'agent-knowledge hook stage-event'",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      }
     ]
   }
 }

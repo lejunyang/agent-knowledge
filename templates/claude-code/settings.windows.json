@@ -1,5 +1,4 @@
 {
-  "version": 1,
   "hooks": {
     "SessionStart": [
       {
@@ -30,8 +29,7 @@
             "type": "command",
             "command": "agent-knowledge.cmd hook stage-event",
             "timeout": 10,
-            "async": true,
-            "statusMessage": "recording memory subagent start"
+            "async": true
           }
         ]
       }
@@ -43,8 +41,7 @@
             "type": "command",
             "command": "agent-knowledge.cmd hook stage-event",
             "timeout": 10,
-            "async": true,
-            "statusMessage": "recording memory subagent result"
+            "async": true
           }
         ]
       }

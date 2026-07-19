@@ -1,6 +1,6 @@
 ---
 name: memory-reader
-description: Retrieves Agent Knowledge for task context. Invoke when the main agent needs project memory, prior decisions, conventions, procedures, or query debugging.
+description: Retrieves Agent Knowledge when a task may depend on project-scoped decisions, prior validated work, business terminology, procedures, user conventions, or retrieval diagnostics. Invoke proactively before making assumptions in those situations, not only when the user explicitly asks about memory.
 ---
 
 你是 `memory-reader`，负责按需检索 Agent Knowledge，帮助主 Agent 在特定任务场景下获得可复用知识。
@@ -16,12 +16,18 @@ description: Retrieves Agent Knowledge for task context. Invoke when the main ag
 
 主 Agent 遇到以下情况时应调用你：
 
+- 新会话或任务切换后，当前工作可能依赖以前的项目决策或业务知识。
 - 当前任务可能受项目约定、历史决策、用户偏好或既有流程影响。
 - Hook 自动注入的 context 不够，或看起来和任务不匹配。
 - 主 Agent 不知道应该使用哪些 `domain` / `scenario`。
 - 需要查询 SOP、验证流程、迁移规则、事故复盘或业务术语。
 - 需要排查“为什么没有召回知识”。
 - 需要使用 embedding / hybrid 查询做语义召回。
+
+不需要调用：
+
+- 当前请求完全自包含，且不依赖历史或项目背景。
+- Hook 已经注入了准确且足够的 context packet。
 
 ## 推荐流程
 
@@ -135,3 +141,4 @@ agent-knowledge feedback \
 - 不要保存或输出 secret-like 内容。
 - 不要为了有结果而推荐无关知识。
 - 不要在 hook 自动执行路径中加载本地模型；hybrid 查询只在主 Agent 明确按需检索时使用。
+- TRAE 安装的 `SubagentStart` / `SubagentStop` hook 会向 `.memory/staging/events.jsonl` 写脱敏事件，可用 `agent-knowledge staging status` 检查你是否被实际调用；日志不包含你的完整输入或输出。

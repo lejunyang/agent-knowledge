@@ -1,35 +1,42 @@
 # TRAE 模板
 
-本目录存放对外安装模板，不直接命名为 `.trae`。真正使用时，把文件链接或复制到目标项目或用户级配置目录。
+本目录存放 TRAE 产品 adapter 的源模板和可选 plugin bundle。安装统一由 integration installer 管理。
 
-## 安装位置
+## 安装
 
-项目级安装：
-
-```text
-templates/trae/agents/memory-reader.md -> <project>/.trae/agents/memory-reader.md
-templates/trae/agents/memory-writer.md -> <project>/.trae/agents/memory-writer.md
-templates/trae/hooks.json -> <project>/.trae/hooks.json
-templates/trae/hooks.windows.json -> <project>/.trae/hooks.json（Windows）
-```
-
-用户级安装推荐使用命令创建符号链接：
+用户级：
 
 ```bash
-agent-knowledge link-trae-templates
+agent-knowledge integration install \
+  --product trae \
+  --scope user \
+  --components hooks,agents,skills
 ```
 
-等价目标位置：
+项目级：
 
-```text
-templates/trae/agents/memory-reader.md -> ~/.trae-cn/agents/memory-reader.md
-templates/trae/agents/memory-writer.md -> ~/.trae-cn/agents/memory-writer.md
-templates/trae/hooks.json -> ~/.trae-cn/hooks.json（macOS/Linux）
-templates/trae/hooks.windows.json -> ~/.trae-cn/hooks.json（Windows）
-.trae/skills/knowledge-organizer -> ~/.trae-cn/skills/knowledge-organizer
+```bash
+agent-knowledge integration install \
+  --product trae \
+  --scope project
 ```
 
-如果目标已存在，命令会拒绝覆盖；确认替换时使用 `agent-knowledge link-trae-templates --force`。
+可选生成 TRAE plugin bundle：
+
+```bash
+agent-knowledge integration install \
+  --product trae \
+  --scope user \
+  --components plugin-bundle
+```
+
+安装器不使用 symlink：
+
+- Hooks JSON 先 parse，再删除/替换 command 中匹配 `agent-knowledge(.cmd) hook` 的自有 handler。
+- 保留其他 hook group、handler 和顶层字段。
+- Agent/Skill/plugin 只管理 integration manifest 记录的路径。
+- 同名但未被管理的资源报告 conflict，不覆盖。
+- `integration uninstall` 只移除自有且未被用户改写的资源。
 
 ## hooks.json 能力
 
@@ -37,6 +44,10 @@ templates/trae/hooks.windows.json -> ~/.trae-cn/hooks.json（Windows）
 
 - `SessionStart`：初始化 `AGENT_KNOWLEDGE_ROOT`，并向当前会话补充知识库路径说明。
 - `UserPromptSubmit`：在主 Agent 处理用户请求前注入 catalog 简表和 context packet。
+- `SubagentStart` / `SubagentStop`：异步记录脱敏 Subagent staging。
+- `Stop` / `SessionEnd`：异步记录回合/会话结束信号。
+
+Staging hook 不返回 block、allow 或 continuation，不会强制模型继续。它只记录 hash、长度、agent type、reason 和 project ID，不保存完整 prompt、response、tool payload 或 transcript。
 
 安装命令会按平台选择 hook 模板：
 
@@ -49,11 +60,14 @@ Hook 输出会包含 runtime context：
 - `isGit`：该目录是否位于 Git 工作树。
 - `gitRoot`：可探测到时输出 Git 根目录。
 - `gitOrigin`：可探测到时输出 `remote.origin.url`。
+- `project ID`：Git remote 或 canonical Git root 生成的稳定 ID。
 
 如果需要确认 TRAE 当前环境到底把 hook 放在哪个目录执行，可以运行：
 
 ```bash
 agent-knowledge hook doctor
+agent-knowledge project detect
+agent-knowledge staging status
 ```
 
 `UserPromptSubmit` 未命中知识时只注入粗粒度 catalog，包含：
@@ -77,7 +91,7 @@ agent-knowledge hook doctor
 - `name: memory-reader`
 - `description`
 
-该 Subagent 用于按需检索 Agent Knowledge。主 Agent 在 hook 注入不足、任务中途需要历史约定、需要 `query --debug`、需要 hybrid 查询或需要记录反馈时调用它。
+该 Subagent 用于按需检索 Agent Knowledge。主 Agent 在任务可能依赖项目约定、历史决策、业务术语或 SOP 时应主动调用，而不只是在用户显式问“记忆”时调用。
 
 ## memory-writer 能力
 
@@ -87,7 +101,19 @@ agent-knowledge hook doctor
 - `description`
 - `tools: ""`
 
-该 Subagent 只输出候选 JSON，不调用工具，不写文件。候选 JSON 支持 `aliases`，用于把用户自然说法、简称、旧称和中英文同义表达写入知识元数据。
+该 Subagent 只输出候选 JSON，不调用工具，不写文件。候选 JSON 支持：
+
+- `aliases`
+- `capture_mode`
+- `actor_type`
+- `corroboration_count`
+- `project_ids`
+
+外部客户和 automatic session 只能生成 proposed observation，不能直接成为 active 事实。
+
+## memory-maintainer
+
+`.trae/skills/memory-maintainer` 用于审阅 staging/log、结合已验证证据调用 `memory-writer`，并把支持充分的结果写入 `_inbox`。
 
 ## embedding / aliases 辅助命令
 
@@ -98,15 +124,15 @@ agent-knowledge embed-index --provider local
 agent-knowledge suggest-aliases --provider local
 ```
 
-生产环境可把 `embed-index` 切到 `--provider transformers --model <local-model-path>`；Transformers.js provider 默认禁止远程模型下载，只有人工确认后才使用 `--allow-remote-models`。
+生产环境默认 profile 是 multilingual E5 small q8；也可选 `--profile bge-small-zh-v1.5`。Transformers.js provider 默认禁止远程模型下载，只有人工确认后才使用 `--allow-remote-models`。
 
 如果目标项目已经构建 embedding 缓存，可以在主 Agent 的显式查询流程中使用：
 
 ```bash
-agent-knowledge query --retrieval hybrid --provider transformers --model <local-model-path> --debug
+agent-knowledge query --retrieval hybrid --provider transformers --debug
 ```
 
-Hook 模板仍保持轻量，不默认执行 hybrid 查询。
+Hook 模板保持轻量，不默认执行 hybrid 查询或模型抽取。
 
 ## 维护规则
 
@@ -116,4 +142,5 @@ Hook 模板仍保持轻量，不默认执行 hybrid 查询。
 - 若 `CandidateMemoryInput` 字段改变，更新 `agents/memory-writer.md` 的示例。
 - 若新增对外安装步骤，更新本说明。
 - 若 embedding、alias 建议或 query debug 输出变化，更新本说明和主 README。
+- 若 staging 事件或治理字段变化，更新 memory-reader、memory-writer 和 memory-maintainer。
 - 若 TRAE 官方 Hook/Subagent 格式有变化，按官方文档同步模板。
