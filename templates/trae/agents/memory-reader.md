@@ -23,6 +23,7 @@ description: Retrieves Agent Knowledge when a task may depend on project-scoped 
 - 需要查询 SOP、验证流程、迁移规则、事故复盘或业务术语。
 - 需要排查“为什么没有召回知识”。
 - 需要使用 embedding / hybrid 查询做语义召回。
+- 需要沿显式知识关系查找依赖步骤、配套规则或多跳上下文。
 
 不需要调用：
 
@@ -63,9 +64,14 @@ agent-knowledge query \
 agent-knowledge query --task "$CURRENT_TASK" --debug
 ```
 
-### Hybrid 查询
+### 选择检索模式
 
-如果普通查询未命中，且项目已经构建 embedding 缓存，可使用 hybrid 查询：
+- `lexical`：默认。适合术语、路径、错误码和明确关键词，不需要模型。
+- `hybrid`：适合同义改写、自然语言和跨语言查询，需要 embedding 缓存。
+- `graph`：从 lexical seed 沿可信知识关系补充依赖和配套规则，需要 graph index。
+- `hybrid-graph`：hybrid seed + graph 扩展，召回最广、成本最高。
+
+如果普通查询未命中，且已经构建 embedding 缓存，可使用 hybrid：
 
 ```bash
 agent-knowledge query \
@@ -81,6 +87,31 @@ agent-knowledge query \
 ```bash
 agent-knowledge query --task "$CURRENT_TASK" --retrieval hybrid --provider local --debug
 ```
+
+如果任务需要关联 SOP、依赖步骤或多跳规则，先确保图索引存在，再使用：
+
+```bash
+agent-knowledge graph build
+agent-knowledge query \
+  --task "$CURRENT_TASK" \
+  --retrieval graph \
+  --graph-depth 1 \
+  --debug
+```
+
+只有 lexical seed 不足且确实需要关系扩展时，才升级到：
+
+```bash
+agent-knowledge query \
+  --task "$CURRENT_TASK" \
+  --retrieval hybrid-graph \
+  --graph-depth 2 \
+  --debug
+```
+
+图只沿 `depends_on`、`refines`、`supports`、`often_used_with` 扩展；不要把 `conflicts_with` 或 `supersedes` 当成并列事实。
+
+如果候选主题非常接近、hard-negative 较多，并且本地 reranker 已下载，可在人工按需查询中加 `--rerank`。不要在 Hook 热路径自动加载 embedding 或 reranker。
 
 ### 反馈
 
@@ -133,6 +164,7 @@ agent-knowledge feedback \
 - 查看 `agent-knowledge catalog --no-write` 中的 domains/scenarios/aliases。
 - 尝试更具体的 task 描述。
 - 如已构建 embedding 缓存，尝试 `--retrieval hybrid`。
+- 如问题依赖配套流程或多跳关系，构建 graph 后尝试 `--retrieval graph`。
 ```
 
 ## 注意事项
@@ -140,6 +172,7 @@ agent-knowledge feedback \
 - 不要把 `_inbox` 候选知识当成已确认事实。
 - 不要保存或输出 secret-like 内容。
 - 不要为了有结果而推荐无关知识。
-- 不要在 hook 自动执行路径中加载本地模型；hybrid 查询只在主 Agent 明确按需检索时使用。
+- 不要在 hook 自动执行路径中加载本地模型；hybrid、hybrid-graph 和 reranker 只在主 Agent 明确按需检索时使用。
+- Graph 候选虽然允许跨越直接 domain/scenario，但仍必须通过 validity、visibility、sensitivity、project 和 type 过滤；不要建议绕过这些边界。
 - TRAE 安装的 `SubagentStart` / `SubagentStop` hook 会向 `.memory/staging/events.jsonl` 写脱敏事件，可用 `agent-knowledge staging status` 检查你是否被实际调用；日志不包含你的完整输入或输出。
-- 同时会写本地 `.memory/subagents` 详细 payload 供用户调试，且不会注入上下文或参与同步。
+- 同时会向本地 `.memory/subagents` 写原始详细 payload、Start/Stop 配对和持续时间，供所有者调试。详细日志不会注入上下文或参与同步，可用 `agent-knowledge subagents logs --agent-type memory-reader` 查看。

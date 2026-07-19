@@ -34,12 +34,27 @@ describe("managed integrations", () => {
     const hooksTarget = path.join(targetDir, "hooks.json");
     const cliHooksTarget = path.join(targetDir, "cli", "hooks.json");
     const skillTarget = path.join(targetDir, "skills", "knowledge-organizer");
+    const maintainerTarget = path.join(
+      targetDir,
+      "skills",
+      "memory-maintainer",
+      "SKILL.md"
+    );
 
     expect((await lstat(readerTarget)).isFile()).toBe(true);
     expect((await lstat(writerTarget)).isFile()).toBe(true);
     expect((await lstat(hooksTarget)).isFile()).toBe(true);
     expect((await lstat(cliHooksTarget)).isFile()).toBe(true);
     expect((await lstat(skillTarget)).isDirectory()).toBe(true);
+    await expect(readFile(readerTarget, "utf8")).resolves.toContain(
+      "hybrid-graph"
+    );
+    await expect(readFile(writerTarget, "utf8")).resolves.toContain(
+      "organize-inbox --approve"
+    );
+    await expect(readFile(maintainerTarget, "utf8")).resolves.toContain(
+      "maintenance install-skill"
+    );
     expect(result.conflicts).toEqual([]);
     expect(result.managed.length).toBeGreaterThanOrEqual(4);
   });
@@ -222,9 +237,37 @@ describe("managed integrations", () => {
     await expect(
       readFile(path.join(windowsTarget, "plugins", "agent-knowledge", "hooks", "hooks.json"), "utf8")
     ).resolves.toContain("agent-knowledge.cmd hook");
+    await expect(
+      readFile(
+        path.join(
+          windowsTarget,
+          "plugins",
+          "agent-knowledge",
+          "agents",
+          "memory-reader.md"
+        ),
+        "utf8"
+      )
+    ).resolves.toContain("hybrid-graph");
+    await expect(
+      readFile(
+        path.join(
+          windowsTarget,
+          "plugins",
+          "agent-knowledge",
+          "skills",
+          "memory-maintainer",
+          "SKILL.md"
+        ),
+        "utf8"
+      )
+    ).resolves.toContain("maintenance install-skill");
     await expect(readFile(path.join(claudeTarget, "settings.json"), "utf8")).resolves.toContain(
       "agent-knowledge hook"
     );
+    await expect(
+      readFile(path.join(claudeTarget, "agents", "memory-reader.md"), "utf8")
+    ).resolves.toContain("--retrieval graph");
     const doctor = await doctorIntegration({
       product: "trae",
       scope: "user",

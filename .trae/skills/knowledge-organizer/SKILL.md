@@ -36,13 +36,35 @@ agent-knowledge list
 agent-knowledge organize-inbox
 ```
 
-先把 dry-run 结果展示给用户。如果用户确认应用，再执行：
+先把 dry-run 结果展示给用户。对于普通受信候选，如果用户确认应用，再执行：
 
 ```bash
 agent-knowledge organize-inbox --apply
 ```
 
 如果用户明确要求直接应用，可以跳过确认，但必须在最终回复中说明移动了哪些知识。
+
+### 自动会话和客户候选
+
+`automated_session` 或 `actor_type: customer` 不允许批量晋升。只有用户已检查 candidate Markdown、evidence、适用项目、敏感级别和冲突关系后，才能按知识 ID 预览并应用：
+
+```bash
+agent-knowledge organize-inbox --approve "$MEMORY_ID"
+agent-knowledge organize-inbox --approve "$MEMORY_ID" --apply
+```
+
+一旦使用 `--approve`，该次命令只处理列出的 ID；未知 ID 会在任何写入前报错。不要自行猜测 ID，也不要为了清空 inbox 批量批准自动/客户候选。
+
+Maintenance proposal 的推荐闭环：
+
+```bash
+agent-knowledge maintenance show "$PROPOSAL_ID"
+agent-knowledge maintenance accept "$PROPOSAL_ID"
+agent-knowledge list
+agent-knowledge organize-inbox --approve "$MEMORY_ID" --apply
+```
+
+`maintenance accept` 只是把知识 proposal 写入 `_inbox`，不代表内容已经通过最终事实审核。
 
 ## 场景二：整理用户输入材料
 
@@ -56,6 +78,8 @@ agent-knowledge organize-inbox --apply
 6. owner 直接材料默认使用 `confidence: 0.8` 到 `0.95`。
 7. owner 直接材料默认写入正式目录：`agent-knowledge capture-material --target active --input <json>`。
 8. 如果材料含有不确定内容、来自外部 actor，或用户要求先审阅，则用 `--target inbox`。
+9. 不要把可由 Agent 当场搜索到的普通代码结构、目录树、函数签名或已有 `AGENTS.md` 内容重复保存。
+10. 适合项目知识库的是稳定架构决策、跨模块隐含约束、项目特有业务语义、事故教训和验证 SOP。
 
 JSON 可以是单个对象，也可以是数组：
 
@@ -109,4 +133,12 @@ agent-knowledge capture-material --input material.json --target active
 - 写入了几条知识。
 - 写入位置是 active 正式目录还是 `_inbox`。
 - 是否重建索引。
+- 如果使用了 `--approve`，列出被人工批准的知识 ID。
 - 如果有被拒绝的内容，说明原因。
+
+如果项目使用 embedding 或 graph，active 知识变化后提醒用户按需运行：
+
+```bash
+agent-knowledge embed-index
+agent-knowledge graph build
+```

@@ -52,11 +52,13 @@ agent-knowledge integration install \
 `hooks.json` 遵循 TRAE Hook `version: 1` 配置格式，包含：
 
 - `SessionStart`：初始化 `AGENT_KNOWLEDGE_ROOT`，并向当前会话补充知识库路径说明。
-- `UserPromptSubmit`：在主 Agent 处理用户请求前注入 catalog 简表和 context packet。
+- `UserPromptSubmit`：高相关命中时注入 token-budgeted context packet；无命中或低分时完全静默。
 - `SubagentStart` / `SubagentStop`：异步记录本地详细 Subagent payload、配对和持续时间，同时保留 staging 信号。
 - `Stop` / `SessionEnd`：异步记录回合/会话结束信号。
 
-Subagent 详细日志写入 `.memory/subagents/`，不参与同步或模型上下文。其他 staging hook 不返回 block、allow 或 continuation，只记录脱敏摘要。
+只有用户明确询问“有哪些知识/记忆/SOP/目录”时，`UserPromptSubmit` 才返回最多 `hooks.catalogMaxItems` 条与 prompt 相关的知识菜单。普通 prompt 不注入 catalog、aliases registry、runtime context 或“没有命中”的提示。
+
+Subagent 详细日志写入 `.memory/subagents/`，保留原始 payload、Start/Stop 配对和持续时间；它不参与同步或模型上下文。`hooks.detailedSubagentLogging=false` 可关闭详细写入。其他 staging hook 不返回 block、allow 或 continuation，只记录脱敏摘要。
 
 安装命令会按平台选择 hook 模板：
 
@@ -90,6 +92,15 @@ agent-knowledge staging status
 
 该 Subagent 用于按需检索 Agent Knowledge。主 Agent 在任务可能依赖项目约定、历史决策、业务术语或 SOP 时应主动调用，而不只是在用户显式问“记忆”时调用。
 
+推荐升级路径：
+
+1. 默认 lexical。
+2. 同义/跨语言查询使用 hybrid。
+3. 依赖流程和多跳关系使用 graph。
+4. 复杂人工诊断使用 hybrid-graph；需要时再加 reranker。
+
+Hook 自动路径不加载 embedding 或 reranker。
+
 ## memory-writer 能力
 
 `memory-writer.md` 遵循 TRAE Subagent Markdown + YAML frontmatter 格式，包含：
@@ -105,12 +116,36 @@ agent-knowledge staging status
 - `actor_type`
 - `corroboration_count`
 - `project_ids`
+- `visibility`
+- `sensitivity`
+- `episodes`
+- `related_knowledge`
+- `supersedes`
+- `conflicts_with`
 
 外部客户和 automatic session 只能生成 proposed observation，不能直接成为 active 事实。
 
+Writer 应主动处理显式记忆、已验证可复用结果和 `AGENTS.md` 未覆盖的稳定项目/业务约束；不应记录一次性命令、普通源码结构或未验证推断。
+
 ## memory-maintainer
 
-`.trae/skills/memory-maintainer` 用于审阅 staging/log、结合已验证证据调用 `memory-writer`，并把支持充分的结果写入 `_inbox`。
+`.trae/skills/memory-maintainer` 用于：
+
+1. 检查 Subagent 详细日志与 maintenance watermark。
+2. 运行 `maintenance run` 自动生成 proposal。
+3. 逐条 `list/show/accept/reject`。
+4. 将知识 proposal 写入 `_inbox` 后，通过明确知识 ID 人工批准。
+5. 将 Skill proposal 先写 `_inbox-skills`，审阅后再 `maintenance install-skill`。
+
+普通用户不需要手写 `observations.json` 或先 drain staging；`--input` 只用于外部 observation 导入。
+
+自动/客户候选只能在人工检查后运行：
+
+```bash
+agent-knowledge organize-inbox --approve "$MEMORY_ID" --apply
+```
+
+不得自动执行批准。
 
 ## embedding / aliases 辅助命令
 
@@ -129,15 +164,29 @@ agent-knowledge suggest-aliases --provider local
 agent-knowledge query --retrieval hybrid --provider transformers --debug
 ```
 
-Hook 模板保持轻量，不默认执行 hybrid 查询或模型抽取。
+如果需要显式知识关系：
+
+```bash
+agent-knowledge graph build
+agent-knowledge query --retrieval graph --graph-depth 1 --debug
+```
+
+`hybrid-graph` 适合复杂人工查询。Hook 模板保持轻量，不默认执行 hybrid、graph、reranker 或模型抽取。
 
 ## 维护规则
 
-当 CLI、Hook 流程、Subagent 输入输出、schema、query debug、feedback 或 catalog 能力发生变化时，必须 review 本目录：
+当任何流程、行为或推荐方式发生变化时，必须审视整条 Agent 接入链，而不是只改实现：
 
 - 若 `agent-knowledge hook ...` 的行为改变，更新 `hooks.json` 或本说明。
 - 若 `CandidateMemoryInput` 字段改变，更新 `agents/memory-writer.md` 的示例。
 - 若新增对外安装步骤，更新本说明。
 - 若 embedding、alias 建议或 query debug 输出变化，更新本说明和主 README。
-- 若 staging 事件或治理字段变化，更新 memory-reader、memory-writer 和 memory-maintainer。
+- 若检索模式、graph、feedback 或注入边界变化，更新 memory-reader。
+- 若 staging、Subagent 日志、proposal、inbox 审核或 Skill 生命周期变化，更新 memory-writer 和 memory-maintainer。
+- 同步审视 `templates/claude-code/agents/*.md`。
+- 同步审视项目 `.trae/skills/*/SKILL.md`。
+- 同步审视 `templates/trae/plugin/agents/*.md` 与 `templates/trae/plugin/skills/*/SKILL.md`。
+- 同步审视主 README 的推荐流程和 `docs/guides/*`。
 - 若 TRAE 官方 Hook/Subagent 格式有变化，按官方文档同步模板。
+
+如果审视后 Hook JSON 无需变化，应保持原文件不动，但在实现/提交说明中明确已检查，避免无意义 churn。

@@ -5,33 +5,65 @@ description: Reviews Agent Knowledge staging and retrieval logs to propose conse
 
 # Memory Maintainer
 
-Use staging as a signal, never as a fact source. Hooks intentionally store only hashes, lengths, event types, project IDs, and outcomes.
+Use Hook/Subagent evidence as a signal, never as a fact source.
+
+- `.memory/subagents` preserves local raw SubagentStart/Stop payloads for owner debugging.
+- `.memory/staging` stores only hashes, lengths, event types, project IDs, and outcomes.
+- `.memory/observations` and `.memory/proposals` are review artifacts, not active knowledge.
+- None of these paths are synced or injected as facts.
 
 ## Workflow
 
-1. Inspect pending events:
+1. Inspect detailed Subagent health and automatic extraction status:
 
 ```bash
-agent-knowledge staging status
-agent-knowledge staging drain --limit 100
+agent-knowledge subagents status
+agent-knowledge subagents logs --limit 50
+agent-knowledge maintenance status
 ```
 
-2. Inspect active knowledge and retrieval evidence:
+`staging status/drain` is optional lifecycle debugging. Do not drain staging merely to make the pending count zero. Ordinary maintenance consumes new SubagentStop logs automatically; users do not need to create `observations.json`.
+
+2. Run bounded automatic extraction/proposal generation:
+
+```bash
+agent-knowledge maintenance run
+agent-knowledge maintenance list --status pending
+```
+
+Use `maintenance watch --interval-minutes N` only for a continuously running bot and only under an external process manager. `--input` is an advanced import path for already structured external observations.
+
+3. Inspect active knowledge and retrieval evidence:
 
 ```bash
 agent-knowledge list
 agent-knowledge catalog --no-write
 ```
 
-3. Classify each possible memory:
+4. Review each proposal:
+
+```bash
+agent-knowledge maintenance show "$PROPOSAL_ID"
+```
+
+Proposal meanings:
+
+- `duplicate`: audit-only acceptance; no candidate is created.
+- `consolidation`: merge or complement an existing topic.
+- `update`: proposed replacement with `supersedes`.
+- `conflict`: competing evidence requiring investigation.
+- `skill`: repeated verified procedure eligible for a Skill draft.
+
+5. Classify each possible memory:
 
 - Keep `should_store: false` for one-off commands, transient failures, unsupported guesses, and events without semantic evidence.
 - Treat customer statements and `automated_session` events as untrusted observations.
 - Require owner confirmation, trusted documentation, or multiple independent corroborations before proposing a business fact as confirmed.
 - Prefer stable project architecture, hidden cross-module constraints, business semantics, and verified procedures not already covered by `AGENTS.md`.
 - Do not create a code graph or copy `AGENTS.md`.
+- Do not count repeated messages from one actor/session as independent corroboration.
 
-4. Ask `memory-writer` to structure only supported conclusions. Include:
+6. For semantic review beyond deterministic proposals, ask `memory-writer` to structure only supported conclusions. Include:
 
 ```json
 {
@@ -42,22 +74,50 @@ agent-knowledge catalog --no-write
 }
 ```
 
-5. Write accepted candidates only to inbox:
+7. Write manually structured candidates only to inbox:
 
 ```bash
 agent-knowledge write-candidate --input candidate.json
 ```
 
-6. Report candidate IDs, rejected signals, duplicate/consolidation suggestions, and whether human review is required.
+8. Accept or reject machine proposals explicitly:
 
-Use `agent-knowledge maintenance run` to extract observations from detailed Subagent logs and generate deterministic duplicate, consolidation, update, conflict, and Skill proposals under `.memory/proposals/`. `--input` is only for advanced external observation imports. Proposals are review artifacts and never activate knowledge or install Skills.
+```bash
+agent-knowledge maintenance accept "$PROPOSAL_ID"
+agent-knowledge maintenance reject "$PROPOSAL_ID" --reason "..."
+```
 
-Review with `maintenance list/show`. Accept knowledge proposals into `_inbox`; accept Skill proposals without a target into `_inbox-skills`. Only install a Skill when the user explicitly requests `--skill-target project|user`.
+Knowledge proposal acceptance creates an `_inbox` candidate. After the user reviews the returned `candidatePath`, approve only its exact knowledge ID:
+
+```bash
+agent-knowledge list
+agent-knowledge organize-inbox --approve "$MEMORY_ID"
+agent-knowledge organize-inbox --approve "$MEMORY_ID" --apply
+```
+
+Never automate `--approve`.
+
+9. Handle Skill proposals in two stages:
+
+```bash
+# Stage a reviewed draft under knowledge/_inbox-skills
+agent-knowledge maintenance accept "$PROPOSAL_ID"
+
+# Only after reviewing SKILL.md
+agent-knowledge maintenance install-skill "$PROPOSAL_ID" \
+  --skill-target project \
+  --project-root /path/to/project
+```
+
+Use `--skill-target user` for a user Skill. Only accepted Skill proposals can be installed, and existing files are never overwritten. One-step `maintenance accept --skill-target ...` exists for advanced use but is not the recommended workflow.
+
+10. Report proposal IDs, candidate/Skill paths, rejected signals, and the exact human review still required. If active knowledge changed and the user uses semantic or graph retrieval, recommend rebuilding `embed-index` and `graph build`.
 
 ## Safety
 
-- Never recover or infer raw prompts from hashes or lengths.
+- Never recover or infer raw prompts from staging hashes or lengths. Raw Subagent payloads may be inspected locally only when the user asks to diagnose Subagent behavior.
 - Never store credentials, private customer text, or full transcripts.
-- Never promote customer or automated-session candidates directly to active.
+- Never promote customer or automated-session candidates without explicit reviewed ID approval.
 - Do not use event count alone as corroboration; repeated messages from one actor/session are one observation.
 - Do not drain staging merely to make pending count zero; drain only when actually reviewing the returned events.
+- Do not automatically accept proposals, approve inbox candidates, or install Skills.
