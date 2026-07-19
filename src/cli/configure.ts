@@ -28,6 +28,21 @@ function withDefault(answer: string, defaultValue: string): string {
   return trimmed.length > 0 ? trimmed : defaultValue;
 }
 
+/** Parses a decimal setting while preserving the current value for an empty answer. */
+function decimalInRange(
+  answer: string,
+  currentValue: number,
+  label: string,
+  minimum: number,
+  maximum: number
+): number {
+  const value = answer.trim().length > 0 ? Number(answer) : currentValue;
+  if (!Number.isFinite(value) || value < minimum || value > maximum) {
+    throw new Error(`${label} must be between ${minimum} and ${maximum}`);
+  }
+  return value;
+}
+
 export async function runConfigurationWizard(options: {
   configPath: string;
   prompter: ConfigurationPrompter;
@@ -200,6 +215,51 @@ export async function runConfigurationWizard(options: {
     ),
     current.embeddings.rerankerModel ?? ""
   );
+  const rerankerCandidateLimit = await promptNumber(
+    prompter,
+    t("Reranker 候选数量 — 只重排融合结果中的前 N 条", "Reranker candidate limit — rerank only the top N fused results"),
+    current.embeddings.rerankerCandidateLimit,
+    1
+  );
+  const rerankerResultLimit = await promptNumber(
+    prompter,
+    t("Reranker 最终结果数量 — 最多向上下文保留 N 条", "Reranker result limit — retain at most N context results"),
+    current.embeddings.rerankerResultLimit,
+    1
+  );
+  const rerankerMinScore = decimalInRange(
+    await promptInput(
+      prompter,
+      t("Reranker 最低分数（0-1）— 低于阈值的候选不注入", "Reranker minimum score (0-1) — lower-scored candidates are excluded"),
+      String(current.embeddings.rerankerMinScore)
+    ),
+    current.embeddings.rerankerMinScore,
+    "rerankerMinScore",
+    0,
+    1
+  );
+  const rerankerBaseWeight = decimalInRange(
+    await promptInput(
+      prompter,
+      t("基础检索分权重（0-1）", "Base retrieval score weight (0-1)"),
+      String(current.embeddings.rerankerBaseWeight)
+    ),
+    current.embeddings.rerankerBaseWeight,
+    "rerankerBaseWeight",
+    0,
+    1
+  );
+  const rerankerModelWeight = decimalInRange(
+    await promptInput(
+      prompter,
+      t("Reranker 模型分权重（0-1）", "Reranker model score weight (0-1)"),
+      String(current.embeddings.rerankerModelWeight)
+    ),
+    current.embeddings.rerankerModelWeight,
+    "rerankerModelWeight",
+    0,
+    1
+  );
 
   const integrationProduct = await promptSelect(
     prompter,
@@ -351,6 +411,42 @@ export async function runConfigurationWizard(options: {
     ],
     current.sync.sensitivityClearance
   );
+  const hookMinScore = decimalInRange(
+    await promptInput(
+      prompter,
+      t("Hook 自动注入最低相关分数（0-1）", "Minimum relevance score for automatic Hook injection (0-1)"),
+      String(current.hooks.minScore)
+    ),
+    current.hooks.minScore,
+    "hooks.minScore",
+    0,
+    1
+  );
+  const hookMaxTokens = await promptNumber(
+    prompter,
+    t("Hook context packet 最大 token 预算", "Maximum token budget for Hook context packets"),
+    current.hooks.maxTokens,
+    1
+  );
+  const hookCatalogMaxItems = await promptNumber(
+    prompter,
+    t("用户明确询问知识目录时的最大菜单条数（1-20）", "Maximum catalog items when the user explicitly asks for a knowledge menu (1-20)"),
+    current.hooks.catalogMaxItems,
+    1
+  );
+  if (hookCatalogMaxItems > 20) {
+    throw new Error(
+      t(
+        "Hook 知识菜单最多允许 20 条",
+        "Hook knowledge menus support at most 20 items"
+      )
+    );
+  }
+  const detailedSubagentLogging = await promptConfirm(
+    prompter,
+    t("记录完整 SubagentStart/Stop 本地调试日志？", "Record full local SubagentStart/Stop debug logs?"),
+    current.hooks.detailedSubagentLogging
+  );
 
   const configured = resolveUserConfig({
     version: 1,
@@ -373,7 +469,12 @@ export async function runConfigurationWizard(options: {
       graphDecay,
       embeddingTopK,
       rerankerProfile: current.embeddings.rerankerProfile,
-      rerankerModel: rerankerModelAnswer.trim() || null
+      rerankerModel: rerankerModelAnswer.trim() || null,
+      rerankerCandidateLimit,
+      rerankerResultLimit,
+      rerankerMinScore,
+      rerankerBaseWeight,
+      rerankerModelWeight
     },
     integration: {
       product: integrationProduct,
@@ -389,6 +490,12 @@ export async function runConfigurationWizard(options: {
       sensitivityClearance: syncSensitivity,
       webdav,
       s3
+    },
+    hooks: {
+      minScore: hookMinScore,
+      maxTokens: hookMaxTokens,
+      catalogMaxItems: hookCatalogMaxItems,
+      detailedSubagentLogging
     }
   });
   writeUserConfig(options.configPath, configured);

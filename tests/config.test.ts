@@ -106,6 +106,11 @@ describe("user configuration", () => {
       "0.7",
       "30",
       "",
+      "40",
+      "10",
+      "0.6",
+      "0.4",
+      "0.6",
       "trae",
       "user",
       "hooks,agents,skills",
@@ -117,7 +122,11 @@ describe("user configuration", () => {
       "BOT_WEBDAV_PASSWORD",
       "15",
       "project,team",
-      "internal"
+      "internal",
+      "0.65",
+      "900",
+      "4",
+      "yes"
     ]);
 
     const configured = await runConfigurationWizard({
@@ -140,7 +149,12 @@ describe("user configuration", () => {
       retrieval: "hybrid",
       graphDepth: 2,
       graphDecay: 0.7,
-      embeddingTopK: 30
+      embeddingTopK: 30,
+      rerankerCandidateLimit: 40,
+      rerankerResultLimit: 10,
+      rerankerMinScore: 0.6,
+      rerankerBaseWeight: 0.4,
+      rerankerModelWeight: 0.6
     });
     expect(configured.integration.mode).toBe("overwrite");
     expect(configured.sync).toMatchObject({
@@ -151,6 +165,12 @@ describe("user configuration", () => {
         username: "support-bot",
         passwordEnv: "BOT_WEBDAV_PASSWORD"
       }
+    });
+    expect(configured.hooks).toEqual({
+      minScore: 0.65,
+      maxTokens: 900,
+      catalogMaxItems: 4,
+      detailedSubagentLogging: true
     });
     expect(raw).toContain("BOT_WEBDAV_PASSWORD");
     expect(raw).not.toContain("actual-password-value");
