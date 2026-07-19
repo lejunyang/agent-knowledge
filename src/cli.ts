@@ -19,6 +19,7 @@ import {
   MemoryQueryRequestSchema,
   appendJsonlLog,
   buildContextPacket,
+  calibrateRetrieval,
   catalogKnowledge,
   captureMaterial,
   createEmbeddingProvider,
@@ -60,6 +61,8 @@ import {
   loadUserConfig,
   writeCandidateMemory,
   type CandidateMemoryInput,
+  type CalibrationCase,
+  type CalibrationFeedback,
   type UserConfig,
   resolveLocale,
   translate,
@@ -424,6 +427,32 @@ program
       ? { cases: (await loadEvalCorpus(options.fixture)).cases }
       : await loadEvalSuite(options.input!);
     console.log(JSON.stringify(await runEvalSuite(root, suite), null, 2));
+  });
+
+program
+  .command("eval-calibrate")
+  .description(t("根据评测候选和反馈生成检索参数建议", "Suggest retrieval parameters from eval candidates and feedback"))
+  .requiredOption("--input <file>", t("Calibration JSON 输入文件", "calibration JSON input file"))
+  .action(async (options: { input: string }) => {
+    const raw = JSON.parse(await readFile(options.input, "utf8")) as {
+      cases: CalibrationCase[];
+      feedback?: CalibrationFeedback[];
+      grid?: {
+        minScores?: number[];
+        baseWeights?: number[];
+        resultLimits?: number[];
+      };
+    };
+    const result = calibrateRetrieval({
+      cases: raw.cases,
+      feedback: raw.feedback ?? [],
+      grid: {
+        minScores: raw.grid?.minScores ?? [0.45, 0.5, 0.55, 0.6, 0.65],
+        baseWeights: raw.grid?.baseWeights ?? [0.2, 0.3, 0.4, 0.5],
+        resultLimits: raw.grid?.resultLimits ?? [5, 8, 10]
+      }
+    });
+    console.log(JSON.stringify(result, null, 2));
   });
 
 program

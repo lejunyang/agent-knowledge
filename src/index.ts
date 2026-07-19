@@ -22,6 +22,7 @@ export * from "./retrieval/feedback.js";
 export * from "./retrieval/embeddings.js";
 export * from "./retrieval/modelCache.js";
 export * from "./retrieval/reranker.js";
+export * from "./retrieval/calibration.js";
 export * from "./memory/governance.js";
 export * from "./memory/inbox.js";
 export * from "./memory/organizer.js";
