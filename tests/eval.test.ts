@@ -76,6 +76,28 @@ describe("runEvalCase", () => {
     expect(result.packetTokens).toBeGreaterThan(0);
   });
 
+  it("evaluates forbidden injection against the token-bounded context packet", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-eval-injection-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    rebuildIndex(root);
+
+    const result = await runEvalCase(root, {
+      task: "审查 Vue SFC lint 迁移方案，需要关注 ESLint fallback",
+      domains: ["frontend/lint"],
+      scenarios: ["lint-migration"],
+      max_tokens: 200,
+      expected_memories: ["k_20260705_frontend_lint_vue_sfc"],
+      forbidden_memories: ["k_20260705_lint_validation_flow"]
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.matchedIds).toContain("k_20260705_lint_validation_flow");
+    expect(result.injectedIds).toEqual(["k_20260705_frontend_lint_vue_sfc"]);
+    expect(result.presentForbidden).toEqual([]);
+    expect(result.falseInjection).toBe(false);
+  });
+
   it("passes abstention cases when no memory is injected", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-eval-abstain-"));
     tempDirs.push(root);

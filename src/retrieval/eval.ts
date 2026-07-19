@@ -33,6 +33,7 @@ export type EvalCase = {
   domains: string[];
   scenarios: string[];
   project_ids?: string[];
+  max_tokens?: number;
   expected_memories: string[];
   expected_ranks?: Record<string, number>;
   relevance_grades?: Record<string, number>;
@@ -50,6 +51,7 @@ export type EvalSuite = {
 export type EvalResult = {
   passed: boolean;
   matchedIds: string[];
+  injectedIds: string[];
   missingExpected: string[];
   presentForbidden: string[];
   rankById: Record<string, number>;
@@ -103,6 +105,7 @@ const EvalCaseSchema = z.object({
   domains: z.array(z.string()).default([]),
   scenarios: z.array(z.string()).default([]),
   project_ids: z.array(z.string().min(1)).default([]),
+  max_tokens: z.number().int().positive().default(4500),
   expected_memories: z.array(z.string()).default([]),
   expected_ranks: z.record(z.number().int().positive()).optional(),
   relevance_grades: z.record(z.number().int().min(0).max(3)).optional(),
@@ -279,7 +282,7 @@ export async function runEvalCase(
     domains: evalCase.domains,
     scenarios: evalCase.scenarios,
     paths: [],
-    maxTokens: 4500,
+    maxTokens: evalCase.max_tokens,
     includeTypes: ["profile", "semantic", "episodic", "procedural"],
     now,
     visibilityScopes: ["private", "project", "team"],
@@ -313,8 +316,19 @@ export async function runEvalCase(
   }
   const packet = buildContextPacket({ request, ranked });
   const matchedIds = ranked.map((item) => item.document.frontmatter.id);
-  const missingExpected = evalCase.expected_memories.filter((id) => !matchedIds.includes(id));
-  const presentForbidden = evalCase.forbidden_memories.filter((id) => matchedIds.includes(id));
+  const injectedIds = [
+    ...packet.always_apply,
+    ...packet.relevant_facts,
+    ...packet.procedures,
+    ...packet.examples
+  ].map((item) => item.id);
+  // Expected/forbidden 评估最终注入结果；matchedIds 和 rankById 继续保留候选排序诊断。
+  const missingExpected = evalCase.expected_memories.filter(
+    (id) => !injectedIds.includes(id)
+  );
+  const presentForbidden = evalCase.forbidden_memories.filter((id) =>
+    injectedIds.includes(id)
+  );
   const rankById = Object.fromEntries(matchedIds.map((id, index) => [id, index + 1]));
   const rankViolations = Object.entries(evalCase.expected_ranks ?? {})
     .map(([id, expectedAtMost]) => ({
@@ -332,7 +346,7 @@ export async function runEvalCase(
       .filter(([, grade]) => grade > 0)
       .map(([id]) => id)
   ]);
-  const abstained = matchedIds.length === 0;
+  const abstained = injectedIds.length === 0;
   const falseInjection = presentForbidden.length > 0 || Boolean(evalCase.abstain && !abstained);
   const expectedAbstentionSatisfied = evalCase.abstain ? abstained : true;
 
@@ -343,6 +357,7 @@ export async function runEvalCase(
       rankViolations.length === 0 &&
       expectedAbstentionSatisfied,
     matchedIds,
+    injectedIds,
     missingExpected,
     presentForbidden,
     rankById,
