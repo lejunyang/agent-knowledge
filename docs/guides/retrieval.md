@@ -58,7 +58,7 @@ agent-knowledge query --task "自然语言问题" --retrieval hybrid --debug
 
 Embedding 缓存包含 model、revision、dtype、dimensions、pooling、prefix 和内容 hash manifest。查询 provider 与缓存不兼容时会明确失败，不会静默混用向量。
 
-`type: source` 用于保存完整原始证据，不属于默认 query `includeTypes`，因此 `embed-index` 不为 source 原文建向量。应由 `knowledge-organizer` 从 source 中拆出精炼 semantic/procedural/episodic/profile 知识承担检索，避免超长原文污染 dense topK。
+`type: source` 用于保存完整原始证据，不属于默认 query `includeTypes`，因此 `index` 和 `embed-index` 都不把 source 原文放入 FTS/向量缓存。应由 `knowledge-organizer` 从 source 中拆出精炼 semantic/procedural/episodic/profile 知识承担检索，避免超长原文污染 lexical/dense topK。
 
 `embedding status` 只检查本地缓存，不联网；`embedding download` 是普通工作流中唯一默认允许显式下载模型的命令：
 

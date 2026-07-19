@@ -97,6 +97,45 @@ describe("rebuildIndex", () => {
     expect(result.indexed).toBe(2);
   });
 
+  it("does not index source-only evidence that normal queries cannot return", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-index-source-"));
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    const sourceDir = path.join(root, "knowledge", "source", "documents");
+    await mkdir(sourceDir, { recursive: true });
+    const source = await readFile(
+      path.join(
+        root,
+        "knowledge",
+        "semantic",
+        "frontend-lint",
+        "2026-07-05-vue-sfc-eslint-fallback.md"
+      ),
+      "utf8"
+    );
+    await writeFile(
+      path.join(sourceDir, "raw-source.md"),
+      source
+        .replace("k_20260705_frontend_lint_vue_sfc", "k_20260719_source_raw")
+        .replace("type: semantic", "type: source")
+        .replace("title: Vue SFC lint 迁移约束", "title: Raw source evidence"),
+      "utf8"
+    );
+
+    const result = rebuildIndex(root);
+    const db = new DatabaseSync(result.dbPath, { readOnly: true });
+    try {
+      expect(result.indexed).toBe(2);
+      expect(
+        db.prepare("SELECT id FROM memories WHERE id = ?").get(
+          "k_20260719_source_raw"
+        )
+      ).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
   it("adds CJK n-grams to the lexical index", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-index-cjk-"));
     tempDirs.push(root);

@@ -4,7 +4,8 @@
  * 重要边界：
  * - Markdown 是事实源，`.memory/index.sqlite` 只是缓存。
  * - 索引可以随时删除并重建。
- * - 只有 `status: active` 的知识进入索引，避免 `_inbox` 候选污染主 agent 注入。
+ * - 只有 `status: active` 且可进入普通 query 的知识类型进入索引。
+ * - `type: source` 保存完整证据，但不进入 FTS，避免长原文污染召回。
  */
 import { mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -214,7 +215,10 @@ export function rebuildIndex(rootDir: string): RebuildIndexResult {
         const absolutePath = resolveWorkspacePath(rootDir, filePath);
         const document = parseKnowledgeMarkdown(filePath, readFileSync(absolutePath, "utf8"));
 
-        if (document.frontmatter.status !== "active") {
+        if (
+          document.frontmatter.status !== "active" ||
+          document.frontmatter.type === "source"
+        ) {
           continue;
         }
 
