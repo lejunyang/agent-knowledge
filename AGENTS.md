@@ -26,8 +26,19 @@
 CLI 的 workspace root 解析优先级：
 
 1. 命令参数 `--root <dir>`。
-2. 环境变量 `AGENT_KNOWLEDGE_ROOT`。
-3. 默认路径 `~/.agent_knowledge`。
+2. 用户配置文件中的 `knowledgeRoot`。
+3. 环境变量 `AGENT_KNOWLEDGE_ROOT`（兼容旧部署）。
+4. 默认路径 `~/.agent_knowledge`。
+
+用户配置默认位于：
+
+```text
+~/.config/agent-knowledge/config.json
+```
+
+`XDG_CONFIG_HOME` 会替换 `~/.config`；`AGENT_KNOWLEDGE_CONFIG` 或全局 `--config <file>` 可指定其他配置文件。其他设置同样遵循“命令行显式参数 > 用户配置 > 兼容环境变量 > 内置默认值”。
+
+配置文件可以保存 root、actor/capture policy、检索与 embedding、integration、同步 provider 和定时间隔，但只能保存凭据所在的环境变量名，禁止写入密码、access key、secret key 或 session token。
 
 知识库固定在：
 
@@ -106,6 +117,7 @@ node dist/cli.js query \
 
 ```text
 src/core/             稳定共享契约：types、Zod schema、路径和日志
+src/cli/              CLI 交互向导和命令辅助模块
 src/storage/          Markdown 事实源、workspace、SQLite 索引和 catalog
 src/retrieval/        CJK 召回、query、scoring、embedding、context packet、eval 和 feedback
 src/memory/           候选治理、inbox 写入和主动整理
@@ -124,6 +136,7 @@ src/cli.ts            命令行入口和各模块编排
 - 提交前检查 `git diff --cached`，确保暂存区只包含当前功能；提交信息使用 `feat:`、`fix:`、`refactor:`、`docs:`、`test:` 或 `chore:` 前缀。
 - 修改代码时优先补充解释“设计意图、兼容性原因、安全边界、失败策略和非显然算法”的注释。不要给直白赋值、简单循环或已经由函数名完整表达的行为添加重复注释。
 - 新增对外 CLI 命令、配置项、同步策略或治理规则时，入口模块应说明优先级、默认值和为什么不能绕过对应边界；复杂模块的文件头注释应说明职责和明确非职责。
+- 用户配置 schema 变化时同步更新 `src/core/config.ts`、配置向导、README、AGENTS 和配置测试；配置不得持久化 secret 值。
 - 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。`related_knowledge` 只有能指向明确已有或同批可生成的知识 ID 时才填写。`project_ids`、`capture_mode`、`actor_type`、`corroboration_count` 用于适用范围和来源治理，旧 Markdown 依赖 schema 默认值保持兼容。
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - active 知识落盘目录必须保留 domain 的层级结构，例如 `bytedance/business/account` 写到 `knowledge/semantic/bytedance/business/account/`，不要压平成 `bytedance-business-account`。

@@ -22,6 +22,7 @@ import {
   catalogKnowledge,
   captureMaterial,
   createEmbeddingProvider,
+  getDefaultUserConfigPath,
   embedKnowledgeIndex,
   loadEvalSuite,
   initKnowledgeWorkspace,
@@ -46,24 +47,54 @@ import {
   installIntegration,
   listIntegrationProducts,
   uninstallIntegration,
+  loadUserConfig,
   writeCandidateMemory,
-  type CandidateMemoryInput
+  type CandidateMemoryInput,
+  type UserConfig
 } from "./index.js";
 import { getDefaultKnowledgeRoot } from "./core/paths.js";
 import { getGitRuntimeContext, type GitRuntimeContext } from "./hooks/gitContext.js";
 import { coarseCatalogForHook, compactCatalogForHook } from "./hooks/hookOutput.js";
+import {
+  runConfigurationWizard,
+  TerminalConfigurationPrompter
+} from "./cli/configure.js";
 
 const program = new Command();
 
-program.name("agent-knowledge").description("Local human-readable memory toolkit for agents").version("0.1.0");
+program
+  .name("agent-knowledge")
+  .description("Local human-readable memory toolkit for agents")
+  .version("0.1.0")
+  .option("--config <file>", "user config file; defaults to ~/.config/agent-knowledge/config.json")
+  .option("--json", "emit machine-readable JSON for commands that support human output", false);
+
+function resolveConfigPath(): string {
+  const option = program.opts<{ config?: string }>().config;
+  return option ? path.resolve(option) : getDefaultUserConfigPath();
+}
+
+function userConfig(): UserConfig {
+  return loadUserConfig(resolveConfigPath());
+}
+
+function hasUserConfigFile(): boolean {
+  return existsSync(resolveConfigPath());
+}
 
 function resolveCliRoot(root?: string): string {
-  return root ?? process.env.AGENT_KNOWLEDGE_ROOT ?? getDefaultKnowledgeRoot();
+  return (
+    root ??
+    (hasUserConfigFile() ? userConfig().knowledgeRoot : undefined) ??
+    process.env.AGENT_KNOWLEDGE_ROOT ??
+    getDefaultKnowledgeRoot()
+  );
 }
 
 function resolveVisibilityScopes(explicit?: string[]): Array<"private" | "project" | "team"> {
   const values =
     explicit ??
+    (hasUserConfigFile() ? userConfig().identity.visibilityScopes : undefined) ??
     process.env.AGENT_KNOWLEDGE_VISIBILITY_SCOPES?.split(",")
       .map((value) => value.trim())
       .filter(Boolean) ??
@@ -78,7 +109,11 @@ function resolveVisibilityScopes(explicit?: string[]): Array<"private" | "projec
 function resolveSensitivityClearance(
   explicit?: string
 ): "public" | "internal" | "confidential" | "secret" {
-  const value = explicit ?? process.env.AGENT_KNOWLEDGE_SENSITIVITY_CLEARANCE ?? "internal";
+  const value =
+    explicit ??
+    (hasUserConfigFile() ? userConfig().identity.sensitivityClearance : undefined) ??
+    process.env.AGENT_KNOWLEDGE_SENSITIVITY_CLEARANCE ??
+    "internal";
   if (value !== "public" && value !== "internal" && value !== "confidential" && value !== "secret") {
     throw new Error("sensitivity clearance must be public, internal, confidential, or secret");
   }
@@ -86,8 +121,11 @@ function resolveSensitivityClearance(
 }
 
 function applyCapturePolicyOverrides(input: CandidateMemoryInput): CandidateMemoryInput {
-  const actorType = process.env.AGENT_KNOWLEDGE_ACTOR_TYPE;
-  const captureMode = process.env.AGENT_KNOWLEDGE_CAPTURE_MODE;
+  const configuredIdentity = hasUserConfigFile() ? userConfig().identity : undefined;
+  const actorType =
+    configuredIdentity?.actorType ?? process.env.AGENT_KNOWLEDGE_ACTOR_TYPE;
+  const captureMode =
+    configuredIdentity?.captureMode ?? process.env.AGENT_KNOWLEDGE_CAPTURE_MODE;
   return {
     ...input,
     ...(actorType === "owner" ||
@@ -135,6 +173,37 @@ async function readHookInput(): Promise<Record<string, unknown>> {
   return JSON.parse(text) as Record<string, unknown>;
 }
 
+program
+  .command("configure")
+  .description("Interactively configure Agent Knowledge defaults")
+  .action(async () => {
+    const configPath = resolveConfigPath();
+    const prompter = new TerminalConfigurationPrompter();
+    try {
+      const configured = await runConfigurationWizard({
+        configPath,
+        prompter,
+        current: loadUserConfig(configPath)
+      });
+      console.log(`Saved Agent Knowledge configuration to ${configPath}`);
+      console.log(
+        `Knowledge root: ${configured.knowledgeRoot}; actor: ${configured.identity.actorType}; sync: ${configured.sync.provider}`
+      );
+    } finally {
+      prompter.close();
+    }
+  });
+
+const configCommand = program.command("config").description("Inspect the active user configuration");
+
+configCommand.command("path").action(() => {
+  console.log(resolveConfigPath());
+});
+
+configCommand.command("show").action(() => {
+  console.log(JSON.stringify(loadUserConfig(resolveConfigPath()), null, 2));
+});
+
 function hookContext(hookEventName: "SessionStart" | "UserPromptSubmit", additionalContext: string): void {
   console.log(
     JSON.stringify(
@@ -175,28 +244,30 @@ program
   .command("embed-index")
   .description("Build .memory/embeddings/index.jsonl from active Markdown knowledge")
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--provider <provider>", "transformers or local", "transformers")
+  .option("--provider <provider>", "transformers or local; defaults to user config")
   .option("--profile <profile>", "embedding profile: multilingual-e5-small or bge-small-zh-v1.5")
   .option("--model <model>", "Transformers.js model id or local model path")
   .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
   .action(async (options: {
     root?: string;
-    provider: string;
+    provider?: string;
     profile?: string;
     model?: string;
     allowRemoteModels: boolean;
   }) => {
-    if (options.provider !== "transformers" && options.provider !== "local") {
+    const configuredEmbeddings = userConfig().embeddings;
+    const providerName = options.provider ?? configuredEmbeddings.provider;
+    if (providerName !== "transformers" && providerName !== "local") {
       throw new Error("--provider must be transformers or local");
     }
     const provider = createEmbeddingProvider({
-      provider: options.provider,
+      provider: providerName,
       profile:
         options.profile === "multilingual-e5-small" || options.profile === "bge-small-zh-v1.5"
           ? options.profile
-          : undefined,
-      model: options.model,
-      allowRemoteModels: options.allowRemoteModels
+          : configuredEmbeddings.profile,
+      model: options.model ?? configuredEmbeddings.model ?? undefined,
+      allowRemoteModels: options.allowRemoteModels || configuredEmbeddings.allowRemoteModels
     });
     const result = await embedKnowledgeIndex(resolveCliRoot(options.root), { provider });
     console.log(JSON.stringify(result, null, 2));
@@ -218,7 +289,7 @@ program
   .command("suggest-aliases")
   .description("Dry-run alias suggestions using embeddings, logs, and Markdown docs")
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
-  .option("--provider <provider>", "transformers or local", "local")
+  .option("--provider <provider>", "transformers or local; defaults to user config")
   .option("--model <model>", "Transformers.js model id or local model path")
   .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
   .option("--max <count>", "max suggestions per memory", "5")
@@ -226,19 +297,22 @@ program
   .action(
     async (options: {
       root?: string;
-      provider: string;
+      provider?: string;
       model?: string;
       allowRemoteModels: boolean;
       max: string;
       minScore: string;
     }) => {
-      if (options.provider !== "transformers" && options.provider !== "local") {
+      const configuredEmbeddings = userConfig().embeddings;
+      const providerName = options.provider ?? configuredEmbeddings.provider;
+      if (providerName !== "transformers" && providerName !== "local") {
         throw new Error("--provider must be transformers or local");
       }
       const provider = createEmbeddingProvider({
-        provider: options.provider,
-        model: options.model,
-        allowRemoteModels: options.allowRemoteModels
+        provider: providerName,
+        profile: configuredEmbeddings.profile,
+        model: options.model ?? configuredEmbeddings.model ?? undefined,
+        allowRemoteModels: options.allowRemoteModels || configuredEmbeddings.allowRemoteModels
       });
       const result = await suggestAliases(resolveCliRoot(options.root), {
         provider,
@@ -260,11 +334,11 @@ program
   .option("--project-id <id...>", "allowed project IDs")
   .option("--agent-role <role>", "agent role", "main")
   .option("--debug", "include retrieval debug details in JSON output", false)
-  .option("--retrieval <mode>", "lexical or hybrid", "lexical")
-  .option("--provider <provider>", "embedding provider for hybrid retrieval: transformers or local", "transformers")
+  .option("--retrieval <mode>", "lexical or hybrid; defaults to user config")
+  .option("--provider <provider>", "embedding provider for hybrid retrieval: transformers or local")
   .option("--profile <profile>", "embedding profile: multilingual-e5-small or bge-small-zh-v1.5")
   .option("--model <model>", "Transformers.js model id or local model path for hybrid retrieval")
-  .option("--embedding-top-k <count>", "embedding topK for hybrid retrieval", "20")
+  .option("--embedding-top-k <count>", "embedding topK for hybrid retrieval; defaults to user config")
   .option("--allow-remote-models", "allow Transformers.js to download model files; disabled by default", false)
   .action(async (options: {
     task: string;
@@ -276,15 +350,21 @@ program
     projectId?: string[];
     agentRole: string;
     debug: boolean;
-    retrieval: string;
-    provider: string;
+    retrieval?: string;
+    provider?: string;
     profile?: string;
     model?: string;
-    embeddingTopK: string;
+    embeddingTopK?: string;
     allowRemoteModels: boolean;
   }) => {
-    if (options.retrieval !== "lexical" && options.retrieval !== "hybrid") {
+    const configuredEmbeddings = userConfig().embeddings;
+    const retrievalMode = options.retrieval ?? configuredEmbeddings.retrieval;
+    if (retrievalMode !== "lexical" && retrievalMode !== "hybrid") {
       throw new Error("--retrieval must be lexical or hybrid");
+    }
+    const providerName = options.provider ?? configuredEmbeddings.provider;
+    if (providerName !== "transformers" && providerName !== "local") {
+      throw new Error("--provider must be transformers or local");
     }
     const visibilityScopes = resolveVisibilityScopes(options.visibility);
     const sensitivityClearance = resolveSensitivityClearance(options.sensitivityClearance);
@@ -299,18 +379,20 @@ program
     });
     const root = resolveCliRoot(options.root);
     const { ranked, debug } =
-      options.retrieval === "hybrid"
+      retrievalMode === "hybrid"
         ? await queryMemoriesHybridWithDebug(root, request, {
             embeddingProvider: createEmbeddingProvider({
-              provider: options.provider === "local" ? "local" : "transformers",
+              provider: providerName,
               profile:
                 options.profile === "multilingual-e5-small" || options.profile === "bge-small-zh-v1.5"
                   ? options.profile
-                  : undefined,
-              model: options.model,
-              allowRemoteModels: options.allowRemoteModels
+                  : configuredEmbeddings.profile,
+              model: options.model ?? configuredEmbeddings.model ?? undefined,
+              allowRemoteModels: options.allowRemoteModels || configuredEmbeddings.allowRemoteModels
             }),
-            embeddingTopK: Number.parseInt(options.embeddingTopK, 10)
+            embeddingTopK: options.embeddingTopK
+              ? Number.parseInt(options.embeddingTopK, 10)
+              : configuredEmbeddings.embeddingTopK
           })
         : queryMemoriesWithDebug(root, request);
     const packet = buildContextPacket({ request, ranked });
