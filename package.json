@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:comments": "node scripts/check-comments.mjs",
+    "build:lark-sources": "node scripts/build-lark-source-candidates.mjs",
     "export:lark": "node scripts/fetch-lark-corpus.mjs",
     "test:comments": "node --test tests/commentAudit.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
