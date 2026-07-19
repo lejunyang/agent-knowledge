@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coarseCatalogForHook, compactCatalogForHook } from "../src/hooks/hookOutput.js";
+import { hookContextJson } from "../src/hooks/hookOutput.js";
 import type { KnowledgeCatalog } from "../src/storage/catalog.js";
 
 function makeCatalog(): KnowledgeCatalog {
@@ -39,32 +39,17 @@ function makeCatalog(): KnowledgeCatalog {
   };
 }
 
-describe("hook catalog output", () => {
-  it("keeps no-hit hook context coarse", () => {
-    const output = coarseCatalogForHook(makeCatalog());
-
-    expect(output).toEqual({
-      total: 1,
-      byStatus: { active: 1 },
-      byType: { semantic: 1 },
-      domains: ["bytedance/business/glossary"],
-      scenarios: ["terminology"]
-    });
-    expect(output).not.toHaveProperty("aliases");
-    expect(output).not.toHaveProperty("items");
+describe("hook output", () => {
+  it("returns no stdout payload when additional context is empty", () => {
+    expect(hookContextJson("UserPromptSubmit", "")).toBeNull();
   });
 
-  it("keeps detailed catalog available when context is injected", () => {
-    const output = compactCatalogForHook(makeCatalog());
-
-    expect(output).toMatchObject({
-      aliases: ["aweme"],
-      items: [
-        {
-          id: "k_20260705_bytedance_business_glossary_aweme",
-          aliases: ["aweme", "抖音"]
-        }
-      ]
+  it("wraps non-empty additional context in the hook protocol", () => {
+    expect(hookContextJson("UserPromptSubmit", "relevant context")).toEqual({
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext: "relevant context"
+      }
     });
   });
 });

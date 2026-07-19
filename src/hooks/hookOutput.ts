@@ -1,5 +1,20 @@
 import type { KnowledgeCatalog } from "../storage/catalog.js";
 
+export function hookContextJson(
+  hookEventName: "SessionStart" | "UserPromptSubmit",
+  additionalContext: string
+): Record<string, unknown> | null {
+  if (additionalContext.length === 0) {
+    return null;
+  }
+  return {
+    hookSpecificOutput: {
+      hookEventName,
+      additionalContext
+    }
+  };
+}
+
 export function coarseCatalogForHook(catalog: KnowledgeCatalog): Record<string, unknown> {
   return {
     total: catalog.total,

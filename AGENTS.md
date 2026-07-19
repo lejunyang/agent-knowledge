@@ -155,6 +155,7 @@ src/cli.ts            命令行入口和各模块编排
   - Hook 行为、事件、命令或注入上下文变化时，检查 `templates/trae/hooks.json` 和 `templates/trae/README.md`。
   - Subagent 输入、输出、frontmatter、工具权限或候选 JSON 字段变化时，检查 `templates/trae/agents/memory-writer.md`。
   - 模板必须遵循 TRAE 官方 Subagent Markdown + YAML frontmatter 格式和 Hook `version: 1` JSON 配置格式。
+- `UserPromptSubmit` 无命中、低于阈值或异常时默认静默；普通命中只能注入最小 `context_packet`。禁止恢复全量 catalog、runtime context 或无命中说明。知识目录仅在显式 catalog intent 下返回相关 top 5。
 - 修改产品安装时同时 review `templates/claude-code/`、`templates/trae/plugin/` 和 integration merge/uninstall 测试。
 - `trae` 项目/用户资源根是 `.trae`，必须同时管理 `.trae/hooks.json` 和 `.trae/cli/hooks.json`；`trae-cn` 使用 `.trae-cn/hooks.json`；Claude Code 使用 `.claude/settings.json`。
 - Integration 默认使用 `merge`，只替换 Agent Knowledge 自有 Hook 并保留外部配置；只有显式 `overwrite` 时才允许删除目标文件、目录或 symlink 后写入模板。overwrite 不能删除 symlink 指向的外部源文件。

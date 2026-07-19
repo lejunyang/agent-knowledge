@@ -23,6 +23,7 @@ import {
   captureMaterial,
   createEmbeddingProvider,
   createConfiguredSyncBackend,
+  decideHookInjection,
   getDefaultUserConfigPath,
   embedKnowledgeIndex,
   loadEvalSuite,
@@ -59,7 +60,7 @@ import {
 } from "./index.js";
 import { getDefaultKnowledgeRoot } from "./core/paths.js";
 import { getGitRuntimeContext, type GitRuntimeContext } from "./hooks/gitContext.js";
-import { coarseCatalogForHook, compactCatalogForHook } from "./hooks/hookOutput.js";
+import { hookContextJson } from "./hooks/hookOutput.js";
 import {
   runConfigurationWizard,
   TerminalConfigurationPrompter
@@ -242,18 +243,10 @@ configCommand.command("show").action(() => {
 });
 
 function hookContext(hookEventName: "SessionStart" | "UserPromptSubmit", additionalContext: string): void {
-  console.log(
-    JSON.stringify(
-      {
-        hookSpecificOutput: {
-          hookEventName,
-          additionalContext
-        }
-      },
-      null,
-      2
-    )
-  );
+  const output = hookContextJson(hookEventName, additionalContext);
+  if (output) {
+    console.log(JSON.stringify(output));
+  }
 }
 
 function formatRuntimeContext(context: GitRuntimeContext): string {
@@ -1029,6 +1022,7 @@ hook
   .description("Query Agent Knowledge for the submitted prompt and return additional context")
   .option("--root <dir>", "workspace root; defaults to AGENT_KNOWLEDGE_ROOT or ~/.agent_knowledge")
   .action(async (options: { root?: string }) => {
+    const startedAt = performance.now();
     const root = resolveCliRoot(options.root);
     const runtimeContext = getGitRuntimeContext();
     const detectedProject = runtimeContext.isGit
@@ -1037,7 +1031,12 @@ hook
     const input = await readHookInput();
     const prompt = typeof input.prompt === "string" ? input.prompt : "";
     if (prompt.trim().length === 0) {
-      hookContext("UserPromptSubmit", "Agent Knowledge 未收到用户 prompt，跳过知识检索。");
+      appendJsonlLog(root, {
+        event: "hook.user_prompt_submit",
+        decision: "none",
+        promptLength: 0,
+        latencyMs: performance.now() - startedAt
+      });
       return;
     }
 
@@ -1045,48 +1044,50 @@ hook
       await initKnowledgeWorkspace(root);
       rebuildIndex(root);
       const catalog = await catalogKnowledge(root, { write: false });
+      const hookConfig = userConfig().hooks;
       const request = MemoryQueryRequestSchema.parse({
         task: prompt,
         agentRole: "main",
+        maxTokens: hookConfig.maxTokens,
         visibilityScopes: resolveVisibilityScopes(),
         sensitivityClearance: resolveSensitivityClearance(),
         projectIds: detectedProject ? [detectedProject.id] : []
       });
       const { ranked, debug } = queryMemoriesWithDebug(root, request);
       const packet = buildContextPacket({ request, ranked });
-      const hasContext =
-        packet.always_apply.length +
-          packet.relevant_facts.length +
-          packet.procedures.length +
-          packet.examples.length +
-          packet.warnings.length >
-        0;
+      const injection = decideHookInjection({
+        prompt,
+        ranked,
+        packet,
+        minScore: hookConfig.minScore,
+        catalog,
+        catalogMaxItems: hookConfig.catalogMaxItems
+      });
 
       appendJsonlLog(root, {
         event: "hook.user_prompt_submit",
+        decision: injection.decision,
         promptLength: prompt.length,
-        catalogTotal: catalog.total,
-        resultIds: debug.resultIds,
+        resultIds: injection.resultIds,
+        topScore: injection.score,
+        packetTokens: injection.packetTokens,
         fallbackUsed: debug.fallbackUsed,
         fallbackSuppressedReason: debug.fallbackSuppressedReason,
         runtimeContext,
-        projectId: detectedProject?.id
+        projectId: detectedProject?.id,
+        latencyMs: performance.now() - startedAt
       });
 
-      hookContext(
-        "UserPromptSubmit",
-        hasContext
-          ? `Hook runtime context:\n\n${formatRuntimeContext(runtimeContext)}\n\nAgent Knowledge catalog:\n\n${JSON.stringify(compactCatalogForHook(catalog), null, 2)}\n\nAgent Knowledge context packet:\n\n${JSON.stringify(packet, null, 2)}`
-          : `Hook runtime context:\n\n${formatRuntimeContext(runtimeContext)}\n\nAgent Knowledge coarse catalog:\n\n${JSON.stringify(coarseCatalogForHook(catalog), null, 2)}\n\nAgent Knowledge 已查询 ${root}，没有命中可注入的 active 知识。仅注入粗粒度 catalog；如任务需要历史知识，可根据 domains/scenarios 调用 memory-reader 精查。`
-      );
+      hookContext("UserPromptSubmit", injection.additionalContext);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       appendJsonlLog(root, {
         event: "hook.user_prompt_submit.error",
+        decision: "error",
         promptLength: prompt.length,
-        message
+        message,
+        latencyMs: performance.now() - startedAt
       });
-      hookContext("UserPromptSubmit", `Agent Knowledge 检索失败，主流程可继续。错误：${message}`);
     }
   });
 

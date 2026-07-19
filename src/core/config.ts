@@ -80,6 +80,14 @@ const SyncConfigSchema = z
   })
   .default({});
 
+const HookConfigSchema = z
+  .object({
+    minScore: z.number().min(0).max(1).default(0.55),
+    maxTokens: z.number().int().positive().default(1200),
+    catalogMaxItems: z.number().int().positive().max(20).default(5)
+  })
+  .default({});
+
 export const UserConfigSchema = z.object({
   version: z.literal(1).default(1),
   locale: z.enum(["auto", "zh-CN", "en"]).default("auto"),
@@ -87,7 +95,8 @@ export const UserConfigSchema = z.object({
   identity: IdentityConfigSchema,
   embeddings: EmbeddingsConfigSchema,
   integration: IntegrationConfigSchema,
-  sync: SyncConfigSchema
+  sync: SyncConfigSchema,
+  hooks: HookConfigSchema
 });
 
 export type UserConfig = z.output<typeof UserConfigSchema>;

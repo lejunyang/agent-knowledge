@@ -32,3 +32,4 @@ export * from "./sync/s3.js";
 export * from "./sync/configured.js";
 export * from "./sync/scheduler.js";
 export * from "./hooks/staging.js";
+export * from "./hooks/relevance.js";
