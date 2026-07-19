@@ -9,9 +9,13 @@
  * 评测复用真实 query/context packet pipeline，既看召回质量，也记录注入成本和延迟。
  */
 import { performance } from "node:perf_hooks";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import yaml from "js-yaml";
 import { z } from "zod";
+import { KnowledgeDocumentSchema } from "../core/schema.js";
+import { serializeKnowledgeMarkdown } from "../storage/markdown.js";
+import { resolveWorkspacePath } from "../core/paths.js";
 import { buildContextPacket, estimateContextPacketTokens } from "./contextPacket.js";
 import { queryMemories } from "./query.js";
 
@@ -26,6 +30,7 @@ export type EvalCase = {
   abstain?: boolean;
   language?: string;
   domain?: string;
+  now?: string;
 };
 
 export type EvalSuite = {
@@ -76,12 +81,100 @@ const EvalCaseSchema = z.object({
   forbidden_memories: z.array(z.string()).default([]),
   abstain: z.boolean().default(false),
   language: z.string().min(1).default("unknown"),
-  domain: z.string().min(1).optional()
+  domain: z.string().min(1).optional(),
+  now: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
 });
 
 const EvalSuiteSchema = z.object({
   cases: z.array(EvalCaseSchema).min(1)
 });
+
+const EvalFixtureDocumentSchema = z.object({
+  id: z.string().regex(/^k_[a-zA-Z0-9_]+$/),
+  title: z.string().min(1),
+  type: z.enum(["profile", "semantic", "episodic", "procedural"]),
+  domain: z.string().min(1),
+  scenarios: z.array(z.string().min(1)).min(1),
+  aliases: z.array(z.string()).default([]),
+  tags: z.array(z.string()).default([]),
+  body: z.string().min(1),
+  status: z.enum(["active", "deprecated"]).default("active"),
+  valid_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default("2026-01-01"),
+  valid_until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null)
+});
+
+const EvalCorpusSchema = z.object({
+  documents: z.array(EvalFixtureDocumentSchema).min(1),
+  cases: z.array(EvalCaseSchema).min(1)
+});
+
+export type EvalCorpus = z.output<typeof EvalCorpusSchema>;
+
+function normalizeYamlDates(value: unknown): unknown {
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+  if (Array.isArray(value)) {
+    return value.map(normalizeYamlDates);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizeYamlDates(item)])
+    );
+  }
+  return value;
+}
+
+export async function loadEvalCorpus(filePath: string): Promise<EvalCorpus> {
+  return EvalCorpusSchema.parse(
+    normalizeYamlDates(yaml.load(await readFile(filePath, "utf8")))
+  );
+}
+
+export async function materializeEvalCorpus(rootDir: string, corpus: EvalCorpus): Promise<void> {
+  for (const item of corpus.documents) {
+    const relativePath = path.posix.join(
+      "knowledge",
+      item.type,
+      ...item.domain.split("/"),
+      `${item.id}.md`
+    );
+    const absolutePath = resolveWorkspacePath(rootDir, relativePath);
+    await mkdir(path.dirname(absolutePath), { recursive: true });
+    const document = KnowledgeDocumentSchema.parse({
+      filePath: relativePath,
+      frontmatter: {
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        aliases: item.aliases,
+        domain: item.domain,
+        related_domains: [],
+        scenario: item.scenarios,
+        tags: item.tags,
+        status: item.status,
+        confidence: 0.9,
+        source_authority: "documented",
+        source: ["eval:retrieval-complete"],
+        related_knowledge: [],
+        supersedes: [],
+        conflicts_with: [],
+        visibility: "project",
+        sensitivity: "internal",
+        project_ids: [],
+        capture_mode: "direct_material",
+        actor_type: "owner",
+        corroboration_count: 1,
+        created_at: item.valid_from,
+        updated_at: item.valid_from,
+        valid_from: item.valid_from,
+        valid_until: item.valid_until
+      },
+      body: `# ${item.title}\n\n${item.body}\n`
+    });
+    await writeFile(absolutePath, serializeKnowledgeMarkdown(document), "utf8");
+  }
+}
 
 /**
  * 从 YAML 读取单个评估用例。
@@ -138,6 +231,7 @@ function normalizedDiscountedCumulativeGain(matchedIds: string[], grades: Record
 export async function runEvalCase(rootDir: string, rawEvalCase: EvalCase): Promise<EvalResult> {
   const evalCase = EvalCaseSchema.parse(rawEvalCase);
   const startedAt = performance.now();
+  const now = evalCase.now ?? new Date().toISOString().slice(0, 10);
   const ranked = queryMemories(rootDir, {
     task: evalCase.task,
     agentRole: "main",
@@ -145,7 +239,8 @@ export async function runEvalCase(rootDir: string, rawEvalCase: EvalCase): Promi
     scenarios: evalCase.scenarios,
     paths: [],
     maxTokens: 4500,
-    includeTypes: ["profile", "semantic", "episodic", "procedural"]
+    includeTypes: ["profile", "semantic", "episodic", "procedural"],
+    now
   });
   const packet = buildContextPacket({
     request: {
@@ -156,7 +251,7 @@ export async function runEvalCase(rootDir: string, rawEvalCase: EvalCase): Promi
       paths: [],
       maxTokens: 4500,
       includeTypes: ["profile", "semantic", "episodic", "procedural"],
-      now: new Date().toISOString().slice(0, 10),
+      now,
       visibilityScopes: ["private", "project", "team"],
       sensitivityClearance: "internal",
       projectIds: []

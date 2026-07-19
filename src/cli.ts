@@ -29,6 +29,8 @@ import {
   getRetrievalModelStatus,
   embedKnowledgeIndex,
   loadEvalSuite,
+  loadEvalCorpus,
+  materializeEvalCorpus,
   initKnowledgeWorkspace,
   listKnowledge,
   logMemoryFeedback,
@@ -390,12 +392,21 @@ program
 program
   .command("eval")
   .description(t("运行 YAML 检索评测集", "Run a retrieval eval suite from YAML"))
-  .requiredOption("--input <file>", t("包含单个 case 或 cases 数组的评测 YAML", "eval YAML containing one case or a cases array"))
+  .option("--input <file>", t("包含单个 case 或 cases 数组的评测 YAML", "eval YAML containing one case or a cases array"))
+  .option("--fixture <file>", t("可选：包含文档和 cases 的完整评测 corpus YAML", "optional corpus YAML containing documents and cases"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
-  .action(async (options: { input: string; root?: string }) => {
+  .action(async (options: { input?: string; fixture?: string; root?: string }) => {
+    if (!options.input && !options.fixture) {
+      throw new Error(t("必须提供 --input 或 --fixture", "Provide --input or --fixture"));
+    }
     const root = resolveCliRoot(options.root);
+    if (options.fixture) {
+      await materializeEvalCorpus(root, await loadEvalCorpus(options.fixture));
+    }
     rebuildIndex(root);
-    const suite = await loadEvalSuite(options.input);
+    const suite = options.fixture
+      ? { cases: (await loadEvalCorpus(options.fixture)).cases }
+      : await loadEvalSuite(options.input!);
     console.log(JSON.stringify(await runEvalSuite(root, suite), null, 2));
   });
 

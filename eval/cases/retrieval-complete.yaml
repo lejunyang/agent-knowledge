@@ -1,0 +1,334 @@
+documents:
+  - id: k_eval_vue_lint
+    title: Vue SFC lint fallback
+    type: semantic
+    domain: frontend/vue-lint
+    scenarios: [lint-migration]
+    aliases: [vue-lint, sfc fallback]
+    tags: [vue, eslint, oxlint]
+    body: Oxlint checks JavaScript and TypeScript, while Vue SFC template rules still require an ESLint fallback.
+
+  - id: k_eval_react_lint
+    title: React lint fast path
+    type: semantic
+    domain: frontend/react-lint
+    scenarios: [lint-migration]
+    aliases: [react-lint]
+    tags: [react, eslint, oxlint]
+    body: React TSX can use the Oxlint fast path without the Vue template fallback.
+
+  - id: k_eval_mysql_migration
+    title: MySQL online schema migration
+    type: procedural
+    domain: data/mysql-migration
+    scenarios: [schema-migration]
+    aliases: [online ddl, mysql ddl]
+    tags: [mysql, database]
+    body: Large MySQL tables require an online DDL plan, replica lag monitoring, and a rollback checkpoint.
+
+  - id: k_eval_redis_migration
+    title: Redis key migration
+    type: procedural
+    domain: data/redis-migration
+    scenarios: [schema-migration]
+    aliases: [redis migration]
+    tags: [redis, cache]
+    body: Redis migration uses dual read and dual write before switching key prefixes.
+
+  - id: k_eval_refund_approval
+    title: Refund approval boundary
+    type: semantic
+    domain: support/refund-approval
+    scenarios: [customer-support]
+    aliases: [refund review]
+    tags: [refund, approval]
+    body: High-value refunds require an authorized reviewer and cannot be approved from a customer statement alone.
+
+  - id: k_eval_refund_status
+    title: Refund status explanation
+    type: semantic
+    domain: support/refund-status
+    scenarios: [customer-support]
+    aliases: [refund progress]
+    tags: [refund, status]
+    body: Refund status answers explain processing, completed, or rejected states without changing approval rules.
+
+  - id: k_eval_oauth_rotation
+    title: OAuth client secret rotation
+    type: procedural
+    domain: security/oauth-rotation
+    scenarios: [credential-rotation]
+    aliases: [oauth rotation]
+    tags: [oauth, credential]
+    body: Rotate an OAuth client secret with overlap, verify the new credential, then revoke the old credential.
+
+  - id: k_eval_oauth_login
+    title: OAuth login troubleshooting
+    type: procedural
+    domain: security/oauth-login
+    scenarios: [credential-rotation]
+    aliases: [oauth login]
+    tags: [oauth, login]
+    body: OAuth login troubleshooting checks redirect URI and consent scopes; it does not rotate client secrets.
+
+  - id: k_eval_webdav_conflict
+    title: WebDAV three-way conflict
+    type: semantic
+    domain: sync/webdav-conflict
+    scenarios: [knowledge-sync]
+    aliases: [webdav conflict]
+    tags: [webdav, conflict]
+    body: Concurrent local and WebDAV edits produce a conflict artifact instead of last-write-wins replacement.
+
+  - id: k_eval_s3_path_style
+    title: S3-compatible path style
+    type: semantic
+    domain: sync/s3-path-style
+    scenarios: [knowledge-sync]
+    aliases: [minio path style]
+    tags: [s3, minio]
+    body: MinIO and some S3-compatible endpoints require force-path-style bucket addressing.
+
+  - id: k_eval_git_identity
+    title: Git project identity
+    type: semantic
+    domain: project/git-identity
+    scenarios: [project-detection]
+    aliases: [project id]
+    tags: [git, remote]
+    body: Project identity prefers a normalized Git remote and falls back to the canonical Git root path.
+
+  - id: k_eval_agents_inventory
+    title: AGENTS inventory fingerprint
+    type: semantic
+    domain: project/agents-inventory
+    scenarios: [project-detection]
+    aliases: [agents hash]
+    tags: [agents, hash]
+    body: The project registry records AGENTS file paths and hashes without copying instruction contents.
+
+  - id: k_eval_hook_relevance
+    title: Quiet hook relevance gate
+    type: procedural
+    domain: agent/hook-relevance
+    scenarios: [hook-injection]
+    aliases: [quiet hook]
+    tags: [hook, context]
+    body: UserPromptSubmit stays silent for no hit or weak hit and injects only a minimal context packet for reliable matches.
+
+  - id: k_eval_hook_lifecycle
+    title: Hook lifecycle staging
+    type: procedural
+    domain: agent/hook-lifecycle
+    scenarios: [hook-injection]
+    aliases: [hook staging]
+    tags: [hook, staging]
+    body: SubagentStart, SubagentStop, Stop, and SessionEnd append redacted lifecycle staging events.
+
+  - id: k_eval_embedding_cache
+    title: Embedding cache compatibility
+    type: semantic
+    domain: retrieval/embedding-cache
+    scenarios: [hybrid-retrieval]
+    aliases: [embedding manifest]
+    tags: [embedding, cache]
+    body: Query verifies model, dimensions, pooling, prefix, and normalization against the embedding manifest.
+
+  - id: k_eval_rerank_threshold
+    title: Rerank injection threshold
+    type: semantic
+    domain: retrieval/rerank-threshold
+    scenarios: [hybrid-retrieval]
+    aliases: [injection threshold]
+    tags: [rerank, threshold]
+    body: A rerank threshold suppresses weak candidates before the final top results are injected.
+
+  - id: k_eval_temporal_current
+    title: Current account review policy
+    type: semantic
+    domain: business/account-review
+    scenarios: [temporal-update]
+    aliases: [current review policy]
+    tags: [account, review]
+    body: Since July 2026, account changes require one authorized review.
+    valid_from: 2026-07-01
+
+  - id: k_eval_temporal_old
+    title: Deprecated account review policy
+    type: semantic
+    domain: business/account-review-legacy
+    scenarios: [temporal-update]
+    aliases: [old review policy]
+    tags: [account, review]
+    body: Before July 2026, account changes required two reviews.
+    status: deprecated
+    valid_from: 2026-01-01
+    valid_until: 2026-06-30
+
+cases:
+  - task: Vue 单文件组件迁移到 Oxlint 后 template 规则怎么办
+    domains: [frontend/vue-lint]
+    scenarios: [lint-migration]
+    expected_memories: [k_eval_vue_lint]
+    expected_ranks: { k_eval_vue_lint: 1 }
+    forbidden_memories: [k_eval_react_lint]
+    language: zh-CN
+
+  - task: React TSX lint migration fast path
+    domains: [frontend/react-lint]
+    scenarios: [lint-migration]
+    expected_memories: [k_eval_react_lint]
+    expected_ranks: { k_eval_react_lint: 1 }
+    forbidden_memories: [k_eval_vue_lint]
+    language: en
+
+  - task: 大表 MySQL 如何在线修改 schema 并准备回滚
+    domains: [data/mysql-migration]
+    scenarios: [schema-migration]
+    expected_memories: [k_eval_mysql_migration]
+    expected_ranks: { k_eval_mysql_migration: 1 }
+    forbidden_memories: [k_eval_redis_migration]
+    language: zh-CN
+
+  - task: Redis key prefix migration with dual write
+    domains: [data/redis-migration]
+    scenarios: [schema-migration]
+    expected_memories: [k_eval_redis_migration]
+    expected_ranks: { k_eval_redis_migration: 1 }
+    forbidden_memories: [k_eval_mysql_migration]
+    language: en
+
+  - task: 高金额退款能否根据客户一句话直接通过
+    domains: [support/refund-approval]
+    scenarios: [customer-support]
+    expected_memories: [k_eval_refund_approval]
+    expected_ranks: { k_eval_refund_approval: 1 }
+    forbidden_memories: [k_eval_refund_status]
+    language: zh-CN
+
+  - task: explain the current refund processing status
+    domains: [support/refund-status]
+    scenarios: [customer-support]
+    expected_memories: [k_eval_refund_status]
+    expected_ranks: { k_eval_refund_status: 1 }
+    forbidden_memories: [k_eval_refund_approval]
+    language: en
+
+  - task: OAuth client secret 如何无中断轮换
+    domains: [security/oauth-rotation]
+    scenarios: [credential-rotation]
+    expected_memories: [k_eval_oauth_rotation]
+    expected_ranks: { k_eval_oauth_rotation: 1 }
+    forbidden_memories: [k_eval_oauth_login]
+    language: zh-CN
+
+  - task: OAuth redirect URI login failure troubleshooting
+    domains: [security/oauth-login]
+    scenarios: [credential-rotation]
+    expected_memories: [k_eval_oauth_login]
+    expected_ranks: { k_eval_oauth_login: 1 }
+    forbidden_memories: [k_eval_oauth_rotation]
+    language: en
+
+  - task: 本地和 WebDAV 同时修改知识时如何处理
+    domains: [sync/webdav-conflict]
+    scenarios: [knowledge-sync]
+    expected_memories: [k_eval_webdav_conflict]
+    expected_ranks: { k_eval_webdav_conflict: 1 }
+    forbidden_memories: [k_eval_s3_path_style]
+    language: zh-CN
+
+  - task: MinIO bucket addressing requires path style
+    domains: [sync/s3-path-style]
+    scenarios: [knowledge-sync]
+    expected_memories: [k_eval_s3_path_style]
+    expected_ranks: { k_eval_s3_path_style: 1 }
+    forbidden_memories: [k_eval_webdav_conflict]
+    language: en
+
+  - task: 如何根据 Git remote 生成稳定项目 ID
+    domains: [project/git-identity]
+    scenarios: [project-detection]
+    expected_memories: [k_eval_git_identity]
+    expected_ranks: { k_eval_git_identity: 1 }
+    forbidden_memories: [k_eval_agents_inventory]
+    language: zh-CN
+
+  - task: record AGENTS files without copying instruction text
+    domains: [project/agents-inventory]
+    scenarios: [project-detection]
+    expected_memories: [k_eval_agents_inventory]
+    expected_ranks: { k_eval_agents_inventory: 1 }
+    forbidden_memories: [k_eval_git_identity]
+    language: en
+
+  - task: UserPromptSubmit 没有可靠知识时应该输出什么
+    domains: [agent/hook-relevance]
+    scenarios: [hook-injection]
+    expected_memories: [k_eval_hook_relevance]
+    expected_ranks: { k_eval_hook_relevance: 1 }
+    forbidden_memories: [k_eval_hook_lifecycle]
+    language: zh-CN
+
+  - task: which hook events write redacted staging records
+    domains: [agent/hook-lifecycle]
+    scenarios: [hook-injection]
+    expected_memories: [k_eval_hook_lifecycle]
+    expected_ranks: { k_eval_hook_lifecycle: 1 }
+    forbidden_memories: [k_eval_hook_relevance]
+    language: en
+
+  - task: hybrid query 如何判断 embedding 缓存模型兼容
+    domains: [retrieval/embedding-cache]
+    scenarios: [hybrid-retrieval]
+    expected_memories: [k_eval_embedding_cache]
+    expected_ranks: { k_eval_embedding_cache: 1 }
+    forbidden_memories: [k_eval_rerank_threshold]
+    language: zh-CN
+
+  - task: suppress weak candidates before final injection
+    domains: [retrieval/rerank-threshold]
+    scenarios: [hybrid-retrieval]
+    expected_memories: [k_eval_rerank_threshold]
+    expected_ranks: { k_eval_rerank_threshold: 1 }
+    forbidden_memories: [k_eval_embedding_cache]
+    language: en
+
+  - task: 2026 年 7 月之后账户变更需要几级审核
+    domains: [business/account-review]
+    scenarios: [temporal-update]
+    expected_memories: [k_eval_temporal_current]
+    expected_ranks: { k_eval_temporal_current: 1 }
+    forbidden_memories: [k_eval_temporal_old]
+    language: zh-CN
+    now: 2026-07-19
+
+  - task: what is the current Vue template lint fallback
+    domains: [frontend/vue-lint]
+    scenarios: [lint-migration]
+    expected_memories: [k_eval_vue_lint]
+    expected_ranks: { k_eval_vue_lint: 1 }
+    forbidden_memories: [k_eval_react_lint]
+    language: en
+
+  - task: 当前知识库如何处理火星量子厨房的食谱迁移
+    domains: []
+    scenarios: []
+    expected_memories: []
+    forbidden_memories:
+      - k_eval_vue_lint
+      - k_eval_mysql_migration
+      - k_eval_refund_approval
+    abstain: true
+    language: zh-CN
+
+  - task: configure an underwater telescope warranty workflow
+    domains: []
+    scenarios: []
+    expected_memories: []
+    forbidden_memories:
+      - k_eval_refund_status
+      - k_eval_oauth_login
+      - k_eval_hook_relevance
+    abstain: true
+    language: en

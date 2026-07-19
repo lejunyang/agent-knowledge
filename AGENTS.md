@@ -142,6 +142,7 @@ src/cli.ts            命令行入口和各模块编排
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - active 知识落盘目录必须保留 domain 的层级结构，例如 `bytedance/business/account` 写到 `knowledge/semantic/bytedance/business/account/`，不要压平成 `bytedance-business-account`。
 - 修改检索排序时同步更新 eval case 或增加新的 eval case。
+- 完整检索基线位于 `eval/cases/retrieval-complete.yaml`，包含 17 个 active 主题和 hard-negative/no-answer/temporal/cross-language case；修改检索或治理策略时必须保持 forbidden injection 为 0。
 - 测试不得依赖网络或远程模型；embedding 相关测试必须使用 `DeterministicLocalEmbeddingProvider` 或 CLI `--provider local`。
 - Transformers.js provider 默认禁止远程模型下载；只有人工 CLI 调试时才显式传 `--allow-remote-models`。
 - 普通检索、Hook、`embed-index` 和 model status 禁止自动联网；`agent-knowledge embedding download` 是显式模型下载入口。模型缓存默认位于 `~/.cache/agent-knowledge/models`，可由用户配置覆盖。

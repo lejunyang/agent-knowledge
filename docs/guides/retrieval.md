@@ -37,6 +37,9 @@ Embedding manifest 会校验 model、revision、dtype、dimensions、pooling 和
 ```bash
 agent-knowledge query --task "当前任务" --debug
 agent-knowledge eval --input eval/cases/retrieval-baseline.yaml
+agent-knowledge eval --fixture eval/cases/retrieval-complete.yaml --root /tmp/agent-knowledge-eval
 ```
 
 评测输出 Recall@1/3/5、MRR、nDCG、false injection、abstention precision、latency 和 packet tokens。
+
+`retrieval-complete.yaml` 包含 17 条 active 脱敏知识、1 条 deprecated temporal predecessor 和 20 个正向/hard-negative/cross-language/no-answer case。普通 CI 使用 deterministic/lexical 路径；真实模型评测应先显式下载模型，再在本地或定时任务中运行。

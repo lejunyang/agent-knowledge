@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { rebuildIndex } from "../src/storage/indexer.js";
-import { loadEvalSuite, runEvalCase, runEvalSuite } from "../src/retrieval/eval.js";
+import {
+  loadEvalCorpus,
+  loadEvalSuite,
+  materializeEvalCorpus,
+  runEvalCase,
+  runEvalSuite
+} from "../src/retrieval/eval.js";
 
 let tempDirs: string[] = [];
 
@@ -136,5 +142,24 @@ describe("runEvalCase", () => {
     expect(suite.metrics.abstentionPrecision).toBe(1);
     expect(suite.metrics.averageLatencyMs).toBeGreaterThanOrEqual(0);
     expect(suite.metrics.averagePacketTokens).toBeGreaterThanOrEqual(0);
+  });
+
+  it("materializes and passes the complete 17-topic retrieval corpus", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-eval-complete-"));
+    tempDirs.push(root);
+    const corpus = await loadEvalCorpus("eval/cases/retrieval-complete.yaml");
+    await materializeEvalCorpus(root, corpus);
+
+    const index = rebuildIndex(root);
+    const suite = await runEvalSuite(root, { cases: corpus.cases });
+
+    expect(corpus.documents.filter((document) => document.status === "active")).toHaveLength(17);
+    expect(corpus.documents.filter((document) => document.status === "deprecated")).toHaveLength(1);
+    expect(index.indexed).toBe(17);
+    expect(corpus.cases.length).toBeGreaterThanOrEqual(20);
+    expect(suite.failed).toBe(0);
+    expect(suite.metrics.recallAt[1]).toBe(1);
+    expect(suite.metrics.falseInjectionRate).toBe(0);
+    expect(suite.metrics.abstentionPrecision).toBe(1);
   });
 });
