@@ -255,7 +255,7 @@ function metadataMatchScore(row: MemoryRow, request: MemoryQueryRequest): number
   if (request.scenarios.length > 0 && fuzzyIntersects(scenarios, request.scenarios)) {
     score += 2;
   }
-  if (hasExactAliasInTask(aliases, request.task)) {
+  if (aliasCoverageScore(aliases, request.task) >= 0.45) {
     score += 1;
   }
   return score;
@@ -383,6 +383,34 @@ function hasExactAliasInTask(aliases: string[], task: string): boolean {
 }
 
 /**
+ * 计算完整 alias 对任务有效词项的覆盖比例。
+ *
+ * 短通用 alias 仍可帮助候选进入 FTS/证据门控，但长查询中只出现 `uid`、`商家中心` 等单一短词时
+ * 不应获得与完整术语相同的满分。短查询若几乎由 alias 构成，覆盖率仍接近 1。
+ */
+function aliasCoverageScore(aliases: string[], task: string): number {
+  const normalizedTask = task.toLowerCase();
+  const matchedAliases = aliases
+    .map((alias) => alias.trim().toLowerCase())
+    .filter((alias) => alias.length > 0 && normalizedTask.includes(alias));
+  if (matchedAliases.length === 0) {
+    return 0;
+  }
+  const taskTerms = tokenize(task).filter(
+    (token) =>
+      token.length >= 2 &&
+      !/^[\p{Script=Han}]{2}$/u.test(token)
+  );
+  const taskLength = new Set(taskTerms).size;
+  if (taskLength === 0) {
+    return 1;
+  }
+  const aliasTerms = new Set(matchedAliases.flatMap((alias) => tokenize(alias)));
+  const covered = [...aliasTerms].filter((term) => taskTerms.includes(term)).length;
+  return Math.max(0, Math.min(1, covered / taskLength));
+}
+
+/**
  * 过滤只有 CJK n-gram 偶然重合、但缺少 metadata 或完整词项证据的 FTS 候选。
  * 这道门控用于降低短中文片段造成的误召回。
  */
@@ -434,7 +462,7 @@ function scoreRow(
   const aliases = parseJsonArray(row.aliases);
   const scenarioScore = request.scenarios.length > 0 && fuzzyIntersects(scenarios, request.scenarios) ? 1 : 0.3;
   const lexicalScore = Math.max(
-    hasExactAliasInTask(aliases, request.task) ? 1 : 0,
+    aliasCoverageScore(aliases, request.task),
     normalizedLexicalScore
   );
   const confidenceScore = row.confidence;

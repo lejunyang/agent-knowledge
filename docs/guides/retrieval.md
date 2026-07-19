@@ -41,6 +41,8 @@ agent-knowledge query \
 
 只有真实 lexical 命中的候选才获得 lexical 分；dense-only、graph 或关系扩展候选不能因为内部占位分数获得虚假的 lexical 信用。Metadata RRF 通道同样只接收实际命中 domain、scenario 或完整 alias 的候选，0 分候选不参与该通道排名。
 
+Alias 的强排序加分按其对当前任务有效词项的覆盖比例计算。`uid`、`商家中心` 等短通用 alias 仍可帮助召回，但不能在长问题中仅凭一次出现获得满分；完整术语或多个 alias 共同覆盖查询时才获得强 boost，避免宽泛概览压过具体 SOP。
+
 ## Hybrid
 
 ```bash

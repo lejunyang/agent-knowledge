@@ -169,6 +169,7 @@ src/cli.ts            命令行入口和各模块编排
 - `embedding status/download`、Transformers embedding provider、hybrid query 和 reranker 必须统一使用 `embeddings.cacheDir`；不得出现状态检查命中专用缓存、运行时却回退到 `node_modules` 或其他默认目录的分叉。
 - `query` 不应在缺少 domain/scenario 且 FTS 无命中时回退全表；如修改 fallback 策略，必须更新 debug 输出和测试。
 - FTS5 BM25 必须按单次查询内相关度归一化并显式排序，不能使用固定绝对值缩放或依赖无 `ORDER BY` 的 SQLite 返回顺序；dense/graph/related-only 候选不得获得 lexical 分。
+- Alias 排序加分必须考虑其对完整任务的覆盖率；短通用 alias 只能作为弱证据，不能在长查询中自动获得满分并压过具体知识。
 - direct result 和 related expansion 必须执行相同的 validity、visibility、sensitivity、project 和 type 过滤。
 - 普通 `query` 未传 `--project-id` 时必须自动发现当前 Git 项目的稳定 ID；显式参数完全优先，非 Git 或探测失败回退空项目作用域。
 - `_inbox` / `_archive` 必须按路径硬排除，不能只依赖 status。

@@ -277,6 +277,87 @@ describe("queryMemories", () => {
     });
   });
 
+  it("keeps short generic aliases from outranking specific terms", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-alias-specificity-"));
+    tempDirs.push(root);
+    await captureMaterial(
+      root,
+      [
+        {
+          id: "k_eval_generic_product_overview",
+          title: "业务平台通用介绍",
+          aliases: ["商家中心", "uid"],
+          memory_type: "semantic",
+          domain: "business/platform",
+          related_domains: [],
+          scenario: ["business-knowledge"],
+          tags: ["overview"],
+          confidence: 0.95,
+          source_authority: "user_confirmed",
+          summary: "商家中心是通用业务平台，用户通过 UID 登录。",
+          evidence: ["test:generic"]
+        },
+        {
+          id: "k_eval_specific_microfrontend",
+          title: "Garfish 子应用动态装载排查",
+          aliases: ["Goofy 微前端", "Garfish routing"],
+          memory_type: "procedural",
+          domain: "business/platform/frontend",
+          related_domains: [],
+          scenario: ["microfrontend"],
+          tags: ["garfish", "goofy"],
+          confidence: 0.9,
+          source_authority: "documented",
+          summary: "页面没有被正确子应用装载时，先检查 Goofy 模块配置和 Garfish 路由。",
+          evidence: ["test:specific"]
+        },
+        {
+          id: "k_eval_specific_uid_lookup",
+          title: "B 号 UID 与额度预占查询",
+          aliases: ["B号额度查询", "额度预占用"],
+          memory_type: "procedural",
+          domain: "business/platform/account",
+          related_domains: [],
+          scenario: ["account-lookup"],
+          tags: ["uid", "quota"],
+          confidence: 0.9,
+          source_authority: "documented",
+          summary: "不知道 B 号 UID 时先查主体下 B 号，再查询新主体额度预占。",
+          evidence: ["test:specific"]
+        }
+      ],
+      { target: "active", rebuild: true }
+    );
+
+    const routing = queryMemoriesWithDebug(root, {
+      task: "商家中心页面没有被正确的子应用装载，应该检查 Goofy 还是页面",
+      agentRole: "main"
+    });
+    const account = queryMemoriesWithDebug(root, {
+      task: "不知道 B 号 UID 时怎么查主体下 B 号以及新主体的额度预占",
+      agentRole: "main"
+    });
+    const routingScores = new Map(
+      routing.debug.resultScores.map((item) => [item.id, item])
+    );
+    const accountScores = new Map(
+      account.debug.resultScores.map((item) => [item.id, item])
+    );
+
+    expect(routing.ranked[0]?.document.frontmatter.id).toBe(
+      "k_eval_specific_microfrontend"
+    );
+    expect(account.ranked[0]?.document.frontmatter.id).toBe(
+      "k_eval_specific_uid_lookup"
+    );
+    expect(
+      routingScores.get("k_eval_generic_product_overview")?.lexicalScore
+    ).toBeLessThan(1);
+    expect(
+      accountScores.get("k_eval_generic_product_overview")?.lexicalScore
+    ).toBeLessThan(1);
+  });
+
   it("suppresses full-table fallback when domain and scenario are missing", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-no-fallback-"));
     tempDirs.push(root);
