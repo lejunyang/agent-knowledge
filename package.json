@@ -21,6 +21,7 @@
     "@huggingface/transformers": "^4.2.0",
     "@inquirer/prompts": "^8.5.2",
     "commander": "^12.1.0",
+    "cytoscape": "^3.34.0",
     "fast-glob": "^3.3.3",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.0",
