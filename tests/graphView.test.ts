@@ -113,14 +113,9 @@ describe("knowledge graph view", () => {
       totalEdges: 6,
       refinedKnowledge: 1,
       sourceMemories: 1,
-      defaultNodes: 4
+      defaultNodes: 1
     });
-    expect(view.defaultNodeIds).toEqual([
-      "domain:support/refund",
-      "knowledge:k_refined",
-      "project:project-1",
-      "scenario:customer-support"
-    ]);
+    expect(view.defaultNodeIds).toEqual(["knowledge:k_refined"]);
     expect(view.evidenceNodeIds).toEqual([
       "domain:support/refund",
       "episode:one",

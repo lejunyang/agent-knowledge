@@ -178,6 +178,7 @@ src/cli.ts            命令行入口和各模块编排
 - `_inbox-skills` 保存 Skill proposal 草稿，使用 Skill frontmatter 而不是 KnowledgeDocument schema；index、embedding、catalog、graph、list 和同步必须在解析前按路径硬排除。
 - embedding query 必须校验 manifest/profile，不能对不同模型、维度、pooling 或 prefix 的向量静默 cosine。
 - `type: source` 保存完整证据，不属于默认 query includeTypes，也不得进入 SQLite/FTS 或 embedding 缓存；检索内容应由 organizer 拆成 semantic/procedural/episodic/profile。
+- 图谱 HTML 默认只展示精炼 active 知识；结构邻居、source memory/source evidence 只能通过点击展开、证据或全图模式按需显示，不能恢复为全量节点首次布局。
 - source 原始证据导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、用户标识和个人信息；禁止把内部测试账号表原样写入长期知识。
 - `capture-material --replace-source` 只能刷新同 ID、active、documented 的 source 原始证据；不得覆盖 semantic/procedural/profile/episodic，精炼知识更新必须使用新知识和 `supersedes`。
 - Batch reranker 默认只在显式 `query --rerank` 或 reranked eval 中启用；Hook 热路径不得加载 cross-encoder。默认 pipeline 是融合 top 30 -> batch rerank -> threshold -> top 8。

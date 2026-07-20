@@ -213,6 +213,12 @@ agent-knowledge graph export --format html --output knowledge-graph.html
 
 HTML 支持搜索、节点类型/状态/domain/project 筛选和详情查看，适合人类浏览与审阅。脚本也支持：
 
+当前 HTML 使用 Cytoscape.js 离线渲染，支持滚轮缩放、画布平移、节点拖拽、COSE 自动整理、同心/层级/网格布局、适应视图和点击展开一跳邻域。首次打开只加载精炼知识；domain/scenario/project、完整 source 原文知识和 source 证据默认隐藏，避免大规模结构/证据节点挤满画布。左侧可切换：
+
+- `精炼知识`：推荐默认视图。
+- `精炼知识 + 直接证据`：查看 source/episode/proposal 邻居。
+- `全部节点`：查看完整索引；节点很多时先使用网格，再按需运行 COSE。
+
 ```bash
 agent-knowledge graph query --text "退款审核"
 agent-knowledge graph query --id <knowledge-id> --depth 2

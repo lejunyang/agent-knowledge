@@ -30,14 +30,10 @@ export type KnowledgeGraphView = {
   };
 };
 
-const DEFAULT_NEIGHBOR_TYPES = new Set<GraphNodeType>([
+const EVIDENCE_NEIGHBOR_TYPES = new Set<GraphNodeType>([
   "domain",
   "scenario",
-  "project"
-]);
-
-const EVIDENCE_NEIGHBOR_TYPES = new Set<GraphNodeType>([
-  ...DEFAULT_NEIGHBOR_TYPES,
+  "project",
   "source",
   "episode",
   "proposal"
@@ -81,7 +77,7 @@ function sortedUnique(values: string[]): string[] {
 /**
  * 计算默认精炼知识视图和按需证据视图。
  *
- * 默认视图只加入精炼知识及其 domain/scenario/project；证据视图再加入与精炼知识直接相连的
+ * 默认视图只加入精炼知识；证据视图再加入与精炼知识直接相连的 domain/scenario/project、
  * source/episode/proposal。source memory 本身只在“全部节点”模式显示，避免 656 份原文淹没图。
  */
 export function buildKnowledgeGraphView(
@@ -108,9 +104,6 @@ export function buildKnowledgeGraphView(
     const neighbor = nodesById.get(neighborId);
     if (!neighbor || isSourceMemory(neighbor)) {
       continue;
-    }
-    if (DEFAULT_NEIGHBOR_TYPES.has(neighbor.type)) {
-      defaultIds.add(neighbor.id);
     }
     if (EVIDENCE_NEIGHBOR_TYPES.has(neighbor.type)) {
       evidenceIds.add(neighbor.id);

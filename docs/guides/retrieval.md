@@ -178,6 +178,8 @@ agent-knowledge graph export --format html --output knowledge-graph.html
 
 自包含 HTML 无外部 CDN，支持关键词搜索、node type、memory status、domain、project 筛选和节点详情。它适合人类了解知识分布、发现孤立知识、冲突、过期关系和 proposal；真正让 graph 参与 Agent 查询必须使用 `--retrieval graph|hybrid-graph`。
 
+HTML renderer 使用内嵌 Cytoscape.js，支持缩放、平移、拖拽、COSE 自动整理、同心/层级/网格布局、适应视图和点击展开一跳邻域。默认只把 active 非 source 知识加入画布；domain/scenario/project、source memory 和 source evidence 都不参与首次布局。需要查看结构/证据或全图时再点击展开，或切换“精炼知识 + 直接证据”“全部节点”，不要把完整大图当作默认阅读界面。
+
 ## 调试与评测
 
 ```bash
