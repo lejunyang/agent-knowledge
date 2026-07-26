@@ -347,6 +347,7 @@ node dist/cli.js --help
 ## 研究与设计
 
 - [Hivemind、Agent Memory 与 Embedding 评测](docs/research/2026-07-18-hivemind-memory-and-embeddings-evaluation.md)
+- [Context Infrastructure 深度调研与改进建议](docs/research/2026-07-26-context-infrastructure-evaluation.md)
 - [项目知识、同步、客服投毒与主动记忆](docs/research/2026-07-19-project-memory-sync-and-poisoning.md)
 - [Agent Knowledge 演进设计](docs/superpowers/specs/2026-07-19-agent-knowledge-evolution-design.md)
 - [Agent Knowledge 演进实施计划](docs/superpowers/plans/2026-07-19-agent-knowledge-evolution.md)

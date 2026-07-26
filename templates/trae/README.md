@@ -129,6 +129,8 @@ Hook 自动路径不加载 embedding 或 reranker。
 
 外部客户和 automatic session 只能生成 proposed observation，不能直接成为 active 事实。
 
+从旧版模板升级时，integration installer 会把受 manifest 管理且未被修改的 `memory-reader.md` / `memory-writer.md` 迁移为新名称。用户修改过或非本工具管理的旧文件会保留并报告 conflict。
+
 完整 `source` 导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、用户标识和个人信息。同一外部文档更新或脱敏规则升级时，可使用：
 
 ```bash
