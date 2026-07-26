@@ -78,7 +78,7 @@ export AGENT_KNOWLEDGE_CAPTURE_MODE=automated_session
 因此采用两层机制：
 
 1. `SubagentStart`、`SubagentStop`、`Stop`、`SessionEnd` hook 异步写入脱敏 staging。
-2. 主 Agent 在明确触发点主动委派 `memory-writer`，或使用 `memory-maintainer` Skill 批量审阅 staging。
+2. 主 Agent 在明确触发点主动委派 `agent-knowledge-writer`，或使用 `memory-maintainer` Skill 批量审阅 staging。
 
 Staging 只保存：
 

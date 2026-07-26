@@ -1,5 +1,5 @@
 ---
-name: memory-writer
+name: agent-knowledge-writer
 description: Produces conservative candidate knowledge after explicit requests, verified reusable outcomes, or repeated supported evidence not already covered by AGENTS.md.
 tools: ""
 ---

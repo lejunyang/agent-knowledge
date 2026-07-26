@@ -90,8 +90,8 @@ agent-knowledge index
 日常不需要在每个任务前手工查询。推荐分工是：
 
 1. `UserPromptSubmit` Hook 只在高相关命中时注入精简 `context_packet`；无命中和低分命中完全静默。
-2. Hook 内容不足、任务依赖历史决策或业务规则时，主 Agent 主动调用 `memory-reader`；reader 先直接 query，只有不知道领域或用户明确想浏览知识时才看 catalog。
-3. 用户明确要求记忆，或任务产生了已验证且可复用的结果时，主 Agent 调用 `memory-writer` 生成 candidate JSON。
+2. Hook 内容不足、任务依赖历史决策或业务规则时，主 Agent 主动调用 `agent-knowledge-reader`；reader 先直接 query，只有不知道领域或用户明确想浏览知识时才看 catalog。
+3. 用户明确要求记忆，或任务产生了已验证且可复用的结果时，主 Agent 调用 `agent-knowledge-writer` 生成 candidate JSON。
 4. candidate 通过 `write-candidate` 进入 `_inbox`；不会因为 Subagent 输出就直接修改 active 知识。
 5. 主 Agent 实际使用或拒绝某条知识时记录 `feedback`，为阈值校准和 Skill 沉淀提供证据。
 6. 每周或知识积累较多时运行一次 maintenance 和 inbox 审阅。
@@ -148,7 +148,7 @@ agent-knowledge embed-index        # 使用 hybrid / hybrid-graph 时
 | 来源 | 推荐入口 | 默认结果 |
 | --- | --- | --- |
 | 用户直接提供的受信材料 | `knowledge-organizer` Skill + `capture-material` | 可按用户意图写 active 或 inbox |
-| 显式记忆、验证成功的任务 | `memory-writer` + `write-candidate` | 写 `_inbox`，再审阅 |
+| 显式记忆、验证成功的任务 | `agent-knowledge-writer` + `write-candidate` | 写 `_inbox`，再审阅 |
 | 自动会话、客服观察、Subagent 日志 | `maintenance run/watch` | 只生成 proposal / `_inbox` |
 
 普通、受信 candidate 可先运行 `organize-inbox` dry-run，再用 `--apply` 批量整理。自动会话和客户来源默认永久阻止批量晋升；只有人工检查证据后，才能用显式白名单：
@@ -173,7 +173,7 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 主动记忆不是“所有对话自动写入”：
 
 - Hook 会记录生命周期信号和 Subagent 调试日志，但不会调用 LLM 总结，也不会写 active 知识。
-- `memory-writer` 的 description 会指导主 Agent 在“显式要求记忆、已验证可复用结果、重复且有证据的业务观察”这些边界主动调用它。
+- `agent-knowledge-writer` 的 description 会指导主 Agent 在“显式要求记忆、已验证可复用结果、重复且有证据的业务观察”这些边界主动调用它。
 - 普通闲聊、一次性命令、临时错误、可直接搜索到的代码表面结构不应触发长期记忆。
 - 是否实际调用 Subagent 取决于宿主 Agent 的调度；可用 `agent-knowledge subagents status/logs` 检查。
 - `maintenance` 从已记录的 `SubagentStop` 结果自动抽取 observation，但只形成可审阅 proposal。
@@ -287,7 +287,7 @@ agent-knowledge sync watch
 
 # Subagent 与主动维护
 agent-knowledge subagents status
-agent-knowledge subagents logs --agent-type memory-writer
+agent-knowledge subagents logs --agent-type agent-knowledge-writer
 agent-knowledge staging status
 agent-knowledge staging drain --limit 100
 agent-knowledge maintenance run

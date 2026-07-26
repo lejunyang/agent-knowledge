@@ -193,7 +193,7 @@ agent-knowledge embedding download
 ### components
 
 - `hooks`：生命周期 Hook 配置。
-- `agents`：`memory-reader` 和 `memory-writer` 模板。
+- `agents`：`agent-knowledge-reader` 和 `agent-knowledge-writer` 模板。
 - `skills`：`knowledge-organizer`、`memory-maintainer` 等项目 Skill。
 - `plugin-bundle`：TRAE plugin bundle；只在产品支持时选择。
 

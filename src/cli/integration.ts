@@ -96,7 +96,7 @@ export async function promptForIntegrationInstall(options: {
       t("组件（空格切换，回车确认）", "Components (space to toggle, enter to confirm)"),
       [
         { name: "Hooks", value: "hooks", description: t("自动检索和生命周期 staging", "Automatic query and lifecycle staging") },
-        { name: "Agents", value: "agents", description: "memory-reader / memory-writer" },
+        { name: "Agents", value: "agents", description: "agent-knowledge-reader / agent-knowledge-writer" },
         { name: "Skills", value: "skills", description: t("知识整理与维护", "knowledge organizer and maintainer") },
         {
           name: t("插件包", "Plugin bundle"),

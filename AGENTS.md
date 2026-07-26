@@ -252,7 +252,7 @@ agent-knowledge embed-index --root "$AGENT_KNOWLEDGE_ROOT"
 agent-knowledge graph build --root "$AGENT_KNOWLEDGE_ROOT"
 ```
 
-普通任务让 Hook 高相关时自动注入；Hook 不足或任务依赖历史/业务知识时调用 `memory-reader`，其基础查询为：
+普通任务让 Hook 高相关时自动注入；Hook 不足或任务依赖历史/业务知识时调用 `agent-knowledge-reader`，其基础查询为：
 
 ```bash
 agent-knowledge query \
@@ -314,7 +314,7 @@ Hook 主动记忆边界：
 - `SubagentStart` / `SubagentStop` 同时写本地完整 `.memory/subagents` 调试日志和脱敏 staging；`Stop` / `SessionEnd` 只写脱敏 staging。
 - 详细 Subagent 日志默认不脱敏，供本机所有者调试；不得同步、注入模型上下文或直接作为事实。
 - Staging 只保存 hash、长度、agent type、reason、project ID，不保存完整文本。
-- 当前 command hook 不直接调用 Subagent；语义抽取由主 Agent 委派 `memory-writer` 或触发 `memory-maintainer`。
+- 当前 command hook 不直接调用 Subagent；语义抽取由主 Agent 委派 `agent-knowledge-writer` 或触发 `memory-maintainer`。
 - 不在 Stop hook 中强制续跑模型。
 
 `templates/` 是对外安装源；项目 `.trae/skills/` 是本仓库开发时实际启用的 Skills。不要把模板目录误认为已安装用户配置，也不要删除项目 Skills。

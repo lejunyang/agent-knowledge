@@ -27,11 +27,19 @@ agent-knowledge integration install
 ## 组件
 
 - `hooks`：安装生命周期 Hook。负责静默相关知识注入、Subagent 日志和 staging 信号。
-- `agents`：安装 `memory-reader` / `memory-writer` Subagent 模板。
+- `agents`：安装 `agent-knowledge-reader` / `agent-knowledge-writer` Subagent 模板。
 - `skills`：安装 `knowledge-organizer` / `memory-maintainer` 等 Skill。
 - `plugin-bundle`：安装带 plugin manifest、agents、hooks 和 Skills 的 TRAE plugin bundle。它是可选分发方式，不应与同一目标中的散装资源重复安装。
 
 只选择实际需要的组件。例如只希望 Agent 能按需读写、不希望自动 Hook 运行时，可选择 `agents,skills` 而不选 `hooks`。
+
+从旧版本升级时，安装器会迁移上一版 manifest 管理的 `memory-reader.md` 和 `memory-writer.md`：
+
+- 内容未被修改：安装新名称后删除旧文件。
+- 用户已经修改：保留旧文件并报告 conflict，避免升级吞掉定制内容。
+- 非本工具管理的同名旧文件：不删除。
+
+历史 `.memory/subagents` 日志保留旧 agent type 作为审计事实，不做重写。
 
 ## Hook 上下文策略
 
@@ -52,7 +60,7 @@ agent-knowledge integration install
 
 ```bash
 agent-knowledge subagents status
-agent-knowledge subagents logs --agent-type memory-writer
+agent-knowledge subagents logs --agent-type agent-knowledge-writer
 ```
 
 `hooks.detailedSubagentLogging=false` 可关闭原始 payload 写入，但 staging 信号仍按 Hook 模板运行。当前建议保持开启，等 Subagent 触发和输出稳定后再评估是否移除 `SubagentStart` / `SubagentStop` Hook。
@@ -105,7 +113,7 @@ agent-knowledge integration uninstall --product trae --scope user
 当查询、候选字段、Hook 输出、maintenance、图检索或推荐工作流变化时，应同时检查：
 
 - TRAE/Claude Hook 模板是否还调用正确命令。
-- `memory-reader` 是否知道新的检索模式和反馈字段。
-- `memory-writer` 是否包含新的 candidate/provenance 字段。
+- `agent-knowledge-reader` 是否知道新的检索模式和反馈字段。
+- `agent-knowledge-writer` 是否包含新的 candidate/provenance 字段。
 - 项目 Skill 与 plugin Skill 是否仍描述真实维护流程。
 - 本文、主 README 和配置指南是否需要同步更新。

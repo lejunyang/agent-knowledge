@@ -1,5 +1,5 @@
 ---
-name: memory-reader
+name: agent-knowledge-reader
 description: Retrieves Agent Knowledge for project decisions, procedures, business facts, relationship traversal, and retrieval diagnostics. Invoke proactively when prior context may matter.
 ---
 

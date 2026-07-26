@@ -84,6 +84,10 @@ export type IntegrationProduct = {
 const DEFAULT_COMPONENTS: IntegrationComponent[] = ["hooks", "agents", "skills"];
 const OWNED_COMMAND_PATTERN = /(?:^|[\s'"])agent-knowledge(?:\.cmd)?\s+hook(?:\s|$)/;
 const MANIFEST_FILE = ".agent-knowledge-integration.json";
+const LEGACY_AGENT_TEMPLATE_NAMES = new Set([
+  "memory-reader.md",
+  "memory-writer.md"
+]);
 
 const PRODUCTS: IntegrationProduct[] = [
   {
@@ -343,6 +347,44 @@ function agentSourceRoot(packageRoot: string, product: IntegrationProductId): st
   return existsSync(productRoot) ? productRoot : path.join(packageRoot, "templates", "trae", "agents");
 }
 
+/** 判断上一版 manifest 中的资源是不是需要退休的旧 Subagent 模板。 */
+function isLegacyManagedAgentResource(resource: ManagedResource): boolean {
+  return (
+    resource.kind === "file" &&
+    path.basename(path.dirname(resource.path)) === "agents" &&
+    LEGACY_AGENT_TEMPLATE_NAMES.has(path.basename(resource.path))
+  );
+}
+
+/**
+ * 安全退休上一版受管 Subagent 模板。
+ *
+ * 内容仍等于 manifest hash 时删除；用户已经修改时保留并报告 conflict，避免重命名升级吞掉用户定制。
+ */
+async function retireLegacyManagedAgents(
+  previousManifest: IntegrationManifest | null,
+  conflicts: string[]
+): Promise<Set<string>> {
+  const retired = new Set<string>();
+  for (const resource of previousManifest?.resources ?? []) {
+    if (!isLegacyManagedAgentResource(resource)) {
+      continue;
+    }
+    if (!existsSync(resource.path)) {
+      retired.add(resource.path);
+      continue;
+    }
+    const currentHash = await hashPath(resource.path);
+    if (currentHash !== resource.hash) {
+      conflicts.push(resource.path);
+      continue;
+    }
+    await rm(resource.path, { recursive: true, force: true });
+    retired.add(resource.path);
+  }
+  return retired;
+}
+
 /**
  * 按 manifest 所有权复制 Agent/Skill/plugin 路径。
  * merge 模式遇到未托管同名资源必须报告冲突；overwrite 才允许替换文件、目录或 symlink。
@@ -433,6 +475,9 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
   const previousByPath = new Map(previousManifest?.resources.map((resource) => [resource.path, resource]) ?? []);
   const managed: InstallIntegrationResult["managed"] = [];
   const conflicts: string[] = [];
+  const retiredLegacyResources = components.includes("agents")
+    ? await retireLegacyManagedAgents(previousManifest, conflicts)
+    : new Set<string>();
 
   if (components.includes("hooks")) {
     const template = await readJsonObject(
@@ -520,7 +565,9 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
   }
 
   const preservedPrevious = previousManifest?.resources.filter(
-    (resource) => !managed.some((current) => current.path === resource.path)
+    (resource) =>
+      !retiredLegacyResources.has(resource.path) &&
+      !managed.some((current) => current.path === resource.path)
   ) ?? [];
   const manifest: IntegrationManifest = {
     version: 1,

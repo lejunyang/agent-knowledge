@@ -25,7 +25,7 @@ Hook / Subagent 原始信号
 ### 明确触发
 
 - 用户说“记住”“以后按这个规则”“把这些材料整理成知识”。
-- 主 Agent 应调用 `memory-writer` 或 `knowledge-organizer`。
+- 主 Agent 应调用 `agent-knowledge-writer` 或 `knowledge-organizer`。
 - 这是最可靠、意图最清晰的触发方式。
 
 ### 建议主动触发
@@ -33,7 +33,7 @@ Hook / Subagent 原始信号
 - 任务已经执行并验证成功，而且结论在未来任务中可复用。
 - 发现 `AGENTS.md` 未覆盖的稳定项目约束、业务语义、跨模块隐含边界或 SOP。
 - 同一个客服流程在多个独立 session 中反复验证成功，并有受信来源和正反馈。
-- 主 Agent 可依据 Subagent description 主动调用 `memory-writer`；是否调用最终由宿主 Agent 调度。
+- 主 Agent 可依据 Subagent description 主动调用 `agent-knowledge-writer`；是否调用最终由宿主 Agent 调度。
 
 ### 不应触发
 
@@ -47,7 +47,7 @@ Hook / Subagent 原始信号
 
 ```bash
 agent-knowledge subagents status
-agent-knowledge subagents logs --agent-type memory-writer
+agent-knowledge subagents logs --agent-type agent-knowledge-writer
 ```
 
 ## 直接候选写入
@@ -60,7 +60,7 @@ agent-knowledge write-candidate --input candidate.json
 
 候选会经过 secret-like 扫描、来源治理、去重和 schema 校验。
 
-`memory-writer` 只输出 JSON，不调用工具、不写文件。主 Agent 负责把 JSON 保存为临时文件并执行 `write-candidate`。即使候选因 `user_confirmed` 或高置信 verified procedural 被判为 active status，文件仍先落在 `_inbox`，不会直接进入正式检索。
+`agent-knowledge-writer` 只输出 JSON，不调用工具、不写文件。主 Agent 负责把 JSON 保存为临时文件并执行 `write-candidate`。即使候选因 `user_confirmed` 或高置信 verified procedural 被判为 active status，文件仍先落在 `_inbox`，不会直接进入正式检索。
 
 用户直接提供的材料可由 `knowledge-organizer` 拆分，再使用：
 
@@ -152,7 +152,7 @@ Worker 使用 watermark 防止重复消费，使用 lock 防止并发 worker 同
 - `conflict`
 - `skill`
 
-Proposal 不会修改 active Markdown。当前 extraction 是确定性字段抽取，不调用外部 LLM；复杂语义整理应由 `memory-maintainer` Skill 和 `memory-writer` 在人工可见流程中完成。
+Proposal 不会修改 active Markdown。当前 extraction 是确定性字段抽取，不调用外部 LLM；复杂语义整理应由 `memory-maintainer` Skill 和 `agent-knowledge-writer` 在人工可见流程中完成。
 
 ## Proposal 人工审阅
 

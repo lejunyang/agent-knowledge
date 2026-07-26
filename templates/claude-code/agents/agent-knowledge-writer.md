@@ -1,5 +1,5 @@
 ---
-name: memory-writer
+name: agent-knowledge-writer
 description: Extracts conservative candidate knowledge after explicit remember requests, verified reusable task success, or repeated supported project and business evidence not already covered by AGENTS.md. Do not invoke for transient conversation.
 tools: ""
 ---

@@ -1,4 +1,14 @@
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  access,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -10,6 +20,21 @@ import {
 } from "../src/integration/manager.js";
 
 let tempDirs: string[] = [];
+
+/** 判断测试目标是否仍存在。 */
+async function exists(target: string): Promise<boolean> {
+  try {
+    await access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 计算 integration manifest 使用的文本 hash。 */
+function hashText(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 afterEach(async () => {
   await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
@@ -29,8 +54,16 @@ describe("managed integrations", () => {
       components: ["hooks", "agents", "skills"]
     });
 
-    const readerTarget = path.join(targetDir, "agents", "memory-reader.md");
-    const writerTarget = path.join(targetDir, "agents", "memory-writer.md");
+    const readerTarget = path.join(
+      targetDir,
+      "agents",
+      "agent-knowledge-reader.md"
+    );
+    const writerTarget = path.join(
+      targetDir,
+      "agents",
+      "agent-knowledge-writer.md"
+    );
     const hooksTarget = path.join(targetDir, "hooks.json");
     const cliHooksTarget = path.join(targetDir, "cli", "hooks.json");
     const skillTarget = path.join(targetDir, "skills", "knowledge-organizer");
@@ -43,6 +76,12 @@ describe("managed integrations", () => {
 
     expect((await lstat(readerTarget)).isFile()).toBe(true);
     expect((await lstat(writerTarget)).isFile()).toBe(true);
+    expect(await exists(path.join(targetDir, "agents", "memory-reader.md"))).toBe(
+      false
+    );
+    expect(await exists(path.join(targetDir, "agents", "memory-writer.md"))).toBe(
+      false
+    );
     expect((await lstat(hooksTarget)).isFile()).toBe(true);
     expect((await lstat(cliHooksTarget)).isFile()).toBe(true);
     expect((await lstat(skillTarget)).isDirectory()).toBe(true);
@@ -84,8 +123,13 @@ describe("managed integrations", () => {
     await expect(readFile(path.join(targetDir, "hooks.json"), "utf8")).resolves.toContain(
       "agent-knowledge hook"
     );
-    await expect(readFile(path.join(targetDir, "agents", "memory-reader.md"), "utf8")).resolves.toContain(
-      "memory-reader"
+    await expect(
+      readFile(
+        path.join(targetDir, "agents", "agent-knowledge-reader.md"),
+        "utf8"
+      )
+    ).resolves.toContain(
+      "agent-knowledge-reader"
     );
     expect(result.managed.map((item) => item.path)).not.toContain(path.join(targetDir, "cli", "hooks.json"));
   });
@@ -161,7 +205,11 @@ describe("managed integrations", () => {
     });
 
     expect(second.managed.every((item) => item.status === "unchanged")).toBe(true);
-    expect(removed.removed.some((item) => item.endsWith("memory-reader.md"))).toBe(true);
+    expect(
+      removed.removed.some((item) =>
+        item.endsWith("agent-knowledge-reader.md")
+      )
+    ).toBe(true);
     await expect(readFile(path.join(targetDir, "agents", "custom.md"), "utf8")).resolves.toBe("custom");
     const hooks = await readFile(path.join(targetDir, "hooks.json"), "utf8");
     expect(hooks).not.toContain("agent-knowledge hook");
@@ -171,7 +219,11 @@ describe("managed integrations", () => {
     const targetDir = await mkdtemp(path.join(tmpdir(), "agent-knowledge-trae-existing-"));
     tempDirs.push(targetDir);
     await mkdir(path.join(targetDir, "agents"), { recursive: true });
-    await writeFile(path.join(targetDir, "agents", "memory-reader.md"), "foreign", "utf8");
+    await writeFile(
+      path.join(targetDir, "agents", "agent-knowledge-reader.md"),
+      "foreign",
+      "utf8"
+    );
 
     const result = await installIntegration({
       packageRoot: process.cwd(),
@@ -181,8 +233,133 @@ describe("managed integrations", () => {
       components: ["agents"]
     });
 
-    expect(result.conflicts).toContain(path.join(targetDir, "agents", "memory-reader.md"));
-    await expect(readFile(path.join(targetDir, "agents", "memory-reader.md"), "utf8")).resolves.toBe("foreign");
+    expect(result.conflicts).toContain(
+      path.join(targetDir, "agents", "agent-knowledge-reader.md")
+    );
+    await expect(
+      readFile(
+        path.join(targetDir, "agents", "agent-knowledge-reader.md"),
+        "utf8"
+      )
+    ).resolves.toBe("foreign");
+  });
+
+  it("retires unchanged legacy agent templates managed by the previous manifest", async () => {
+    const targetDir = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-trae-legacy-managed-")
+    );
+    tempDirs.push(targetDir);
+    const agentsDir = path.join(targetDir, "agents");
+    const oldReader = path.join(agentsDir, "memory-reader.md");
+    const oldWriter = path.join(agentsDir, "memory-writer.md");
+    await mkdir(agentsDir, { recursive: true });
+    await writeFile(oldReader, "legacy-reader\n", "utf8");
+    await writeFile(oldWriter, "legacy-writer\n", "utf8");
+    await writeFile(
+      path.join(targetDir, ".agent-knowledge-integration.json"),
+      `${JSON.stringify(
+        {
+          version: 1,
+          product: "trae",
+          scope: "user",
+          installedAt: "2026-07-19T00:00:00.000Z",
+          components: ["agents"],
+          resources: [
+            {
+              path: oldReader,
+              kind: "file",
+              hash: hashText("legacy-reader\n")
+            },
+            {
+              path: oldWriter,
+              kind: "file",
+              hash: hashText("legacy-writer\n")
+            }
+          ]
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const result = await installIntegration({
+      packageRoot: process.cwd(),
+      product: "trae",
+      scope: "user",
+      targetDir,
+      components: ["agents"]
+    });
+
+    expect(await exists(oldReader)).toBe(false);
+    expect(await exists(oldWriter)).toBe(false);
+    expect(result.conflicts).toEqual([]);
+    expect(
+      result.managed.map((item) => path.basename(item.path)).sort()
+    ).toEqual([
+      "agent-knowledge-reader.md",
+      "agent-knowledge-writer.md"
+    ]);
+    const manifest = JSON.parse(
+      await readFile(
+        path.join(targetDir, ".agent-knowledge-integration.json"),
+        "utf8"
+      )
+    ) as { resources: Array<{ path: string }> };
+    expect(manifest.resources.map((item) => item.path)).not.toContain(oldReader);
+    expect(manifest.resources.map((item) => item.path)).not.toContain(oldWriter);
+  });
+
+  it("preserves modified legacy agent templates during the rename migration", async () => {
+    const targetDir = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-trae-legacy-modified-")
+    );
+    tempDirs.push(targetDir);
+    const agentsDir = path.join(targetDir, "agents");
+    const oldReader = path.join(agentsDir, "memory-reader.md");
+    await mkdir(agentsDir, { recursive: true });
+    await writeFile(oldReader, "user-modified-reader\n", "utf8");
+    await writeFile(
+      path.join(targetDir, ".agent-knowledge-integration.json"),
+      `${JSON.stringify(
+        {
+          version: 1,
+          product: "trae",
+          scope: "user",
+          installedAt: "2026-07-19T00:00:00.000Z",
+          components: ["agents"],
+          resources: [
+            {
+              path: oldReader,
+              kind: "file",
+              hash: hashText("legacy-original-reader\n")
+            }
+          ]
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const result = await installIntegration({
+      packageRoot: process.cwd(),
+      product: "trae",
+      scope: "user",
+      targetDir,
+      components: ["agents"]
+    });
+
+    await expect(readFile(oldReader, "utf8")).resolves.toBe(
+      "user-modified-reader\n"
+    );
+    expect(result.conflicts).toContain(oldReader);
+    await expect(
+      readFile(
+        path.join(agentsDir, "agent-knowledge-reader.md"),
+        "utf8"
+      )
+    ).resolves.toContain("agent-knowledge-reader");
   });
 
   it("overwrites target resources and replaces symlinks when explicitly requested", async () => {
@@ -190,9 +367,12 @@ describe("managed integrations", () => {
     const externalDir = await mkdtemp(path.join(tmpdir(), "agent-knowledge-trae-external-"));
     tempDirs.push(targetDir, externalDir);
     await mkdir(path.join(targetDir, "agents"), { recursive: true });
-    const externalFile = path.join(externalDir, "memory-reader.md");
+    const externalFile = path.join(externalDir, "agent-knowledge-reader.md");
     await writeFile(externalFile, "external", "utf8");
-    await symlink(externalFile, path.join(targetDir, "agents", "memory-reader.md"));
+    await symlink(
+      externalFile,
+      path.join(targetDir, "agents", "agent-knowledge-reader.md")
+    );
     await writeFile(path.join(targetDir, "hooks.json"), '{"foreign":true}\n', "utf8");
 
     const result = await installIntegration({
@@ -205,9 +385,20 @@ describe("managed integrations", () => {
     });
 
     expect(result.conflicts).toEqual([]);
-    expect((await lstat(path.join(targetDir, "agents", "memory-reader.md"))).isSymbolicLink()).toBe(false);
-    await expect(readFile(path.join(targetDir, "agents", "memory-reader.md"), "utf8")).resolves.toContain(
-      "memory-reader"
+    expect(
+      (
+        await lstat(
+          path.join(targetDir, "agents", "agent-knowledge-reader.md")
+        )
+      ).isSymbolicLink()
+    ).toBe(false);
+    await expect(
+      readFile(
+        path.join(targetDir, "agents", "agent-knowledge-reader.md"),
+        "utf8"
+      )
+    ).resolves.toContain(
+      "agent-knowledge-reader"
     );
     await expect(readFile(path.join(targetDir, "hooks.json"), "utf8")).resolves.not.toContain('"foreign"');
     await expect(readFile(externalFile, "utf8")).resolves.toBe("external");
@@ -253,7 +444,7 @@ describe("managed integrations", () => {
           "plugins",
           "agent-knowledge",
           "agents",
-          "memory-reader.md"
+          "agent-knowledge-reader.md"
         ),
         "utf8"
       )
@@ -288,7 +479,10 @@ describe("managed integrations", () => {
       "agent-knowledge hook"
     );
     await expect(
-      readFile(path.join(claudeTarget, "agents", "memory-reader.md"), "utf8")
+      readFile(
+        path.join(claudeTarget, "agents", "agent-knowledge-reader.md"),
+        "utf8"
+      )
     ).resolves.toContain("--retrieval graph");
     const doctor = await doctorIntegration({
       product: "trae",

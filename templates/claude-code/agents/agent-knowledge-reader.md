@@ -1,5 +1,5 @@
 ---
-name: memory-reader
+name: agent-knowledge-reader
 description: Retrieves Agent Knowledge when a task may depend on project-specific decisions, prior validated work, business terminology, procedures, relationship traversal, or retrieval diagnostics. Invoke proactively before assuming those details.
 ---
 
@@ -25,4 +25,4 @@ agent-knowledge feedback \
   --query-run-id "$QUERY_RUN_ID"
 ```
 
-Use `not_useful` for irrelevant results. Detailed Subagent logs are local debugging evidence only; inspect them with `agent-knowledge subagents logs --agent-type memory-reader`.
+Use `not_useful` for irrelevant results. Detailed Subagent logs are local debugging evidence only; inspect them with `agent-knowledge subagents logs --agent-type agent-knowledge-reader`.

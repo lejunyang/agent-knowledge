@@ -85,11 +85,11 @@ agent-knowledge staging status
 
 `UserPromptSubmit` 未命中或低于相关性阈值时完全静默，不输出 Hook stdout。可靠命中时只注入 `context_packet`；只有用户明确要求查看知识目录时，才返回最多 5 条与 prompt 相关的菜单项。
 
-## memory-reader 能力
+## agent-knowledge-reader 能力
 
-`memory-reader.md` 遵循 TRAE Subagent Markdown + YAML frontmatter 格式，包含：
+`agent-knowledge-reader.md` 遵循 TRAE Subagent Markdown + YAML frontmatter 格式，包含：
 
-- `name: memory-reader`
+- `name: agent-knowledge-reader`
 - `description`
 
 该 Subagent 用于按需检索 Agent Knowledge。主 Agent 在任务可能依赖项目约定、历史决策、业务术语或 SOP 时应主动调用，而不只是在用户显式问“记忆”时调用。
@@ -103,11 +103,11 @@ agent-knowledge staging status
 
 Hook 自动路径不加载 embedding 或 reranker。
 
-## memory-writer 能力
+## agent-knowledge-writer 能力
 
-`memory-writer.md` 遵循 TRAE Subagent Markdown + YAML frontmatter 格式，包含：
+`agent-knowledge-writer.md` 遵循 TRAE Subagent Markdown + YAML frontmatter 格式，包含：
 
-- `name: memory-writer`
+- `name: agent-knowledge-writer`
 - `description`
 - `tools: ""`
 
@@ -200,11 +200,11 @@ agent-knowledge query --retrieval graph --graph-depth 1 --debug
 当任何流程、行为或推荐方式发生变化时，必须审视整条 Agent 接入链，而不是只改实现：
 
 - 若 `agent-knowledge hook ...` 的行为改变，更新 `hooks.json` 或本说明。
-- 若 `CandidateMemoryInput` 字段改变，更新 `agents/memory-writer.md` 的示例。
+- 若 `CandidateMemoryInput` 字段改变，更新 `agents/agent-knowledge-writer.md` 的示例。
 - 若新增对外安装步骤，更新本说明。
 - 若 embedding、alias 建议或 query debug 输出变化，更新本说明和主 README。
-- 若检索模式、graph、feedback 或注入边界变化，更新 memory-reader。
-- 若 staging、Subagent 日志、proposal、inbox 审核或 Skill 生命周期变化，更新 memory-writer 和 memory-maintainer。
+- 若检索模式、graph、feedback 或注入边界变化，更新 agent-knowledge-reader。
+- 若 staging、Subagent 日志、proposal、inbox 审核或 Skill 生命周期变化，更新 agent-knowledge-writer 和 memory-maintainer。
 - 同步审视 `templates/claude-code/agents/*.md`。
 - 同步审视项目 `.trae/skills/*/SKILL.md`。
 - 同步审视 `templates/trae/plugin/agents/*.md` 与 `templates/trae/plugin/skills/*/SKILL.md`。

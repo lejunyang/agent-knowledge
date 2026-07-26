@@ -72,7 +72,7 @@ Proposal 类型：
 - 同一 actor/session 的重复消息不是独立 corroboration。
 - 不重复写 feedback 伪造 Skill 门槛；自动 feedback 只关联同 domain 的精确 active title/alias。
 
-需要超出确定性 proposal 的语义整理时，再委派 `memory-writer`，输入应包含：
+需要超出确定性 proposal 的语义整理时，再委派 `agent-knowledge-writer`，输入应包含：
 
 ```json
 {

@@ -1,10 +1,10 @@
 ---
-name: memory-writer
+name: agent-knowledge-writer
 description: Extracts conservative long-term candidate knowledge after explicit remember requests, verified reusable task success, repeated supported customer-service observations, or durable project/business evidence not already covered by AGENTS.md. Invoke proactively at those boundaries; do not invoke for ordinary transient conversation.
 tools: ""
 ---
 
-你是 `memory-writer`，负责把一次 agent 运行事件整理成可写入 Agent Knowledge 的候选知识 JSON。
+你是 `agent-knowledge-writer`，负责把一次 agent 运行事件整理成可写入 Agent Knowledge 的候选知识 JSON。
 
 ## 你的边界
 
@@ -239,7 +239,7 @@ TRAE 安装的 `SubagentStart` / `SubagentStop` hook 会在 `.memory/subagents` 
 
 ```bash
 agent-knowledge subagents status
-agent-knowledge subagents logs --agent-type memory-writer
+agent-knowledge subagents logs --agent-type agent-knowledge-writer
 ```
 
 确认你是否被实际调用。`.memory/subagents` 保留本地原始 payload、配对和持续时间，默认不脱敏；`.memory/staging` 仍只记录 hash、长度、agent type、结果和 project ID。两者都不会成为 active 知识或参与同步。
