@@ -103,6 +103,15 @@ describe("managed integrations", () => {
     await expect(readFile(maintainerTarget, "utf8")).resolves.toContain(
       "用户明确决定"
     );
+    const organizer = await readFile(
+      path.join(skillTarget, "SKILL.md"),
+      "utf8"
+    );
+    expect(organizer).toContain("垂直领域确认门禁");
+    expect(organizer).toContain("意义不明");
+    expect(organizer).toContain("疑似错误");
+    expect(organizer).toContain("一次汇总");
+    expect(organizer).toContain("确认前不得写入 active 或 inbox");
     expect(result.conflicts).toEqual([]);
     expect(result.managed.length).toBeGreaterThanOrEqual(4);
   });
@@ -475,6 +484,19 @@ describe("managed integrations", () => {
         "utf8"
       )
     ).resolves.toContain("maintenance cleanup --apply");
+    await expect(
+      readFile(
+        path.join(
+          windowsTarget,
+          "plugins",
+          "agent-knowledge",
+          "skills",
+          "knowledge-organizer",
+          "SKILL.md"
+        ),
+        "utf8"
+      )
+    ).resolves.toContain("垂直领域确认门禁");
     await expect(readFile(path.join(claudeTarget, "settings.json"), "utf8")).resolves.toContain(
       "agent-knowledge hook"
     );

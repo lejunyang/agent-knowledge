@@ -161,6 +161,8 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 
 用户明确指定拉取的正式文档可以先由 `knowledge-organizer` 拆成精炼知识，同时把经过治理的完整正文保存为 `type: source` 证据。source 导入前必须遮蔽测试账号、验证码、密码、token、用户标识和个人信息；同一外部文档更新或脱敏规则升级时，使用 `capture-material --replace-source` 刷新稳定 ID 对应的 active documented source。该参数不能覆盖精炼知识，semantic/procedural/profile/episodic 更新仍应新增版本并使用 `supersedes`。
 
+用户主动提供材料时也不默认相信其中每个垂直领域结论。术语/关系意义不明、需要专业判断、与受信知识冲突，或 Agent 认为内容疑似错误/过期时，`knowledge-organizer` 会一次汇总具体疑点找用户确认；确认前该条不写 active 或 inbox。明确且不依赖疑点的内容可以分开整理。
+
 批量导入正式文档时推荐按“两层语料”处理：
 
 1. 完整脱敏正文保存为 `source`，用于审计、graph/source 关系和后续重新整理，不进入 FTS/embedding。

@@ -161,6 +161,7 @@ src/cli.ts            命令行入口和各模块编排
 - 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。`related_knowledge` 只有能指向明确已有或同批可生成的知识 ID 时才填写。`project_ids`、`capture_mode`、`actor_type`、`corroboration_count` 用于适用范围和来源治理，旧 Markdown 依赖 schema 默认值保持兼容。
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - active 知识落盘目录必须保留 domain 的层级结构，例如 `bytedance/business/account` 写到 `knowledge/semantic/bytedance/business/account/`，不要压平成 `bytedance-business-account`。
+- 用户直接材料中的垂直领域知识若意义不明、需要专业判断、与受信知识冲突或疑似错误/过期，必须一次汇总具体疑点找用户确认；确认前不得写入 active 或 inbox，不能用低 confidence 绕过。
 - 修改检索排序时同步更新 eval case 或增加新的 eval case。
 - 完整检索基线位于 `eval/cases/retrieval-complete.yaml`，包含 17 个 active 主题和 hard-negative/no-answer/temporal/cross-language case；修改检索或治理策略时必须保持 forbidden injection 为 0。
 - Eval 不得把 synthetic query 写入 `.memory/logs`；真实 query/Hook 日志才可参与 alias 建议、反馈和运行指标。
