@@ -70,7 +70,15 @@ UID 只在所属账号组内唯一；跨账号组需要通过 OAuth 或业务绑
 
 ## 排查边界
 
-先确认当前域名、AppID 和账号组，再判断页面需要哪类 UID。`,
+先确认当前域名、AppID 和账号组，再判断页面需要哪类 UID。不要因为两个系统都把字段命名为 UID，就推断数值相同或可以直接互换。
+
+## 适用条件
+
+该规则适用于登录态排查、账号绑定、权限承接和跨系统身份映射。查询时还要确认知识所属项目、文档版本和当前生效时间。
+
+## 失败策略
+
+如果文档没有说明账号组、OAuth 绑定或当前页面消费的身份类型，应停止推断并向用户补充询问。不同时间、不同项目或不同业务域的结论不得静默合并。`,
         aliases: [
           {
             value: "账号组边界",
@@ -192,6 +200,6 @@ describe("progressive context", () => {
           projectKeys: ["github.com/example/other-project"]
         }
       })
-    ).rejects.toThrow("Accessible active knowledge not found");
+    ).rejects.toThrow("Accessible active claim not found");
   });
 });

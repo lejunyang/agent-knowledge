@@ -13,6 +13,36 @@ afterEach(async () => {
 });
 
 describe("writeCandidateMemory", () => {
+  it("keeps thin knowledge proposed even when the source is otherwise trusted", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-inbox-thin-")
+    );
+    tempDirs.push(root);
+
+    const result = await writeCandidateMemory(root, {
+      title: "过薄的受信知识",
+      kind: "semantic",
+      layer: "knowledge",
+      synopsis: "这条知识只有结论，没有解释。",
+      explanation: "# 结论\n\n只有一句结论。",
+      aliases: [],
+      domain: "knowledge/quality",
+      related_domains: [],
+      scenarios: [
+        { id: "knowledge-quality", role: "primary", weight: 1 }
+      ],
+      tags: [],
+      claims: [],
+      confidence: 0.95,
+      source_authority: "documented",
+      evidence: ["document:trusted"]
+    });
+    const content = await readFile(result.filePath, "utf8");
+
+    expect(result.status).toBe("proposed");
+    expect(content).toContain("review_reason: knowledge_body_too_thin");
+  });
+
   it("writes safe model-inferred memories to _inbox as proposed", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-inbox-"));
     tempDirs.push(root);

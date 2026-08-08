@@ -6,7 +6,7 @@ import { realpathSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveUserConfig, writeUserConfig } from "../src/core/config.js";
-import { captureMaterial } from "../src/memory/organizer.js";
+import { captureMaterial } from "./helpers/candidate.js";
 import { detectProject } from "../src/integration/projects.js";
 
 const execFileAsync = promisify(execFile);
@@ -219,6 +219,35 @@ describe("CLI user configuration", () => {
     ).rejects.toMatchObject({
       code: 2,
       stdout: expect.stringContaining('"knowledge_body_too_thin"')
+    });
+  });
+
+  it("initializes and reports a separate Git knowledge workspace", async () => {
+    const temp = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-workspace-cli-")
+    );
+    tempDirs.push(temp);
+    const root = path.join(temp, "data");
+
+    const initialized = JSON.parse(
+      await runCli(["workspace", "git-init", "--root", root])
+    ) as { initialized: boolean; rootDir: string };
+    const status = JSON.parse(
+      await runCli(["workspace", "git-status", "--root", root])
+    ) as {
+      isGit: boolean;
+      remote: string | null;
+      trackedKnowledgeFiles: number;
+    };
+
+    expect(initialized).toEqual({
+      initialized: true,
+      rootDir: root
+    });
+    expect(status).toMatchObject({
+      isGit: true,
+      remote: null,
+      trackedKnowledgeFiles: 0
     });
   });
 

@@ -122,7 +122,13 @@ export async function expandEvidence(
   if (!ownerId) {
     throw new Error(`Accessible active claim not found: ${input.claimId}`);
   }
-  const document = accessibleKnowledgeById(rootDir, ownerId, input.request);
+  let document;
+  try {
+    document = accessibleKnowledgeById(rootDir, ownerId, input.request);
+  } catch {
+    // claim ID 不应泄漏其所属的隔离知识 ID；不可访问与不存在统一返回 claim 错误。
+    throw new Error(`Accessible active claim not found: ${input.claimId}`);
+  }
   const claim = document.frontmatter.claims.find(
     (item) => item.id === input.claimId
   );

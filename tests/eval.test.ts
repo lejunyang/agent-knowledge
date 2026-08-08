@@ -10,7 +10,7 @@ import {
   runEvalCase,
   runEvalSuite
 } from "../src/retrieval/eval.js";
-import { captureMaterial } from "../src/memory/organizer.js";
+import { captureMaterial } from "./helpers/candidate.js";
 import { DeterministicLocalEmbeddingProvider, embedKnowledgeIndex } from "../src/retrieval/embeddings.js";
 import { DeterministicBatchReranker } from "../src/retrieval/reranker.js";
 

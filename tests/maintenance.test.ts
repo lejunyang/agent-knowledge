@@ -9,7 +9,7 @@ import {
   type MaintenanceObservation
 } from "../src/memory/maintenance.js";
 import { initKnowledgeWorkspace } from "../src/storage/workspace.js";
-import { captureMaterial } from "../src/memory/organizer.js";
+import { captureMaterial } from "./helpers/candidate.js";
 import { logMemoryFeedback } from "../src/retrieval/feedback.js";
 import { writeMaintenanceProposal } from "../src/memory/proposals.js";
 

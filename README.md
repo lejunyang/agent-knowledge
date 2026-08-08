@@ -31,8 +31,11 @@ npm install -g .
 首次使用运行交互式配置：
 
 ```bash
+agent-knowledge workspace git-init --root ~/agent-knowledge-data
 agent-knowledge configure
 ```
+
+知识数据仓库应是当前代码仓库之外的独立 private Git 目录。`workspace git-init` 只执行本地 `git init`、创建 V2 目录和安全 `.gitignore/SECURITY.md`；不会添加 remote、commit 或 push。用户必须自行创建 private remote 并确认访问范围。
 
 项目可选配置：
 
@@ -177,6 +180,8 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 
 一旦传 `--approve`，该次命令只处理列出的 ID；未知 ID 会在写文件前报错。
 
+`layer: knowledge` 的非 profile 正文少于 300 字时，无论来源看起来多可信，都强制保持 proposed 并标记 `knowledge_body_too_thin`。这防止系统再次退化为“只有一句结论、metadata 很多”的卡片库；人工可以补充背景、条件、例外、失败策略和验证后再批准。
+
 用户明确指定拉取的正式文档可以先由 `knowledge-organizer` 拆成精炼知识，同时把经过治理的证据保存为 `kind: source`、`layer: evidence`。source 导入前必须遮蔽测试账号、验证码、密码、token、用户标识和个人信息；同一外部文档更新或脱敏规则升级时，使用 `capture-material --replace-source` 刷新稳定 ID 对应的 active documented source。该参数不能覆盖精炼知识，semantic/procedural/profile/episodic/principle 更新仍应新增版本并使用 `supersedes`。
 
 用户主动提供材料时也不默认相信其中每个垂直领域结论。术语/关系意义不明、需要专业判断、与受信知识冲突，或 Agent 认为内容疑似错误/过期时，`knowledge-organizer` 会一次汇总具体疑点找用户确认；确认前该条不写 active 或 inbox。明确且不依赖疑点的内容可以分开整理。
@@ -287,6 +292,8 @@ agent-knowledge query --task "当前任务" --retrieval hybrid-graph
 
 ```bash
 # 配置
+agent-knowledge workspace git-init --root ~/agent-knowledge-data
+agent-knowledge workspace git-status --root ~/agent-knowledge-data
 agent-knowledge configure
 agent-knowledge --locale en --help
 agent-knowledge config show

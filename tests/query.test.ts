@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildContextPacket } from "../src/retrieval/contextPacket.js";
 import { rebuildIndex } from "../src/storage/indexer.js";
-import { captureMaterial } from "../src/memory/organizer.js";
+import { captureMaterial } from "./helpers/candidate.js";
 import { queryMemories, queryMemoriesWithDebug } from "../src/retrieval/query.js";
 import { weightedMetadataScore } from "../src/retrieval/scoring.js";
 import { getLogFilePath } from "../src/core/logging.js";

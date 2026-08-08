@@ -63,6 +63,17 @@ agent-knowledge config sources
 
 配置只保存行为参数和**凭据环境变量名**，不保存密码、access key、session token 或其他 secret 值。
 
+## 独立 Git 数据仓库
+
+正式投入使用前，建议在当前代码仓库之外初始化 private 知识数据仓库：
+
+```bash
+agent-knowledge workspace git-init --root ~/agent-knowledge-data
+agent-knowledge workspace git-status --root ~/agent-knowledge-data
+```
+
+目标目录不能位于另一个 Git worktree 内。命令只创建本地 Git、V2 目录和安全 `.gitignore/SECURITY.md`，不添加 remote、不 commit、不 push；用户仍需自行创建 private remote 并确认访问权限。
+
 ## 基础配置
 
 | 配置 | 默认值 | 用途 |

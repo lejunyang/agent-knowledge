@@ -235,6 +235,19 @@ export function decideCandidateStatus(input: CandidateMemoryInput): GovernanceDe
   assertNoSecretLikeContent(input);
   const normalized = normalizeCandidateInput(input);
 
+  // synopsis 不能替代解释层；正文过薄的 knowledge 必须先进入 inbox 人工补充或明确批准。
+  if (
+    normalized.layer === "knowledge" &&
+    normalized.kind !== "profile" &&
+    normalized.explanation.trim().length < 300
+  ) {
+    return {
+      status: "proposed",
+      review_required: true,
+      review_reason: "knowledge_body_too_thin"
+    };
+  }
+
   if (input.capture_mode === "automated_session" || input.actor_type === "customer") {
     return {
       status: "proposed",

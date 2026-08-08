@@ -33,6 +33,7 @@ import {
   downloadRetrievalModel,
   extractMaintenanceObservations,
   getDefaultUserConfigPath,
+  getKnowledgeGitStatus,
   getRetrievalModelStatus,
   getObservationStatus,
   getSubagentLogStatus,
@@ -78,6 +79,7 @@ import {
   doctorIntegration,
   detectProject,
   installIntegration,
+  initializeKnowledgeGitWorkspace,
   listIntegrationProducts,
   uninstallIntegration,
   writeCandidateMemory,
@@ -464,6 +466,49 @@ program
     const root = resolveCliRoot(options.root);
     await initKnowledgeWorkspace(root);
     console.log(t(`已初始化知识库：${root}`, `Initialized knowledge workspace at ${root}`));
+  });
+
+const workspace = program
+  .command("workspace")
+  .description(
+    t(
+      "初始化和检查独立知识数据工作区",
+      "Initialize and inspect a separate knowledge data workspace"
+    )
+  );
+
+workspace
+  .command("git-init")
+  .description(
+    t(
+      "在独立目录初始化 private-data-safe Git 知识库",
+      "Initialize a private-data-safe Git knowledge repository in a separate directory"
+    )
+  )
+  .requiredOption("--root <dir>", t("独立知识数据目录", "separate knowledge data directory"))
+  .action(async (options: { root: string }) => {
+    console.log(
+      JSON.stringify(
+        await initializeKnowledgeGitWorkspace(options.root),
+        null,
+        2
+      )
+    );
+  });
+
+workspace
+  .command("git-status")
+  .description(
+    t(
+      "检查知识数据仓库 Git 状态",
+      "Inspect knowledge data repository Git status"
+    )
+  )
+  .requiredOption("--root <dir>", t("知识数据目录", "knowledge data directory"))
+  .action(async (options: { root: string }) => {
+    console.log(
+      JSON.stringify(await getKnowledgeGitStatus(options.root), null, 2)
+    );
   });
 
 program

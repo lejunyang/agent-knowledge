@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseKnowledgeMarkdown } from "../src/storage/markdown.js";
-import { captureMaterial, listKnowledge, organizeInbox } from "../src/memory/organizer.js";
+import { listKnowledge, organizeInbox } from "../src/memory/organizer.js";
+import { captureMaterial } from "./helpers/candidate.js";
 import { queryMemories } from "../src/retrieval/query.js";
 
 let tempDirs: string[] = [];

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { captureMaterial } from "../src/memory/organizer.js";
+import { captureMaterial } from "./helpers/candidate.js";
 import { buildKnowledgeGraph } from "../src/graph/build.js";
 import { queryKnowledgeGraph } from "../src/graph/query.js";
 import { exportKnowledgeGraph } from "../src/graph/export.js";

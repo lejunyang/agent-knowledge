@@ -60,6 +60,8 @@ agent-knowledge write-candidate --input candidate.json
 
 候选会经过 secret-like 扫描、来源治理、去重和 schema 校验。
 
+`layer: knowledge` 且 `kind != profile` 的正文不足 300 字时，候选强制保持 proposed，review reason 为 `knowledge_body_too_thin`。高 confidence、documented、verified task 或 user-confirmed 都不能绕过；应先补充背景、条件、例外、失败策略和验证证据。
+
 周期维护前建议先运行确定性质量审计：
 
 ```bash
