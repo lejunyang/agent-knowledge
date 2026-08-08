@@ -29,8 +29,10 @@ import {
   catalogKnowledge,
   captureMaterial,
   createEmbeddingProvider,
+  createConnectorFromRegistration,
   createTranscriptConnector,
   createConfiguredSyncBackend,
+  checkConnectorSourceUpdates,
   decideHookInjection,
   downloadRetrievalModel,
   extractMaintenanceObservations,
@@ -53,6 +55,7 @@ import {
   getEventTimeline,
   initKnowledgeWorkspace,
   listEventStreams,
+  listConnectorRegistrations,
   listKnowledge,
   listSources,
   logMemoryFeedback,
@@ -68,6 +71,7 @@ import {
   queryMemoriesWithDebug,
   rebuildIndex,
   runConnectorIngestion,
+  registerConnector,
   runEvalSuite,
   runScheduledSync,
   readSubagentLogs,
@@ -104,9 +108,12 @@ import {
   exportSourceEvidence,
   deleteVaultObject,
   writeCandidateMemory,
+  redactIngestionError,
   type CandidateMemoryInput,
   type CalibrationCase,
   type CalibrationFeedback,
+  type ConnectorRegistrationInput,
+  type KnowledgeConnector,
   type MaintenanceObservation,
   type UserConfig,
   resolveLocale,
@@ -704,6 +711,40 @@ function parseIngestionLimit(value: string): number {
   return parsed;
 }
 
+/**
+ * 先登记可重跑 Connector，再执行现有 ingestion。
+ *
+ * complete inventory 的 identity 必须在写登记前由 Connector 自身校验；输出只返回 workspace
+ * 相对登记路径，不暴露本机 source 目录。登记成功不绕过后续 Vault/manifest/checkpoint 边界。
+ */
+async function runRegisteredConnectorIngestion(
+  rootDir: string,
+  connector: KnowledgeConnector,
+  registration: ConnectorRegistrationInput,
+  options: Parameters<typeof runConnectorIngestion>[2]
+) {
+  const rawInventoryIdentity = await connector.inventoryIdentity?.();
+  const registered = await registerConnector(
+    rootDir,
+    registration,
+    rawInventoryIdentity
+      ? { inventoryIdentity: rawInventoryIdentity }
+      : {}
+  );
+  const result = await runConnectorIngestion(rootDir, connector, options);
+  return {
+    ...result,
+    registration: {
+      connectorId: registered.record.connectorId,
+      kind: registered.record.kind,
+      path: path
+        .relative(path.resolve(rootDir), registered.path)
+        .split(path.sep)
+        .join("/")
+    }
+  };
+}
+
 ingest
   .command("files")
   .description(
@@ -796,11 +837,26 @@ ingest
       projectKeys: options.projectKey,
       contentType: options.contentType
     });
+    const root = resolveCliRoot(options.root);
     console.log(
       JSON.stringify(
-        await runConnectorIngestion(
-          resolveCliRoot(options.root),
+        await runRegisteredConnectorIngestion(
+          root,
           connector,
+          {
+            kind: "files",
+            connectorId: options.connectorId,
+            redactionPolicy: options.redaction,
+            options: {
+              baseDir: path.resolve(options.baseDir),
+              patterns: options.pattern,
+              artifactKind: options.artifactKind,
+              projectKeys: options.projectKey,
+              ...(options.contentType
+                ? { contentType: options.contentType }
+                : {})
+            }
+          },
           {
             vault: { key: configuredVaultKey(), actor: "ingest-files" },
             redactionPolicy: options.redaction,
@@ -852,11 +908,22 @@ ingest
       patterns: options.pattern,
       projectKeys: options.projectKey
     });
+    const root = resolveCliRoot(options.root);
     console.log(
       JSON.stringify(
-        await runConnectorIngestion(
-          resolveCliRoot(options.root),
+        await runRegisteredConnectorIngestion(
+          root,
           connector,
+          {
+            kind: "transcripts",
+            connectorId: options.connectorId,
+            redactionPolicy: "secrets-and-pii",
+            options: {
+              baseDir: path.resolve(options.baseDir),
+              patterns: options.pattern,
+              projectKeys: options.projectKey
+            }
+          },
           {
             vault: {
               key: configuredVaultKey(),
@@ -938,11 +1005,25 @@ ingest
       pathspecs: options.pathspec,
       projectKey: options.projectKey
     });
+    const root = resolveCliRoot(options.root);
     console.log(
       JSON.stringify(
-        await runConnectorIngestion(
-          resolveCliRoot(options.root),
+        await runRegisteredConnectorIngestion(
+          root,
           connector,
+          {
+            kind: "git",
+            connectorId: options.connectorId,
+            redactionPolicy: options.redaction,
+            options: {
+              repositoryDir: path.resolve(options.repository),
+              ref: options.ref,
+              pathspecs: options.pathspec,
+              ...(options.projectKey
+                ? { projectKey: options.projectKey }
+                : {})
+            }
+          },
           {
             vault: { key: configuredVaultKey(), actor: "ingest-git" },
             redactionPolicy: options.redaction,
@@ -990,11 +1071,21 @@ ingest
       exportDir: options.exportDir,
       projectKeys: options.projectKey
     });
+    const root = resolveCliRoot(options.root);
     console.log(
       JSON.stringify(
-        await runConnectorIngestion(
-          resolveCliRoot(options.root),
+        await runRegisteredConnectorIngestion(
+          root,
           connector,
+          {
+            kind: "lark-export",
+            connectorId: options.connectorId,
+            redactionPolicy: "secrets-and-pii",
+            options: {
+              exportDir: path.resolve(options.exportDir),
+              projectKeys: options.projectKey
+            }
+          },
           {
             vault: {
               key: configuredVaultKey(),
@@ -1588,6 +1679,104 @@ source
         2
       )
     );
+  });
+
+source
+  .command("check")
+  .description(
+    t(
+      "仅用本地/离线版本 probe 检查已登记 source 更新，不抓正文或写 Vault/manifest",
+      "Check registered source updates using local/offline probes without fetching bodies or writing Vault/manifests"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option(
+    "--connector-id <id...>",
+    t("只检查指定的已登记 Connector", "check only selected registered Connectors")
+  )
+  .option(
+    "--fail-on-updates",
+    t(
+      "有确定更新、待抓取确认或检查错误时以状态码 2 退出",
+      "exit with status 2 when updates, required verification, or check errors exist"
+    ),
+    false
+  )
+  .action(async (options: {
+    root?: string;
+    connectorId?: string[];
+    failOnUpdates: boolean;
+  }) => {
+    const root = resolveCliRoot(options.root);
+    const registrations = await listConnectorRegistrations(root);
+    const requested = new Set(options.connectorId ?? []);
+    const selected =
+      requested.size === 0
+        ? registrations
+        : registrations.filter((registration) =>
+            requested.has(registration.connectorId)
+          );
+    const missing = [...requested].filter(
+      (connectorId) =>
+        !registrations.some(
+          (registration) => registration.connectorId === connectorId
+        )
+    );
+    const reports = [];
+    const errors: Array<{ connectorId: string; message: string }> = missing.map(
+      (connectorId) => ({
+        connectorId,
+        message: "connector_not_registered"
+      })
+    );
+    for (const registration of selected) {
+      try {
+        const connector = createConnectorFromRegistration(registration);
+        reports.push(
+          await checkConnectorSourceUpdates(
+            root,
+            connector,
+            registration
+          )
+        );
+      } catch (error) {
+        errors.push({
+          connectorId: registration.connectorId,
+          message: redactIngestionError(
+            error,
+            registration.redactionPolicy
+          )
+        });
+      }
+    }
+    const result = {
+      networkAccess: "none" as const,
+      freshnessNotice:
+        "Git checks the registered local ref; Lark checks the registered offline export. Refresh upstream snapshots explicitly before checking remote freshness.",
+      summary: {
+        connectors: selected.length,
+        updatesAvailable: reports.reduce(
+          (sum, report) => sum + report.summary.updatesAvailable,
+          0
+        ),
+        verificationRequired: reports.reduce(
+          (sum, report) => sum + report.summary.verificationRequired,
+          0
+        ),
+        errors: errors.length
+      },
+      reports,
+      errors
+    };
+    console.log(JSON.stringify(result, null, 2));
+    if (
+      options.failOnUpdates &&
+      (result.summary.updatesAvailable > 0 ||
+        result.summary.verificationRequired > 0 ||
+        result.summary.errors > 0)
+    ) {
+      process.exitCode = 2;
+    }
   });
 
 source

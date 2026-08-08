@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile
+} from "node:fs/promises";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { realpathSync } from "node:fs";
@@ -418,7 +425,9 @@ describe("CLI user configuration", () => {
           "--connector-id",
           "trae-sessions",
           "--base-dir",
-          transcripts
+          transcripts,
+          "--project-key",
+          "github.com/example/support"
         ],
         environment
       )
@@ -771,6 +780,198 @@ describe("CLI user configuration", () => {
         }
       ]
     });
+  });
+
+  it("registers ingestion sources and checks updates without reading Vault payloads", async () => {
+    const temp = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-source-check-cli-")
+    );
+    tempDirs.push(temp);
+    const root = path.join(temp, "workspace");
+    const sourceDir = path.join(temp, "business-docs");
+    const sourceFile = path.join(sourceDir, "guide.md");
+    const environment = {
+      AGENT_KNOWLEDGE_VAULT_KEY: Buffer.alloc(32, 31).toString("base64")
+    };
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(sourceFile, "# Guide\n\nVersion one.\n", "utf8");
+
+    const first = JSON.parse(
+      await runCli(
+        [
+          "ingest",
+          "files",
+          "--root",
+          root,
+          "--connector-id",
+          "business-docs",
+          "--base-dir",
+          sourceDir,
+          "--pattern",
+          "**/*.md",
+          "--project-key",
+          "github.com/example/business"
+        ],
+        environment
+      )
+    ) as {
+      completed: number;
+      jobs: Array<{ sourceManifestPath: string; vaultObject: string }>;
+      registration: {
+        connectorId: string;
+        kind: string;
+        path: string;
+      };
+    };
+    const registrationPath = path.join(root, first.registration.path);
+    const manifestPath = first.jobs[0]!.sourceManifestPath;
+    const beforeCheck = await readFile(manifestPath, "utf8");
+
+    expect(first.completed).toBe(1);
+    expect(first.registration).toEqual({
+      connectorId: "business-docs",
+      kind: "files",
+      path: expect.stringContaining(
+        ".memory/ingestion/connectors/"
+      )
+    });
+    expect((await stat(registrationPath)).mode & 0o777).toBe(0o600);
+
+    const unchanged = JSON.parse(
+      await runCli([
+        "source",
+        "check",
+        "--root",
+        root,
+        "--connector-id",
+        "business-docs"
+      ])
+    ) as {
+      networkAccess: string;
+      summary: {
+        connectors: number;
+        updatesAvailable: number;
+        verificationRequired: number;
+        errors: number;
+      };
+      reports: Array<{
+        freshnessBoundary: string;
+        summary: { unchanged: number };
+      }>;
+    };
+
+    expect(unchanged).toMatchObject({
+      networkAccess: "none",
+      summary: {
+        connectors: 1,
+        updatesAvailable: 0,
+        verificationRequired: 0,
+        errors: 0
+      }
+    });
+    expect(unchanged.reports[0]).toMatchObject({
+      freshnessBoundary: "local-filesystem",
+      summary: { unchanged: 1 }
+    });
+    expect(await readFile(manifestPath, "utf8")).toBe(beforeCheck);
+
+    await writeFile(
+      sourceFile,
+      "# Guide\n\nVersion two with a changed workflow.\n",
+      "utf8"
+    );
+    const changed = JSON.parse(
+      await runCli([
+        "source",
+        "check",
+        "--root",
+        root,
+        "--connector-id",
+        "business-docs"
+      ])
+    ) as {
+      summary: {
+        updatesAvailable: number;
+        verificationRequired: number;
+      };
+      reports: Array<{
+        summary: { update_unknown: number };
+        items: Array<{ state: string }>;
+      }>;
+    };
+
+    expect(changed.summary).toMatchObject({
+      updatesAvailable: 0,
+      verificationRequired: 1
+    });
+    expect(changed.reports[0]).toMatchObject({
+      summary: { update_unknown: 1 }
+    });
+    expect(changed.reports[0]?.items[0]?.state).toBe("update_unknown");
+    expect(await readFile(manifestPath, "utf8")).toBe(beforeCheck);
+
+    await expect(
+      execFileAsync(
+        "node",
+        [
+          "--import",
+          tsxLoader,
+          path.resolve("src/cli.ts"),
+          "source",
+          "check",
+          "--root",
+          root,
+          "--connector-id",
+          "business-docs",
+          "--fail-on-updates"
+        ],
+        {
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            AGENT_KNOWLEDGE_DISABLE_PROJECT_CONFIG: "1"
+          }
+        }
+      )
+    ).rejects.toMatchObject({
+      code: 2,
+      stdout: expect.stringContaining('"verificationRequired": 1')
+    });
+
+    const refreshed = JSON.parse(
+      await runCli(
+        [
+          "ingest",
+          "files",
+          "--root",
+          root,
+          "--connector-id",
+          "business-docs",
+          "--base-dir",
+          sourceDir,
+          "--pattern",
+          "**/*.md",
+          "--project-key",
+          "github.com/example/business"
+        ],
+        environment
+      )
+    ) as { jobs: Array<{ classification: string }> };
+    const current = JSON.parse(
+      await runCli([
+        "source",
+        "check",
+        "--root",
+        root,
+        "--connector-id",
+        "business-docs"
+      ])
+    ) as {
+      reports: Array<{ summary: { unchanged: number } }>;
+    };
+
+    expect(refreshed.jobs[0]?.classification).toBe("content_changed");
+    expect(current.reports[0]?.summary.unchanged).toBe(1);
   });
 
   it("records support and initiative event timelines with encrypted payloads", async () => {
