@@ -71,6 +71,16 @@ agent-knowledge knowledge audit --fail-on warning
 
 审计检查正文是否过薄、frontmatter 是否压过正文、metadata 数量、source 是否已分类、supported claim 的 section/hash 是否仍有效，以及 project key 是否存在于 registry。它只输出报告，不修改知识。
 
+Source 层还报告四个正式使用覆盖率：
+
+- `sourceCoverage`：每个 source 是否已分类处理。
+- `vaultEvidenceCoverage`：manifest 是否指向本机真实存在的加密 Vault object。
+- `upstreamVersionCoverage`：是否有 revision、ETag、commit SHA、更新时间或 opaque version 可做轻量更新探测。
+- `redactionPolicyCoverage`：是否记录了实际脱敏策略。
+
+缺失或丢失 Vault object 是 error；缺少上游版本信号或脱敏策略记录是 warning。缺少上游版本
+不阻止摄入，但后续每次检查都必须抓取全文比较 content hash。
+
 `agent-knowledge-writer` 只输出 JSON，不调用工具、不写文件。主 Agent 负责把 JSON 保存为临时文件并执行 `write-candidate`。即使候选因 `user_confirmed` 或高置信 verified procedural 被判为 active status，文件仍先落在 `_inbox`，不会直接进入正式检索。
 
 用户直接提供的材料可由 `knowledge-organizer` 拆分，再使用：
@@ -102,16 +112,36 @@ Source manifest 同时保存：
 - 上游版本：revision、ETag、commit SHA、更新时间或 opaque provider version。
 - 本地确认：content hash、version fingerprint、observed time。
 - 结构：section ID、heading path、section text hash。
+- 治理：artifact kind、project keys、content type/bytes、redaction policy/counts、processing profile。
+- 原文：指向客户端加密 Vault object 的不可逆 handle。
 
 更新流程：
 
 1. Connector 先读取廉价 upstream probe。
-2. 与上次共同版本信号相同：标记 unchanged，跳过完整正文下载。
+2. 与上次共同版本信号相同且 processing profile 未变：标记 unchanged，跳过完整正文下载。
 3. 信号变化或双方没有可比较字段：重新抓取并脱敏。
 4. content hash 相同：标记 metadata-only，只更新版本记录。
 5. content hash 变化：重新生成 section；引用已变化 section 的 claim 进入待验证状态，再生成知识更新 proposal。
 
-飞书使用 revision/更新时间，Git/GitHub 使用 commit SHA；没有上游版本信息时必须重新抓取比较 content hash，不能静默假设未变化。
+飞书使用 revision/更新时间，Git/GitHub 使用 commit SHA；没有上游版本信息时必须重新抓取比较 content hash，不能静默假设未变化。normalize 或脱敏规则升级会改变 processing profile，即使上游版本没变也必须重抓；若正文 hash 未变，保留已有 source 分类状态。
+
+本地文件与完整 transcript 可先使用：
+
+```bash
+agent-knowledge ingest files \
+  --connector-id business-docs \
+  --base-dir /secure/exports/business-docs \
+  --pattern '**/*.md' \
+  --project-key github.com/example/business
+
+agent-knowledge ingest transcripts \
+  --connector-id support-sessions \
+  --base-dir /secure/exports/support-sessions \
+  --project-key github.com/example/support
+```
+
+`transcripts` 强制遮蔽 secret 与 PII，manifest 不保存正文 preview；完整脱敏内容只进入 Vault。
+每次尝试有独立 job，失败不推进 checkpoint，同一 Connector 的并发运行由本地 lock 拒绝。
 
 ## Hook、详细日志与 staging
 

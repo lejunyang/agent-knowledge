@@ -4,6 +4,7 @@
  * 它只读事实源和可重建 registry，不调用 LLM、不修改知识。审计结果用于 CI、人工 review
  * 和正式使用门禁，不能被当作新的知识事实。
  */
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
@@ -15,6 +16,7 @@ import {
   type SourceManifest
 } from "./sourceManifest.js";
 import type { KnowledgeDocument } from "../core/types.js";
+import { getVaultObjectPath } from "../vault/core.js";
 
 export type KnowledgeQualityFindingCode =
   | "knowledge_body_too_thin"
@@ -23,6 +25,10 @@ export type KnowledgeQualityFindingCode =
   | "too_many_scenarios"
   | "too_many_tags"
   | "source_without_refined_knowledge"
+  | "source_without_vault_object"
+  | "missing_vault_object"
+  | "source_without_upstream_version"
+  | "source_redaction_not_recorded"
   | "missing_source_manifest"
   | "unknown_evidence_anchor"
   | "unknown_project_key";
@@ -53,6 +59,9 @@ export type KnowledgeQualityReport = {
     knowledgeDocuments: number;
     synopsisDocuments: number;
     sourceCoverage: number;
+    vaultEvidenceCoverage: number;
+    upstreamVersionCoverage: number;
+    redactionPolicyCoverage: number;
     claimEvidenceCoverage: number;
     medianKnowledgeBodyChars: number;
     medianFrontmatterShare: number;
@@ -307,6 +316,9 @@ export async function auditKnowledgeQuality(
   const classifiedSources = manifests.filter(
     (manifest) => manifest.processing_status !== "pending"
   ).length;
+  let vaultBackedSources = 0;
+  let versionedSources = 0;
+  let redactionGovernedSources = 0;
   for (const manifest of manifests) {
     if (manifest.processing_status === "pending") {
       addFinding(findings, {
@@ -315,6 +327,56 @@ export async function auditKnowledgeQuality(
         sourceId: manifest.source_id,
         message: `Source has not been classified or refined: ${manifest.title}.`
       });
+    }
+    if (!manifest.vault_object) {
+      addFinding(findings, {
+        code: "source_without_vault_object",
+        severity: "error",
+        sourceId: manifest.source_id,
+        message: `Source manifest has no encrypted Vault evidence handle: ${manifest.title}.`
+      });
+    } else if (!existsSync(getVaultObjectPath(rootDir, manifest.vault_object))) {
+      addFinding(findings, {
+        code: "missing_vault_object",
+        severity: "error",
+        sourceId: manifest.source_id,
+        message: `Source manifest references a missing Vault object: ${manifest.vault_object}.`
+      });
+    } else {
+      vaultBackedSources += 1;
+    }
+
+    if (Object.keys(manifest.version.upstream).length === 0) {
+      addFinding(findings, {
+        code: "source_without_upstream_version",
+        severity: "warning",
+        sourceId: manifest.source_id,
+        message: `Source has no cheap upstream version signal and must be fully fetched for update checks: ${manifest.title}.`
+      });
+    } else {
+      versionedSources += 1;
+    }
+
+    if (manifest.redaction_policy === "not-applied") {
+      addFinding(findings, {
+        code: "source_redaction_not_recorded",
+        severity: "warning",
+        sourceId: manifest.source_id,
+        message: `Source does not record an applied redaction policy: ${manifest.title}.`
+      });
+    } else {
+      redactionGovernedSources += 1;
+    }
+
+    for (const projectKey of manifest.project_keys) {
+      if (!knownProjectKeys.has(projectKey)) {
+        addFinding(findings, {
+          code: "unknown_project_key",
+          severity: "warning",
+          sourceId: manifest.source_id,
+          message: `Source project key is not present in the local registry: ${projectKey}.`
+        });
+      }
     }
   }
 
@@ -341,6 +403,14 @@ export async function auditKnowledgeQuality(
       ).length,
       sourceCoverage:
         manifests.length === 0 ? 1 : classifiedSources / manifests.length,
+      vaultEvidenceCoverage:
+        manifests.length === 0 ? 1 : vaultBackedSources / manifests.length,
+      upstreamVersionCoverage:
+        manifests.length === 0 ? 1 : versionedSources / manifests.length,
+      redactionPolicyCoverage:
+        manifests.length === 0
+          ? 1
+          : redactionGovernedSources / manifests.length,
       claimEvidenceCoverage:
         supportedClaims === 0 ? 1 : groundedClaims / supportedClaims,
       medianKnowledgeBodyChars: median(bodyLengths),

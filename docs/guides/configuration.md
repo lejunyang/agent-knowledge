@@ -84,6 +84,35 @@ agent-knowledge workspace git-status --root ~/agent-knowledge-data
 
 语言优先级是全局 `--locale` > 项目 local > 项目共享 > 用户配置 > `LC_ALL` / `LC_MESSAGES` / `LANG` > 系统 locale。默认和未知系统语言都使用中文说明。
 
+## Connector 与 Vault
+
+Connector 当前没有持久化配置层；来源目录、glob、Connector ID、project key 和单次 limit 都是
+`ingest` 命令显式参数，避免安装或配置时静默创建后台 crawler。Vault 密钥仍通过
+`vault.keyEnv` 指向的环境变量注入：
+
+```bash
+agent-knowledge ingest files \
+  --root ~/agent-knowledge-data \
+  --connector-id business-docs \
+  --base-dir /secure/exports/business-docs \
+  --pattern '**/*.md' \
+  --project-key github.com/example/business
+
+agent-knowledge ingest transcripts \
+  --root ~/agent-knowledge-data \
+  --connector-id agent-sessions \
+  --base-dir /secure/exports/agent-sessions \
+  --project-key github.com/example/business
+```
+
+- `connector-id` 必须稳定且不含个人信息；更改它会创建新的 checkpoint/source identity。
+- `project-key` 可重复，必须是规范 remote key 或显式 `local/...`，不接受 Git URL/hash/绝对路径。
+- `files` 默认 `secrets-only`，可显式传 `--redaction secrets-and-pii`。
+- `transcripts` 强制内置 `secrets-and-pii` 规则，不能通过配置降级；该规则不是完整 DLP，
+  姓名、地址、业务 UID 等领域 PII 需要专用 Connector 继续清洗。
+- `--limit 0` 是有意的空运行；正数限制本次发现的 source 数。
+- 当前命令是前台单次运行，不创建 cron、launchd 或 systemd；周期运行交给用户显式的进程管理器。
+
 ## 身份与治理
 
 | 配置 | 默认值 | 用途 |

@@ -522,13 +522,28 @@ claims:
 
 ```ts
 interface KnowledgeConnector {
-  id: string;
-  discover(cursor?: ConnectorCursor): AsyncIterable<SourceDescriptor>;
-  fetch(source: SourceDescriptor): Promise<RawArtifact>;
-  normalize(raw: RawArtifact): Promise<NormalizedArtifact>;
-  checkpoint(result: IngestResult): Promise<ConnectorCursor>;
+  readonly id: string;
+  readonly processingProfile: string;
+  discover(cursor: ConnectorCursor | null): AsyncIterable<SourceDescriptor>;
+  fetch(source: SourceDescriptor): Promise<Buffer>;
+  normalize(
+    source: SourceDescriptor,
+    raw: Buffer
+  ): Promise<NormalizedArtifact>;
 }
 ```
+
+Connector 本身保持只读，不直接写 checkpoint。统一 ingestion core 在 runtime 校验 descriptor，
+然后执行脱敏、Vault、source manifest、独立 job 和原子 checkpoint；只有 completed/skipped
+才推进水位。这样不同来源不能绕过同一套安全、失败恢复和并发锁边界。
+
+当前已交付第一批本地 UTF-8 adapter：
+
+- `ingest files`：显式 base directory + glob，不跟随 symlink。
+- `ingest transcripts`：JSONL convenience adapter，强制 secret + PII 脱敏，manifest 不保存正文 preview。
+
+Source manifest 同时记录 upstream/content fingerprint 与 `processing_profile`。上游版本未变但
+normalize/脱敏规则升级时仍会重抓；正文未变则归类 metadata-only 并保留已有处理状态。
 
 ### 首批 Connector
 

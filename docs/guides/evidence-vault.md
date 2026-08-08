@@ -39,6 +39,33 @@ agent-knowledge vault status --root ~/agent-knowledge-data
 
 ## 写入
 
+`vault put` 是受控的底层写入命令，调用方必须自行完成 secret/PII 脱敏和 source manifest。
+正式文档、会话和工具轨迹优先通过 Connector 摄入，不要绕过治理编排：
+
+```bash
+agent-knowledge ingest files \
+  --root ~/agent-knowledge-data \
+  --connector-id local-business-docs \
+  --base-dir /secure/exports/business-docs \
+  --pattern '**/*.md' \
+  --project-key github.com/example/business
+
+agent-knowledge ingest transcripts \
+  --root ~/agent-knowledge-data \
+  --connector-id trae-sessions \
+  --base-dir /secure/exports/trae-sessions \
+  --project-key github.com/example/business
+```
+
+当前 `files`/`transcripts` Connector 只读取显式 `base-dir` 下的 UTF-8 普通文件，不跟随
+symbolic link。`transcripts` 默认 `**/*.jsonl` 并强制 `secrets-and-pii`；`files` 默认
+`secrets-only`，处理含个人信息的文档时显式传 `--redaction secrets-and-pii`。
+
+内置确定性规则覆盖私钥、常见 token/key、密码/cookie、邮箱、中国手机号和身份证号；它
+不是完整 DLP，也无法可靠判断姓名、地址、业务 UID 或自由文本中的所有个人信息。包含领域
+PII 的来源必须由专用 Connector 在 `normalize` 阶段额外清洗，并在
+`processingProfile` 中版本化该规则。Vault 加密不能替代来源授权与最小化采集。
+
 推荐文件输入，避免完整内容进入 shell history：
 
 ```bash
@@ -56,6 +83,26 @@ agent-knowledge vault put \
 - 非敏感 key ID。
 
 密文和访问日志文件权限为 0600；目录权限为 0700。
+
+## 增量状态与版本
+
+Connector 每次 source 尝试写入：
+
+- `knowledge/source-manifests/<source-id>.json`：严格 `schema_version: 2` 的 Git 可跟踪身份、版本、section hash、处理状态、
+  `redaction_policy`、`processing_profile`、脱敏计数和 `vault_object`。
+- `.memory/ingestion/jobs/<job-id>.json`：本次 completed/skipped/failed 审计；不保存正文。
+- `.memory/ingestion/checkpoints/<connector-hash>.json`：成功或跳过后的增量水位。
+- `.memory/ingestion/locks/<connector-hash>.lock`：同 Connector 互斥运行状态。
+
+轻量 probe 优先比较 revision、commit SHA、ETag、opaque version 或更新时间。共同信号相同且
+`processing_profile` 未变时跳过正文；无共同信号时必须重新抓取并比较 content hash。
+处理规则版本变化会强制重抓，避免旧脱敏结果永久被当作“未更新”。
+
+旧 source manifest 不做字段补齐或原地迁移；与旧 KnowledgeDocument 一样，从原始 evidence
+重新摄入生成 v2 manifest，避免缺少 Vault、脱敏或 processing profile 的记录被误认为完整。
+
+失败 job 不推进 checkpoint，可安全重跑；metadata-only 更新保留已有 source 处理状态。
+锁归活进程所有时拒绝并发，进程崩溃留下的死 PID 锁由下一次运行恢复。
 
 ## 读取
 
@@ -91,4 +138,6 @@ agent-knowledge vault delete vault_sha256_<hash> \
 - API key、token、cookie、私钥等凭据原值仍不应进入 Vault；只保存 redaction marker。
 - `.vault/access-log` 只记录 timestamp、action、object ID、actor、bytes 和 dedupe 状态，不记录正文。
 - source manifest 可以保存 `vault_object` handle，但 Git 中不能保存解密原文。
+- transcript/tool trace manifest 不保存 section preview，只保存 range/hash、脱敏计数和 Vault handle。
+- Connector 会脱敏 external key/title，但 source ID 与 connector ID 仍应使用不含个人信息的稳定标识。
 - 当前 WebDAV/S3 是 Markdown 镜像，不会上传 `.vault/`。远端加密 Vault backend 属于后续 Connector/Storage adapter 阶段。

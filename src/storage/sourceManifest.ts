@@ -8,6 +8,18 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
+/**
+ * Source manifest 需被独立 Node 数据脚本直接加载，因此在本模块保留同一 project key 契约，
+ * 不引入源码态不存在的 `.js` runtime 依赖。KnowledgeDocument 的规范定义仍在 knowledgeV2。
+ */
+const SourceProjectKeySchema = z
+  .string()
+  .min(3)
+  .regex(
+    /^(?:[a-z0-9.-]+\/[a-z0-9._/-]+|local\/[a-z0-9._/-]+)$/,
+    "expected a normalized Git remote or explicit local key"
+  );
+
 export const SourceProcessingStatusSchema = z.enum([
   "pending",
   "refined",
@@ -55,20 +67,71 @@ export const SourceSectionSchema = z.object({
   preview: z.string().max(500)
 });
 
-/** manifest 是 Git 可跟踪导航；完整 evidence object 由后续 Vault 实现。 */
-export const SourceManifestSchema = z.object({
-  schema_version: z.literal(1),
-  source_id: z.string().min(1),
-  connector: z.string().min(1),
-  external_key: z.string().min(1),
-  title: z.string().min(1),
-  version: SourceVersionSchema,
-  processing_status: SourceProcessingStatusSchema.default("pending"),
-  processing_reason: z.string().min(1).optional(),
-  duplicate_of: z.string().min(1).optional(),
-  vault_object: z.string().min(1).optional(),
-  sections: z.array(SourceSectionSchema).min(1)
-});
+/** manifest 是 Git 可跟踪导航；完整 evidence object 只保存在加密 Vault。 */
+export const SourceManifestSchema = z
+  .object({
+    schema_version: z.literal(2),
+    source_id: z.string().regex(/^src_[A-Za-z0-9_.-]+$/),
+    connector: z.string().min(1),
+    artifact_kind: z
+      .enum([
+        "document",
+        "transcript",
+        "tool_trace",
+        "attachment",
+        "repository"
+      ]),
+    external_key: z.string().min(1),
+    title: z.string().min(1),
+    project_keys: z.array(SourceProjectKeySchema),
+    content_type: z.string().min(1),
+    content_bytes: z.number().int().nonnegative(),
+    redaction_policy: z
+      .enum([
+        "secrets-only",
+        "secrets-and-pii",
+        "connector-specific",
+        "not-applied"
+      ]),
+    processing_profile: z.string().min(1),
+    redactions: z.record(z.string(), z.number().int().positive()),
+    version: SourceVersionSchema,
+    processing_status: SourceProcessingStatusSchema.default("pending"),
+    processing_reason: z.string().min(1).optional(),
+    duplicate_of: z.string().min(1).optional(),
+    vault_object: z
+      .string()
+      .regex(/^vault_sha256_[a-f0-9]{64}$/)
+      .optional(),
+    sections: z.array(SourceSectionSchema).min(1)
+  })
+  .superRefine((manifest, context) => {
+    const isSensitiveStream =
+      manifest.artifact_kind === "transcript" ||
+      manifest.artifact_kind === "tool_trace";
+    if (
+      isSensitiveStream &&
+      manifest.redaction_policy !== "secrets-and-pii"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["redaction_policy"],
+        message:
+          "transcript and tool_trace manifests require secrets-and-pii redaction"
+      });
+    }
+    if (
+      isSensitiveStream &&
+      manifest.sections.some((section) => section.preview.length > 0)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sections"],
+        message:
+          "transcript and tool_trace manifests cannot persist section previews"
+      });
+    }
+  });
 
 export type SourceManifest = z.output<typeof SourceManifestSchema>;
 export type SourceVersion = z.output<typeof SourceVersionSchema>;
@@ -294,10 +357,18 @@ function updateHeadingPath(
 export function buildSourceManifest(input: {
   sourceId: string;
   connector: string;
+  artifactKind?: z.input<typeof SourceManifestSchema>["artifact_kind"];
   externalKey: string;
   title: string;
   content: string;
   observedAt: string;
+  projectKeys?: string[];
+  contentType?: string;
+  contentBytes?: number;
+  redactionPolicy?: z.input<typeof SourceManifestSchema>["redaction_policy"];
+  processingProfile?: string;
+  redactions?: Record<string, number>;
+  includeSectionPreviews?: boolean;
   upstreamVersion?: z.input<typeof UpstreamVersionSchema>;
   processingStatus?: z.input<typeof SourceProcessingStatusSchema>;
   processingReason?: string;
@@ -326,7 +397,10 @@ export function buildSourceManifest(input: {
       text_hash: `sha256:${sha256(normalizedText)}`,
       char_start: heading.start,
       char_end: Math.max(heading.start + 1, end),
-      preview: normalizedText.slice(0, 500)
+      preview:
+        input.includeSectionPreviews === false
+          ? ""
+          : normalizedText.slice(0, 500)
     });
   }
 
@@ -338,16 +412,24 @@ export function buildSourceManifest(input: {
       text_hash: `sha256:${sha256(text)}`,
       char_start: 0,
       char_end: Math.max(1, input.content.length),
-      preview: text.slice(0, 500)
+      preview: input.includeSectionPreviews === false ? "" : text.slice(0, 500)
     });
   }
 
   return SourceManifestSchema.parse({
-    schema_version: 1,
+    schema_version: 2,
     source_id: input.sourceId,
     connector: input.connector,
+    artifact_kind: input.artifactKind ?? "document",
     external_key: input.externalKey,
     title: input.title,
+    project_keys: input.projectKeys ?? [],
+    content_type: input.contentType ?? "text/plain",
+    content_bytes:
+      input.contentBytes ?? Buffer.byteLength(input.content, "utf8"),
+    redaction_policy: input.redactionPolicy ?? "not-applied",
+    processing_profile: input.processingProfile ?? "legacy-unversioned",
+    redactions: input.redactions ?? {},
     version: buildSourceVersion({
       observedAt: input.observedAt,
       contentHash: `sha256:${sha256(input.content)}`,

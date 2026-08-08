@@ -85,8 +85,9 @@ agent-knowledge organize-inbox --approve "$MEMORY_ID" --apply
 10. 适合项目知识库的是稳定架构决策、跨模块隐含约束、项目特有业务语义、事故教训和验证 SOP。
 11. 用户明确提供/指定拉取的正式文档可使用 `source_authority: "documented"`、`actor_type: "owner"`、`capture_mode: "direct_material"`；confidence 至少 `0.8` 时可按用户要求直接 active。后台自动发现或客户转述不能使用这条放行路径。
 12. `kind: source` / `layer: evidence` 的原始证据必须先删除临时下载 URL，并遮蔽账号、验证码、密码、token、用户标识和其他个人信息；不应把“内部测试账号表”复制进长期知识。
-13. 同一外部文档更新或脱敏规则升级时，可使用 `capture-material --replace-source` 刷新同 ID 的 active documented source。该参数不能覆盖 semantic/procedural/profile/episodic；精炼知识变化必须新增版本并使用 `supersedes`。
-14. V2 KnowledgeDocument 不读取或迁移旧 Markdown；遇到旧知识时回到原始 evidence 重新拆分。`synopsis` 只用于路由，`explanation` 必须保存背景、条件、例外、步骤、失败策略和验证。
+13. 完整本地文档或会话优先使用 `agent-knowledge ingest files|transcripts`，由 Connector 统一执行版本 probe、脱敏、Vault、source manifest、job 和 checkpoint；不要把完整正文先转换成 source Markdown。
+14. 同一外部文档更新或脱敏规则升级时，Connector 会用 upstream/content/processing profile 识别更新。`capture-material --replace-source` 只兼容已有受治理 source Markdown，不能覆盖 semantic/procedural/profile/episodic；精炼知识变化必须新增版本并使用 `supersedes`。
+15. V2 KnowledgeDocument 不读取或迁移旧 Markdown；遇到旧知识时回到原始 evidence 重新拆分。`synopsis` 只用于路由，`explanation` 必须保存背景、条件、例外、步骤、失败策略和验证。
 
 ### 垂直领域确认门禁
 
@@ -150,7 +151,22 @@ JSON 可以是单个对象，也可以是数组：
 agent-knowledge capture-material --input material.json --target active
 ```
 
-刷新已导入且稳定映射到同一外部文档的 source：
+完整本地文档或 Agent transcript 先进入 Vault 和 source manifest：
+
+```bash
+agent-knowledge ingest files \
+  --connector-id business-docs \
+  --base-dir /secure/exports/business-docs \
+  --pattern '**/*.md' \
+  --project-key github.com/example/business
+
+agent-knowledge ingest transcripts \
+  --connector-id agent-sessions \
+  --base-dir /secure/exports/agent-sessions \
+  --project-key github.com/example/business
+```
+
+刷新旧流程中已导入且稳定映射到同一外部文档的 source Markdown：
 
 ```bash
 agent-knowledge capture-material \

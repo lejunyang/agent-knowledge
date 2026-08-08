@@ -4,8 +4,10 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { auditKnowledgeQuality } from "../src/storage/qualityAudit.js";
 import { buildSourceManifest } from "../src/storage/sourceManifest.js";
+import { putVaultObject } from "../src/vault/core.js";
 
 const tempDirs: string[] = [];
+const vaultKey = Buffer.alloc(32, 13);
 
 afterEach(async () => {
   await Promise.all(
@@ -17,16 +19,29 @@ afterEach(async () => {
 /** 在 fixture 工作区写 source manifest，并返回首个 section 供 claim 引用。 */
 async function writeManifest(
   root: string,
-  processingStatus: "pending" | "refined"
+  processingStatus: "pending" | "refined",
+  options: { persistVault?: boolean } = {}
 ) {
+  const content =
+    "<h1>Vue SFC</h1><p>Vue SFC template needs ESLint fallback.</p>";
+  const vaultObject = options.persistVault
+    ? await putVaultObject(
+        root,
+        { bytes: Buffer.from(content, "utf8"), contentType: "text/html" },
+        { key: vaultKey, actor: "quality-test" }
+      )
+    : undefined;
   const manifest = buildSourceManifest({
     sourceId: "src_lint_design",
     connector: "file",
     externalKey: "file:lint-design",
     title: "Lint design",
-    content: "<h1>Vue SFC</h1><p>Vue SFC template needs ESLint fallback.</p>",
+    content,
     observedAt: "2026-08-09T00:00:00.000Z",
-    processingStatus
+    upstreamVersion: { opaque_version: "fixture-v1" },
+    redactionPolicy: "connector-specific",
+    processingStatus,
+    vaultObject: vaultObject?.id
   });
   const directory = path.join(root, "knowledge", "source-manifests");
   await mkdir(directory, { recursive: true });
@@ -85,9 +100,13 @@ describe("auditKnowledgeQuality", () => {
 
     expect(report.summary.sourceDocuments).toBe(1);
     expect(report.summary.sourceCoverage).toBe(0);
+    expect(report.summary.vaultEvidenceCoverage).toBe(0);
+    expect(report.summary.upstreamVersionCoverage).toBe(1);
+    expect(report.summary.redactionPolicyCoverage).toBe(1);
     expect(report.summary.claimEvidenceCoverage).toBe(0);
     expect(codes).toContain("knowledge_body_too_thin");
     expect(codes).toContain("source_without_refined_knowledge");
+    expect(codes).toContain("source_without_vault_object");
     expect(codes).toContain("unknown_evidence_anchor");
     expect(codes).toContain("unknown_project_key");
   });
@@ -98,7 +117,9 @@ describe("auditKnowledgeQuality", () => {
     );
     tempDirs.push(root);
     await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
-    const manifest = await writeManifest(root, "refined");
+    const manifest = await writeManifest(root, "refined", {
+      persistVault: true
+    });
     const section = manifest.sections[0]!;
     const target = path.join(
       root,
@@ -139,6 +160,9 @@ describe("auditKnowledgeQuality", () => {
     });
 
     expect(report.summary.sourceCoverage).toBe(1);
+    expect(report.summary.vaultEvidenceCoverage).toBe(1);
+    expect(report.summary.upstreamVersionCoverage).toBe(1);
+    expect(report.summary.redactionPolicyCoverage).toBe(1);
     expect(report.summary.claimEvidenceCoverage).toBe(1);
     expect(
       report.findings.filter((finding) => finding.severity === "error")

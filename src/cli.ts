@@ -28,6 +28,7 @@ import {
   catalogKnowledge,
   captureMaterial,
   createEmbeddingProvider,
+  createTranscriptConnector,
   createConfiguredSyncBackend,
   decideHookInjection,
   downloadRetrievalModel,
@@ -35,6 +36,7 @@ import {
   getDefaultUserConfigPath,
   getKnowledgeGitStatus,
   getVaultStatus,
+  FileSystemConnector,
   getRetrievalModelStatus,
   getObservationStatus,
   getSubagentLogStatus,
@@ -57,6 +59,7 @@ import {
   queryMemoriesRerankedWithDebug,
   queryMemoriesWithDebug,
   rebuildIndex,
+  runConnectorIngestion,
   runEvalSuite,
   runScheduledSync,
   readSubagentLogs,
@@ -654,6 +657,205 @@ vault
           objectId,
           { reason: options.reason },
           { key: configuredVaultKey(), actor: options.actor }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+const ingest = program
+  .command("ingest")
+  .description(
+    t(
+      "从 Connector 增量摄入版本化 evidence",
+      "Incrementally ingest versioned evidence from connectors"
+    )
+  );
+
+/** 解析可重复 `--project-key`，空数组表示未绑定项目而不是自动探测。 */
+function collectProjectKey(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
+/** 校验 ingestion 数量上限，拒绝 NaN 或负数造成意外全量抓取。 */
+function parseIngestionLimit(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(
+      t(
+        "ingest limit 必须是非负整数",
+        "ingest limit must be a non-negative integer"
+      )
+    );
+  }
+  return parsed;
+}
+
+ingest
+  .command("files")
+  .description(
+    t(
+      "摄入显式目录内的 UTF-8 文档；不跟随符号链接",
+      "Ingest UTF-8 documents inside an explicit directory without following symlinks"
+    )
+  )
+  .requiredOption("--connector-id <id>", t("稳定 Connector ID", "stable connector ID"))
+  .requiredOption("--base-dir <dir>", t("只读来源目录", "read-only source directory"))
+  .requiredOption(
+    "--pattern <glob...>",
+    t("相对 base dir 的一个或多个 glob", "one or more globs relative to base dir")
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option(
+    "--artifact-kind <kind>",
+    t(
+      "document、tool_trace 或 repository",
+      "document, tool_trace, or repository"
+    ),
+    "document"
+  )
+  .option("--content-type <type>", t("覆盖 MIME 类型", "override MIME content type"))
+  .option(
+    "--project-key <key>",
+    t("绑定规范项目 key，可重复", "canonical project key; repeatable"),
+    collectProjectKey,
+    []
+  )
+  .option(
+    "--redaction <policy>",
+    t(
+      "secrets-only 或 secrets-and-pii",
+      "secrets-only or secrets-and-pii"
+    ),
+    "secrets-only"
+  )
+  .option("--limit <count>", t("本次最多处理 source 数", "maximum sources in this run"))
+  .action(async (options: {
+    connectorId: string;
+    baseDir: string;
+    pattern: string[];
+    root?: string;
+    artifactKind: string;
+    contentType?: string;
+    projectKey: string[];
+    redaction: string;
+    limit?: string;
+  }) => {
+    if (
+      options.artifactKind !== "document" &&
+      options.artifactKind !== "tool_trace" &&
+      options.artifactKind !== "repository"
+    ) {
+      throw new Error(
+        t(
+          "ingest files artifact kind 必须是 document、tool_trace 或 repository",
+          "ingest files artifact kind must be document, tool_trace, or repository"
+        )
+      );
+    }
+    if (
+      options.redaction !== "secrets-only" &&
+      options.redaction !== "secrets-and-pii"
+    ) {
+      throw new Error(
+        t(
+          "ingest redaction 必须是 secrets-only 或 secrets-and-pii",
+          "ingest redaction must be secrets-only or secrets-and-pii"
+        )
+      );
+    }
+    if (
+      options.artifactKind === "tool_trace" &&
+      options.redaction !== "secrets-and-pii"
+    ) {
+      throw new Error(
+        t(
+          "ingest files 的 tool_trace 必须使用 secrets-and-pii 脱敏",
+          "ingest files tool_trace requires secrets-and-pii redaction"
+        )
+      );
+    }
+    const connector = new FileSystemConnector({
+      id: options.connectorId,
+      baseDir: options.baseDir,
+      patterns: options.pattern,
+      artifactKind: options.artifactKind,
+      projectKeys: options.projectKey,
+      contentType: options.contentType
+    });
+    console.log(
+      JSON.stringify(
+        await runConnectorIngestion(
+          resolveCliRoot(options.root),
+          connector,
+          {
+            vault: { key: configuredVaultKey(), actor: "ingest-files" },
+            redactionPolicy: options.redaction,
+            ...(options.limit === undefined
+              ? {}
+              : { limit: parseIngestionLimit(options.limit) })
+          }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+ingest
+  .command("transcripts")
+  .description(
+    t(
+      "摄入完整 Agent 会话 JSONL，并在入 Vault 前强制遮蔽 secret 与 PII",
+      "Ingest complete Agent transcript JSONL with mandatory secret and PII redaction before Vault storage"
+    )
+  )
+  .requiredOption("--connector-id <id>", t("稳定 Connector ID", "stable connector ID"))
+  .requiredOption("--base-dir <dir>", t("只读 transcript 目录", "read-only transcript directory"))
+  .option(
+    "--pattern <glob...>",
+    t("相对 base dir 的 glob", "globs relative to base dir"),
+    ["**/*.jsonl"]
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option(
+    "--project-key <key>",
+    t("绑定规范项目 key，可重复", "canonical project key; repeatable"),
+    collectProjectKey,
+    []
+  )
+  .option("--limit <count>", t("本次最多处理 source 数", "maximum sources in this run"))
+  .action(async (options: {
+    connectorId: string;
+    baseDir: string;
+    pattern: string[];
+    root?: string;
+    projectKey: string[];
+    limit?: string;
+  }) => {
+    const connector = createTranscriptConnector({
+      id: options.connectorId,
+      baseDir: options.baseDir,
+      patterns: options.pattern,
+      projectKeys: options.projectKey
+    });
+    console.log(
+      JSON.stringify(
+        await runConnectorIngestion(
+          resolveCliRoot(options.root),
+          connector,
+          {
+            vault: {
+              key: configuredVaultKey(),
+              actor: "ingest-transcripts"
+            },
+            // transcript 默认含客户或用户原始输入，不允许降级为只遮蔽 secret。
+            redactionPolicy: "secrets-and-pii",
+            ...(options.limit === undefined
+              ? {}
+              : { limit: parseIngestionLimit(options.limit) })
+          }
         ),
         null,
         2

@@ -48,7 +48,22 @@ agent-knowledge organize-inbox --approve "$MEMORY_ID" --apply
 
 引用具体原文，说明疑点和影响，并尽量一次汇总全部问题。确认前不得写入 active 或 inbox，不能用低 confidence 代替确认。用户无法确认时跳过该条并汇报暂缓原因；其他不依赖该疑点的明确材料可分开处理。
 
-`kind: source` / `layer: evidence` 导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、用户标识和个人信息。同一外部文档或脱敏规则更新时，可显式刷新稳定 ID 对应的来源证据：
+`kind: source` / `layer: evidence` 导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、用户标识和个人信息。完整本地文档或会话优先通过 Connector 写入加密 Vault 和版本化 source manifest：
+
+```bash
+agent-knowledge ingest files \
+  --connector-id business-docs \
+  --base-dir /secure/exports/business-docs \
+  --pattern '**/*.md' \
+  --project-key github.com/example/business
+
+agent-knowledge ingest transcripts \
+  --connector-id agent-sessions \
+  --base-dir /secure/exports/agent-sessions \
+  --project-key github.com/example/business
+```
+
+旧流程中已存在的 source Markdown 才使用：
 
 ```bash
 agent-knowledge capture-material \

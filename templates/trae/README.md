@@ -134,7 +134,24 @@ Hook 自动路径不加载 embedding 或 reranker。
 
 从旧版模板升级时，integration installer 会把受 manifest 管理且未被修改的 `memory-reader.md` / `memory-writer.md` 迁移为新名称。用户修改过或非本工具管理的旧文件会保留并报告 conflict。
 
-完整 `source` 导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、用户标识和个人信息。同一外部文档更新或脱敏规则升级时，可使用：
+完整本地文档或会话优先通过 Connector 进入加密 Vault 和版本化 source manifest；不要把全文
+写进 candidate Markdown：
+
+```bash
+agent-knowledge ingest files \
+  --connector-id business-docs \
+  --base-dir /secure/exports/business-docs \
+  --pattern '**/*.md' \
+  --project-key github.com/example/business
+
+agent-knowledge ingest transcripts \
+  --connector-id agent-sessions \
+  --base-dir /secure/exports/agent-sessions \
+  --project-key github.com/example/business
+```
+
+Connector 会移除 secret/PII、跟踪 upstream/content/processing profile，并让 transcript
+manifest 不保存正文 preview。旧流程中已有的受治理 `source` Markdown 才使用：
 
 ```bash
 agent-knowledge capture-material \

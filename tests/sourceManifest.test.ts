@@ -4,6 +4,7 @@ import {
   classifySourceUpdate,
   compareSourceVersionProbe,
   decideSourceRefresh,
+  SourceManifestSchema,
   sourceSectionId,
   sourceVersionFingerprint
 } from "../src/storage/sourceManifest.js";
@@ -11,6 +12,38 @@ import {
 const observedAt = "2026-08-09T00:00:00.000Z";
 
 describe("source manifests", () => {
+  it("rejects legacy manifests instead of defaulting missing governance fields", () => {
+    expect(() =>
+      SourceManifestSchema.parse({
+        schema_version: 1,
+        source_id: "src_legacy",
+        connector: "file",
+        external_key: "legacy.md",
+        title: "Legacy",
+        version: {
+          observed_at: observedAt,
+          upstream: {},
+          content_hash:
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          fingerprint:
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        processing_status: "pending",
+        sections: [
+          {
+            section_id: "sec_aaaaaaaaaaaaaaaaaaaa",
+            heading_path: ["正文"],
+            text_hash:
+              "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            char_start: 0,
+            char_end: 1,
+            preview: "legacy"
+          }
+        ]
+      })
+    ).toThrow();
+  });
+
   it("creates stable heading-aware sections and records upstream versions", () => {
     const content = [
       "<title>账号指南</title>",

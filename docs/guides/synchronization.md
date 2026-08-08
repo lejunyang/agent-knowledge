@@ -1,8 +1,15 @@
 # WebDAV、S3 与定时同步
 
-同步只处理正式 KnowledgeDocument Markdown，不上传 `_inbox`、`_archive`、`_inbox-skills`、索引、embedding、日志、staging 或凭据。
+同步只处理正式 KnowledgeDocument Markdown，不上传 `_inbox`、`_archive`、`_inbox-skills`、
+`knowledge/source-manifests/*.json`、索引、embedding、ingestion job/checkpoint/lock、日志、
+staging、Vault 或凭据。
 
 当前实现会同步权限策略允许的 `kind: source` Markdown，包括其中已有的完整脱敏正文。WebDAV/S3 对象没有客户端加密，因此该功能是知识 Markdown 镜像，不是完整会话、附件和工具轨迹使用的 Evidence Vault。
+
+`agent-knowledge ingest files|transcripts` 写入的完整内容只在本机 `.vault/`；其 source manifest
+位于独立 private Git 数据仓库，由用户自己的 Git remote/backup 策略同步。WebDAV/S3 不会
+上传 manifest 或 Vault，不能承担证据备份。正式投入使用前应单独演练 private Git 与加密
+Vault 的 backup/restore。
 
 先运行：
 
@@ -45,7 +52,7 @@ agent-knowledge configure
 
 - `visibilityScopes`：只同步 frontmatter visibility 位于该集合的知识。默认 `project,team`，不上传 `private`。
 - `sensitivityClearance`：允许同步的最高敏感级别。默认 `internal`，不会上传 `confidential` / `secret`。
-- `_inbox`、`_archive`、`_inbox-skills`、`.memory`、proposals、Skill 草稿和凭据始终排除，即使 visibility/sensitivity 匹配。
+- `_inbox`、`_archive`、`_inbox-skills`、`.memory`、`.vault`、source manifest、proposals、Skill 草稿和凭据始终排除，即使 visibility/sensitivity 匹配。
 
 这是上传边界，不改变本地 query 的权限配置。
 

@@ -99,7 +99,8 @@ test("keeps the standalone Lark manifest builder aligned with the runtime contra
     content: "<h1>登录态</h1><h2>账号组</h2><p>正文。</p>",
     observedAt: "2026-08-09T00:00:00.000Z",
     revision: 17,
-    updatedAt: "2026-08-08T12:00:00.000Z"
+    updatedAt: "2026-08-08T12:00:00.000Z",
+    projectKeys: []
   };
   const scriptManifest = buildLarkSourceManifest(input);
   const runtimeManifest = buildSourceManifest({
@@ -112,7 +113,11 @@ test("keeps the standalone Lark manifest builder aligned with the runtime contra
     upstreamVersion: {
       revision: String(input.revision),
       updated_at: input.updatedAt
-    }
+    },
+    projectKeys: input.projectKeys,
+    contentType: "application/xml",
+    redactionPolicy: "connector-specific",
+    processingProfile: "lark-source-candidates-v1"
   });
 
   assert.deepEqual(scriptManifest, runtimeManifest);

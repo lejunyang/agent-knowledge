@@ -117,11 +117,18 @@ export function buildLarkSourceManifest(input) {
     ...(input.updatedAt ? { updated_at: input.updatedAt } : {})
   };
   return {
-    schema_version: 1,
+    schema_version: 2,
     source_id: input.sourceId,
     connector: "lark",
+    artifact_kind: "document",
     external_key: input.externalKey,
     title: input.title,
+    project_keys: input.projectKeys ?? [],
+    content_type: "application/xml",
+    content_bytes: Buffer.byteLength(input.content, "utf8"),
+    redaction_policy: "connector-specific",
+    processing_profile: "lark-source-candidates-v1",
+    redactions: {},
     version: {
       observed_at: input.observedAt,
       upstream,
@@ -315,7 +322,8 @@ export async function buildLarkSourceCandidates(options) {
       observedAt:
         document.observedAt ?? manifest.generatedAt ?? new Date().toISOString(),
       revision: document.revisionId,
-      updatedAt: document.upstreamUpdatedAt
+      updatedAt: document.upstreamUpdatedAt,
+      projectKeys: options.projectKey ? [options.projectKey] : []
     });
     const manifestRelativePath = path.posix.join(
       "source-manifests",

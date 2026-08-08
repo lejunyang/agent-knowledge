@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { realpathSync } from "node:fs";
@@ -334,6 +334,96 @@ describe("CLI user configuration", () => {
         environment
       )
     ).rejects.toThrow();
+  });
+
+  it("incrementally ingests transcript files without printing or persisting private values", async () => {
+    const temp = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-ingest-cli-")
+    );
+    tempDirs.push(temp);
+    const root = path.join(temp, "workspace");
+    const transcripts = path.join(temp, "transcripts");
+    const privateEmail = "owner@example.com";
+    const privatePhone = "13800138000";
+    const privateToken = "sk-abcdefghijklmnopqrstuvwxyz123456";
+    const environment = {
+      AGENT_KNOWLEDGE_VAULT_KEY: Buffer.alloc(32, 6).toString("base64")
+    };
+    await mkdir(transcripts, { recursive: true });
+    await writeFile(
+      path.join(transcripts, `session-${privateEmail}.jsonl`),
+      [
+        JSON.stringify({ role: "user", email: privateEmail, phone: privatePhone }),
+        JSON.stringify({ role: "tool", token: privateToken })
+      ].join("\n"),
+      "utf8"
+    );
+
+    const firstStdout = await runCli(
+      [
+        "ingest",
+        "transcripts",
+        "--root",
+        root,
+        "--connector-id",
+        "trae-sessions",
+        "--base-dir",
+        transcripts,
+        "--project-key",
+        "github.com/example/support"
+      ],
+      environment
+    );
+    const first = JSON.parse(firstStdout) as {
+      completed: number;
+      skipped: number;
+      jobs: Array<{
+        sourceManifestPath: string;
+        redactions: Record<string, number>;
+      }>;
+    };
+    const manifestText = await readFile(
+      first.jobs[0]!.sourceManifestPath,
+      "utf8"
+    );
+    const persistedOutput = `${firstStdout}\n${manifestText}`;
+
+    expect(first).toMatchObject({
+      completed: 1,
+      skipped: 0,
+      jobs: [
+        {
+          redactions: {
+            openai_style_key: 1,
+            phone: 1,
+            email: 1
+          }
+        }
+      ]
+    });
+    expect(persistedOutput).not.toContain(privateEmail);
+    expect(persistedOutput).not.toContain(privatePhone);
+    expect(persistedOutput).not.toContain(privateToken);
+    expect(manifestText).toContain("[REDACTED_EMAIL]");
+    expect(manifestText).not.toContain("[REDACTED_PHONE]");
+    expect(manifestText).not.toContain("[REDACTED_SECRET]");
+
+    const second = JSON.parse(
+      await runCli(
+        [
+          "ingest",
+          "transcripts",
+          "--root",
+          root,
+          "--connector-id",
+          "trae-sessions",
+          "--base-dir",
+          transcripts
+        ],
+        environment
+      )
+    ) as { completed: number; skipped: number };
+    expect(second).toMatchObject({ completed: 0, skipped: 1 });
   });
 
   it("automatically scopes query to the current Git project unless project IDs are explicit", async () => {

@@ -72,6 +72,33 @@ agent-knowledge query --task "审查 Vue SFC lint 迁移方案"
 agent-knowledge knowledge audit
 ```
 
+把本地正式文档或完整 Agent 会话增量摄入加密 Vault：
+
+```bash
+export AGENT_KNOWLEDGE_VAULT_KEY="<32-byte-key-as-hex-or-base64>"
+
+agent-knowledge ingest files \
+  --root ~/agent-knowledge-data \
+  --connector-id business-doc-exports \
+  --base-dir /secure/exports/business-docs \
+  --pattern '**/*.md' '**/*.txt' \
+  --project-key github.com/example/business
+
+agent-knowledge ingest transcripts \
+  --root ~/agent-knowledge-data \
+  --connector-id trae-sessions \
+  --base-dir /secure/exports/trae-sessions \
+  --project-key github.com/example/business
+```
+
+`ingest` 只输出 job、manifest 和 Vault handle，不输出正文。`files` 默认遮蔽内置规则可识别的
+secret；`transcripts` 强制应用内置 secret + PII 规则，且 Git manifest 不保存 transcript
+正文 preview。确定性 detector 目前覆盖私钥、常见 token/key、密码/cookie、邮箱、中国手机号
+和身份证号，不等同于完整 DLP；姓名、地址、业务 UID 等领域 PII 应由专用 Connector 在
+`normalize` 阶段继续清洗，未确认授权范围的材料不得摄入。
+当前文件 Connector 只接受显式目录内的 UTF-8 普通文件，不跟随 symlink；PDF/Office、飞书
+在线拉取和 GitHub API 使用后续专用 Connector，不能伪装成 UTF-8 文件处理。
+
 项目作用域使用规范化 Git remote，例如 `github.com/lejunyang/agent-knowledge`。普通 query 会自动发现当前仓库 remote；跨项目诊断使用：
 
 ```bash
@@ -192,7 +219,8 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 
 1. `synopsis`：只负责低成本路由和首次上下文。
 2. knowledge 正文：保存背景、条件、例外、步骤、失败策略和验证方式。
-3. evidence：保存 source/section/hash 引用；完整敏感原文未来由加密 Evidence Vault 管理。
+3. evidence：source manifest 保存 source/section/hash、版本、脱敏摘要和 Vault handle；完整
+   原文进入客户端加密 Evidence Vault，不进入普通 query 或 Git。
 
 现有 656 份飞书 source 和 33 条旧精炼知识只用于审计问题与构造评测，不会迁移进 V2 正式知识库。等 Vault、Connector 和蒸馏流程完成后，从原始飞书导出或重新拉取结果全量重建。
 
@@ -211,6 +239,12 @@ node scripts/fetch-lark-corpus.mjs \
   --output local_exports/lark \
   --refresh-existing
 ```
+
+Connector 还会把 normalize/脱敏规则版本写入 `processing_profile`。即使上游 revision 没变，
+处理规则升级也会强制重抓；正文 hash 未变时仍归类为 `metadata_only`，并保留已有
+`refined/duplicate/obsolete/no_long_term_value/blocked` 状态。每次尝试独立写入
+`.memory/ingestion/jobs/`，failed 不推进 checkpoint；同一 Connector 并发运行由本地锁拒绝，
+进程崩溃留下的死 PID 锁可在下次运行时恢复。
 
 ## 主动记忆何时发生
 
