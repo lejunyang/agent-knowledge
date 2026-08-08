@@ -101,6 +101,15 @@ const HookConfigSchema = z
   })
   .default({});
 
+const VaultConfigSchema = z
+  .object({
+    keyEnv: z
+      .string()
+      .min(1)
+      .default("AGENT_KNOWLEDGE_VAULT_KEY")
+  })
+  .default({});
+
 export const UserConfigSchema = z.object({
   version: z.literal(1).default(1),
   locale: z.enum(["auto", "zh-CN", "en"]).default("auto"),
@@ -109,7 +118,8 @@ export const UserConfigSchema = z.object({
   embeddings: EmbeddingsConfigSchema,
   integration: IntegrationConfigSchema,
   sync: SyncConfigSchema,
-  hooks: HookConfigSchema
+  hooks: HookConfigSchema,
+  vault: VaultConfigSchema
 });
 
 export type UserConfig = z.output<typeof UserConfigSchema>;

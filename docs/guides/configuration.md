@@ -80,6 +80,7 @@ agent-knowledge workspace git-status --root ~/agent-knowledge-data
 | --- | --- | --- |
 | `locale` | `auto` | `auto` 检测系统语言；支持 `zh-CN` 和 `en`，其他语言回退中文 |
 | `knowledgeRoot` | `~/.agent_knowledge` | Markdown、索引、缓存和日志的 workspace root |
+| `vault.keyEnv` | `AGENT_KNOWLEDGE_VAULT_KEY` | 保存 32 字节 Vault 密钥的环境变量名；配置不保存真实密钥 |
 
 语言优先级是全局 `--locale` > 项目 local > 项目共享 > 用户配置 > `LC_ALL` / `LC_MESSAGES` / `LANG` > 系统 locale。默认和未知系统语言都使用中文说明。
 

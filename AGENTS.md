@@ -15,6 +15,7 @@
 - `.memory/subagents/*.jsonl` 是本地完整 Subagent 调试日志，不是事实源，不参与同步或上下文注入。
 - `.memory/observations/*.jsonl` 和 `.memory/proposals/*.json` 是自动维护的中间审阅产物，不是事实源。
 - `.memory/graph.json` 是从 Markdown/proposal 重建的知识关系图索引，不是事实源。
+- `.vault/objects` 保存 AES-256-GCM 客户端加密的完整 evidence；`.vault/tombstones` 和 `.vault/access-log` 保存删除与访问审计。Vault 不进入 Git、Markdown 同步或普通 query。
 - `agent-knowledge query` 输出主 agent 可注入的 Context Packet 2.0，默认只含 synopsis 与 evidence handles；`--debug` 附带 scorer/reranker 和分项分数。
 - `agent-knowledge knowledge audit` 检查正文密度、metadata 膨胀、source 处理状态、claim evidence 和 project registry；`knowledge show/evidence` 执行安全过滤后显式展开。
 - `agent-knowledge embed-index` 使用本地 provider 生成 embedding 缓存；`agent-knowledge suggest-aliases` 只输出 dry-run JSON 建议。
@@ -50,7 +51,7 @@ CLI 的 workspace root 解析优先级：
 
 项目配置对象递归合并，数组整体替换。`AGENT_KNOWLEDGE_DISABLE_PROJECT_CONFIG=1` 仅供测试和故障诊断临时关闭自动发现。
 
-配置文件可以保存 root、actor/capture policy、检索与 embedding、integration、同步 provider 和定时间隔，但只能保存凭据所在的环境变量名，禁止写入密码、access key、secret key 或 session token。
+配置文件可以保存 root、actor/capture policy、检索与 embedding、integration、同步 provider、定时间隔和 `vault.keyEnv`，但只能保存凭据所在的环境变量名，禁止写入密码、access key、secret key、Vault key 或 session token。
 
 知识库固定在：
 
@@ -186,6 +187,8 @@ src/cli.ts            命令行入口和各模块编排
 - `kind: source` / `layer: evidence` 保存证据引用或受治理的 evidence，不属于默认 query includeTypes，也不得进入 SQLite/FTS 或 embedding 缓存；检索内容应由 organizer 拆成 semantic/procedural/episodic/profile/principle。
 - 图谱 HTML 默认只展示精炼 active 知识；结构邻居、source memory/source evidence 只能通过点击展开、证据或全图模式按需显示，不能恢复为全量节点首次布局。
 - source 原始证据导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、用户标识和个人信息；禁止把内部测试账号表原样写入长期知识。
+- 完整会话、工具轨迹和附件只能进入授权范围内的加密 Vault；凭据原值仍禁止保存。Vault key 必须从环境/KMS/密码管理器注入，CLI 不得把解密正文输出到 stdout。
+- Vault 删除必须物理移除密文并写 tombstone，不能只删除 source manifest 或对象引用；默认不得静默复活同 ID 对象。
 - 每个可更新 source 必须记录稳定 `source_id/external_key` 和版本信息。优先保存上游 revision、ETag、commit SHA、更新时间或 provider version ID，并始终保存抓取后的 content hash；没有上游版本信号时只能回退到重新抓取后比较 content hash。
 - Connector 更新检查应先做轻量 probe：共同版本信号未变时跳过正文下载；信号变化或不可比较时抓取全文。上游 metadata 变化但 content hash 不变不得触发重蒸馏；content hash 变化才重新切 section、失效受影响 claim 并生成更新 proposal。
 - `capture-material --replace-source` 只能刷新同 ID、active、documented 的 source 原始证据；不得覆盖 semantic/procedural/profile/episodic，精炼知识更新必须使用新知识和 `supersedes`。

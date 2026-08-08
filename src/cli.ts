@@ -34,6 +34,7 @@ import {
   extractMaintenanceObservations,
   getDefaultUserConfigPath,
   getKnowledgeGitStatus,
+  getVaultStatus,
   getRetrievalModelStatus,
   getObservationStatus,
   getSubagentLogStatus,
@@ -48,6 +49,7 @@ import {
   logMemoryFeedback,
   organizeInbox,
   planMaintenanceCleanup,
+  putVaultObject,
   queryKnowledgeGraph,
   queryMemoriesGraphWithDebug,
   queryMemories,
@@ -80,8 +82,12 @@ import {
   detectProject,
   installIntegration,
   initializeKnowledgeGitWorkspace,
+  initializeVault,
   listIntegrationProducts,
   uninstallIntegration,
+  vaultKeyFromEnvironment,
+  writeVaultObjectToFile,
+  deleteVaultObject,
   writeCandidateMemory,
   type CandidateMemoryInput,
   type CalibrationCase,
@@ -508,6 +514,150 @@ workspace
   .action(async (options: { root: string }) => {
     console.log(
       JSON.stringify(await getKnowledgeGitStatus(options.root), null, 2)
+    );
+  });
+
+/** 从生效配置指向的环境变量加载 Vault key，避免真实密钥出现在 CLI 参数。 */
+function configuredVaultKey(): Buffer {
+  return vaultKeyFromEnvironment(userConfig().vault.keyEnv);
+}
+
+const vault = program
+  .command("vault")
+  .description(
+    t(
+      "管理本地客户端加密 Evidence Vault",
+      "Manage the local client-encrypted Evidence Vault"
+    )
+  );
+
+vault
+  .command("init")
+  .description(t("初始化 Vault 目录并验证环境密钥", "Initialize Vault directories and validate the environment key"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await initializeVault(resolveCliRoot(options.root), {
+          key: configuredVaultKey(),
+          actor: "cli"
+        }),
+        null,
+        2
+      )
+    );
+  });
+
+vault
+  .command("status")
+  .description(t("查看不含正文的 Vault 健康摘要", "Show Vault health without evidence content"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { root?: string }) => {
+    let key: Buffer | undefined;
+    try {
+      key = configuredVaultKey();
+    } catch {
+      key = undefined;
+    }
+    console.log(
+      JSON.stringify(
+        await getVaultStatus(resolveCliRoot(options.root), { key }),
+        null,
+        2
+      )
+    );
+  });
+
+vault
+  .command("put")
+  .description(t("加密写入完整 evidence", "Encrypt and store complete evidence"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--input <file>", t("要写入的本地文件", "local file to store"))
+  .option("--text <text>", t("受控自动化使用的 UTF-8 文本；推荐文件输入", "UTF-8 text for controlled automation; file input is preferred"))
+  .option("--content-type <type>", t("MIME 类型", "MIME content type"), "application/octet-stream")
+  .option("--actor <actor>", t("访问审计 actor", "access audit actor"), "cli")
+  .action(async (options: {
+    root?: string;
+    input?: string;
+    text?: string;
+    contentType: string;
+    actor: string;
+  }) => {
+    if (Boolean(options.input) === Boolean(options.text)) {
+      throw new Error("vault put requires exactly one of --input or --text");
+    }
+    const bytes = options.input
+      ? await readFile(path.resolve(options.input))
+      : Buffer.from(options.text ?? "", "utf8");
+    console.log(
+      JSON.stringify(
+        await putVaultObject(
+          resolveCliRoot(options.root),
+          { bytes, contentType: options.contentType },
+          { key: configuredVaultKey(), actor: options.actor }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+vault
+  .command("get")
+  .description(t("解密对象到显式本地文件；不向 stdout 输出正文", "Decrypt an object to an explicit local file without printing content"))
+  .argument("<object-id>", t("Vault object ID", "Vault object ID"))
+  .requiredOption("--output <file>", t("解密输出文件", "decrypted output file"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--overwrite", t("允许覆盖已有输出文件", "allow overwriting the output file"), false)
+  .option("--actor <actor>", t("访问审计 actor", "access audit actor"), "cli")
+  .action(async (
+    objectId: string,
+    options: {
+      root?: string;
+      output: string;
+      overwrite: boolean;
+      actor: string;
+    }
+  ) => {
+    console.log(
+      JSON.stringify(
+        await writeVaultObjectToFile(
+          resolveCliRoot(options.root),
+          {
+            id: objectId,
+            outputPath: options.output,
+            overwrite: options.overwrite
+          },
+          { key: configuredVaultKey(), actor: options.actor }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+vault
+  .command("delete")
+  .description(t("物理删除密文并写 tombstone", "Physically delete ciphertext and write a tombstone"))
+  .argument("<object-id>", t("Vault object ID", "Vault object ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--reason <reason>", t("删除原因；Vault 只保存 hash", "deletion reason; Vault stores only its hash"))
+  .option("--actor <actor>", t("访问审计 actor", "access audit actor"), "cli")
+  .action(async (
+    objectId: string,
+    options: { root?: string; reason?: string; actor: string }
+  ) => {
+    console.log(
+      JSON.stringify(
+        await deleteVaultObject(
+          resolveCliRoot(options.root),
+          objectId,
+          { reason: options.reason },
+          { key: configuredVaultKey(), actor: options.actor }
+        ),
+        null,
+        2
+      )
     );
   });
 

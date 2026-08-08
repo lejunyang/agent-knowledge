@@ -77,6 +77,7 @@ describe("user configuration", () => {
     expect(loaded.embeddings.graphDecay).toBe(0.6);
     expect(loaded.embeddings.rerankerProfile).toBe("bge-reranker-large");
     expect(loaded.sync.provider).toBe("none");
+    expect(loaded.vault.keyEnv).toBe("AGENT_KNOWLEDGE_VAULT_KEY");
     expect(loaded.locale).toBe("auto");
   });
 
@@ -258,6 +259,7 @@ describe("user configuration", () => {
       "15",
       "project,team",
       "internal",
+      "BOT_VAULT_KEY",
       "0.65",
       "900",
       "4",
@@ -307,8 +309,13 @@ describe("user configuration", () => {
       catalogMaxItems: 4,
       detailedSubagentLogging: true
     });
+    expect(configured.vault).toEqual({
+      keyEnv: "BOT_VAULT_KEY"
+    });
     expect(raw).toContain("BOT_WEBDAV_PASSWORD");
+    expect(raw).toContain("BOT_VAULT_KEY");
     expect(raw).not.toContain("actual-password-value");
     expect(raw).not.toContain("actual-access-key-value");
+    expect(raw).not.toContain(Buffer.alloc(32, 5).toString("base64"));
   });
 });

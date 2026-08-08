@@ -251,6 +251,91 @@ describe("CLI user configuration", () => {
     });
   });
 
+  it("stores, restores, and deletes encrypted Vault evidence without printing plaintext", async () => {
+    const temp = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-vault-cli-")
+    );
+    tempDirs.push(temp);
+    const root = path.join(temp, "workspace");
+    const output = path.join(temp, "restored.txt");
+    const environment = {
+      AGENT_KNOWLEDGE_VAULT_KEY: Buffer.alloc(32, 5).toString("base64")
+    };
+
+    const initialized = JSON.parse(
+      await runCli(["vault", "init", "--root", root], environment)
+    ) as { initialized: boolean; keyId: string };
+    const putStdout = await runCli(
+      [
+        "vault",
+        "put",
+        "--root",
+        root,
+        "--text",
+        "complete private transcript",
+        "--content-type",
+        "text/plain"
+      ],
+      environment
+    );
+    const stored = JSON.parse(putStdout) as { id: string };
+    const status = JSON.parse(
+      await runCli(["vault", "status", "--root", root], environment)
+    ) as { objects: number; keyAvailable: boolean };
+    const restored = JSON.parse(
+      await runCli(
+        [
+          "vault",
+          "get",
+          stored.id,
+          "--root",
+          root,
+          "--output",
+          output
+        ],
+        environment
+      )
+    ) as { outputPath: string };
+    const deleted = JSON.parse(
+      await runCli(
+        [
+          "vault",
+          "delete",
+          stored.id,
+          "--root",
+          root,
+          "--reason",
+          "test cleanup"
+        ],
+        environment
+      )
+    ) as { deleted: boolean };
+
+    expect(initialized.initialized).toBe(true);
+    expect(initialized.keyId).toMatch(/^key_[a-f0-9]{16}$/);
+    expect(putStdout).not.toContain("complete private transcript");
+    expect(status).toMatchObject({ objects: 1, keyAvailable: true });
+    expect(restored.outputPath).toBe(output);
+    expect(await import("node:fs/promises").then(({ readFile }) =>
+      readFile(output, "utf8")
+    )).toBe("complete private transcript");
+    expect(deleted.deleted).toBe(true);
+    await expect(
+      runCli(
+        [
+          "vault",
+          "get",
+          stored.id,
+          "--root",
+          root,
+          "--output",
+          path.join(temp, "missing.txt")
+        ],
+        environment
+      )
+    ).rejects.toThrow();
+  });
+
   it("automatically scopes query to the current Git project unless project IDs are explicit", async () => {
     const temp = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-project-"));
     tempDirs.push(temp);

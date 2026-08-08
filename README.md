@@ -18,6 +18,7 @@ Agent Knowledge 是一个本地、可审计的 Agent 知识持久化工具。V2 
 - [候选治理、自动维护和 Skill 生命周期](docs/guides/memory-governance.md)
 - [TRAE、TRAE CN 与 Claude Code 接入](docs/guides/integrations.md)
 - [WebDAV、S3 与定时同步](docs/guides/synchronization.md)
+- [完整文档、会话与工具轨迹的加密 Evidence Vault](docs/guides/evidence-vault.md)
 - [研究与设计](#研究与设计)
 
 ## 快速开始
@@ -54,6 +55,7 @@ agent-knowledge config sources
 - embedding provider、profile 和检索模式。
 - TRAE / TRAE CN / Claude Code integration。
 - WebDAV / S3 和定时同步间隔。
+- Evidence Vault 密钥所在的环境变量名；不会保存真实密钥。
 
 安装 Agent 产品接入；不传参数时会交互式选择：
 
@@ -294,6 +296,7 @@ agent-knowledge query --task "当前任务" --retrieval hybrid-graph
 # 配置
 agent-knowledge workspace git-init --root ~/agent-knowledge-data
 agent-knowledge workspace git-status --root ~/agent-knowledge-data
+agent-knowledge vault init --root ~/agent-knowledge-data
 agent-knowledge configure
 agent-knowledge --locale en --help
 agent-knowledge config show
@@ -332,6 +335,12 @@ agent-knowledge graph export --format html --output knowledge-graph.html
 agent-knowledge knowledge audit --fail-on warning
 agent-knowledge knowledge show <knowledge-id> --layer knowledge
 agent-knowledge knowledge evidence <claim-id>
+
+# 加密完整 evidence
+agent-knowledge vault status
+agent-knowledge vault put --input complete-session.json --content-type application/json
+agent-knowledge vault get <vault-object-id> --output /secure/path/session.json
+agent-knowledge vault delete <vault-object-id> --reason "retention expired"
 
 # 同步
 agent-knowledge sync run

@@ -420,6 +420,14 @@ export async function runConfigurationWizard(options: {
     ],
     current.sync.sensitivityClearance
   );
+  const vaultKeyEnv = await promptInput(
+    prompter,
+    t(
+      "Evidence Vault 密钥环境变量名 — 只保存变量名，不保存密钥",
+      "Evidence Vault key environment variable — only the variable name is stored"
+    ),
+    current.vault.keyEnv
+  );
   const hookMinScore = decimalInRange(
     await promptInput(
       prompter,
@@ -499,6 +507,9 @@ export async function runConfigurationWizard(options: {
       sensitivityClearance: syncSensitivity,
       webdav,
       s3
+    },
+    vault: {
+      keyEnv: vaultKeyEnv
     },
     hooks: {
       minScore: hookMinScore,
