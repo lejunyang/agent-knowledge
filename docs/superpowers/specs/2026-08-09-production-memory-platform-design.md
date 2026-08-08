@@ -460,8 +460,15 @@ source_id: src_lark_...
 connector: lark
 external_key: wiki:...
 title: 商家中心前端开发指南
-content_hash: ...
-version_observed_at: ...
+version:
+  observed_at: ...
+  upstream:
+    revision: "2461"
+    updated_at: ...
+    commit_sha: null
+    etag: null
+  content_hash: sha256:...
+  fingerprint: sha256:...
 vault_object: vault_sha256_...
 sections:
   - section_id: sec_...
@@ -472,6 +479,16 @@ sections:
     char_start: 18320
     char_end: 21790
 ```
+
+版本判断遵循“先 probe、后确认”：
+
+- 飞书优先比较 `revision/updated_at`。
+- Git/GitHub 优先比较 commit SHA，必要时增加 path/tree hash。
+- HTTP/WebDAV/S3 优先比较 ETag、Last-Modified 或 object version ID。
+- 共同上游信号相同可跳过完整抓取。
+- 上游信号变化但 content hash 相同是 metadata-only，不重蒸馏。
+- content hash 变化才重新切 section、失效受影响 claim。
+- 没有共同上游信号时必须抓取后比较 hash，不能判定 unchanged。
 
 ### Knowledge Claim
 

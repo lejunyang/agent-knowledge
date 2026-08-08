@@ -183,6 +183,8 @@ src/cli.ts            命令行入口和各模块编排
 - `kind: source` / `layer: evidence` 保存证据引用或受治理的 evidence，不属于默认 query includeTypes，也不得进入 SQLite/FTS 或 embedding 缓存；检索内容应由 organizer 拆成 semantic/procedural/episodic/profile/principle。
 - 图谱 HTML 默认只展示精炼 active 知识；结构邻居、source memory/source evidence 只能通过点击展开、证据或全图模式按需显示，不能恢复为全量节点首次布局。
 - source 原始证据导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、用户标识和个人信息；禁止把内部测试账号表原样写入长期知识。
+- 每个可更新 source 必须记录稳定 `source_id/external_key` 和版本信息。优先保存上游 revision、ETag、commit SHA、更新时间或 provider version ID，并始终保存抓取后的 content hash；没有上游版本信号时只能回退到重新抓取后比较 content hash。
+- Connector 更新检查应先做轻量 probe：共同版本信号未变时跳过正文下载；信号变化或不可比较时抓取全文。上游 metadata 变化但 content hash 不变不得触发重蒸馏；content hash 变化才重新切 section、失效受影响 claim 并生成更新 proposal。
 - `capture-material --replace-source` 只能刷新同 ID、active、documented 的 source 原始证据；不得覆盖 semantic/procedural/profile/episodic，精炼知识更新必须使用新知识和 `supersedes`。
 - Batch reranker 默认只在显式 `query --rerank` 或 reranked eval 中启用；Hook 热路径不得加载 cross-encoder。默认 pipeline 是融合 top 30 -> batch rerank -> threshold -> top 8。
 - Calibration 只能输出 dry-run 参数建议，不得自动改用户配置；目标函数必须优先惩罚 forbidden injection、abstention failure 和 not_useful feedback。

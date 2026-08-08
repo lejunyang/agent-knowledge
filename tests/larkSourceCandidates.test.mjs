@@ -2,9 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   auditLarkSourceContent,
+  buildLarkSourceCandidates,
+  buildLarkSourceManifest,
   redactSecretLikeContent,
   sanitizeLarkSourceXml
 } from "../scripts/build-lark-source-candidates.mjs";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { buildSourceManifest } from "../src/storage/sourceManifest.ts";
 
 test("removes temporary Lark resource handles while preserving readable evidence", () => {
   const input = `<p id="block1">正文</p>
@@ -83,4 +89,95 @@ test("keeps conceptual account guidance while auditing actual private values", (
     "secret_assignment",
     "phone_number"
   ]);
+});
+
+test("keeps the standalone Lark manifest builder aligned with the runtime contract", () => {
+  const input = {
+    sourceId: "src_lark_contract",
+    externalKey: "wiki:contract",
+    title: "Contract",
+    content: "<h1>登录态</h1><h2>账号组</h2><p>正文。</p>",
+    observedAt: "2026-08-09T00:00:00.000Z",
+    revision: 17,
+    updatedAt: "2026-08-08T12:00:00.000Z"
+  };
+  const scriptManifest = buildLarkSourceManifest(input);
+  const runtimeManifest = buildSourceManifest({
+    sourceId: input.sourceId,
+    connector: "lark",
+    externalKey: input.externalKey,
+    title: input.title,
+    content: input.content,
+    observedAt: input.observedAt,
+    upstreamVersion: {
+      revision: String(input.revision),
+      updated_at: input.updatedAt
+    }
+  });
+
+  assert.deepEqual(scriptManifest, runtimeManifest);
+});
+
+test("writes versioned source manifests and project keys for Lark batches", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "lark-source-version-"));
+  const corpus = path.join(root, "corpus");
+  const output = path.join(root, "output");
+  const directory = "doc-one";
+  await mkdir(path.join(corpus, directory), { recursive: true });
+  await writeFile(
+    path.join(corpus, directory, "content.xml"),
+    "<h1>版本</h1><p>完整正文。</p>",
+    "utf8"
+  );
+  await writeFile(
+    path.join(corpus, "manifest.json"),
+    `${JSON.stringify({
+      generatedAt: "2026-08-09T00:00:00.000Z",
+      documents: {
+        "wiki:one": {
+          key: "wiki:one",
+          title: "版本文档",
+          directory,
+          objType: "docx",
+          revisionId: 42,
+          upstreamUpdatedAt: "2026-08-08T12:00:00.000Z",
+          observedAt: "2026-08-09T00:00:00.000Z",
+          contentHash: "upstream-content-hash"
+        }
+      }
+    }, null, 2)}\n`,
+    "utf8"
+  );
+
+  try {
+    const result = await buildLarkSourceCandidates({
+      input: path.join(corpus, "manifest.json"),
+      output,
+      batchSize: 20,
+      projectKey: "github.com/example/knowledge"
+    });
+    const batch = JSON.parse(await readFile(result.batchPaths[0], "utf8"));
+    const mapping = JSON.parse(
+      await readFile(path.join(output, "mapping.json"), "utf8")
+    );
+    const sourceManifest = JSON.parse(
+      await readFile(
+        path.join(output, mapping[0].sourceManifest),
+        "utf8"
+      )
+    );
+
+    assert.deepEqual(batch[0].project_keys, [
+      "github.com/example/knowledge"
+    ]);
+    assert.equal(sourceManifest.version.upstream.revision, "42");
+    assert.equal(
+      sourceManifest.version.upstream.updated_at,
+      "2026-08-08T12:00:00.000Z"
+    );
+    assert.match(sourceManifest.version.content_hash, /^sha256:[a-f0-9]{64}$/);
+    assert.equal(mapping[0].sourceVersion.fingerprint, sourceManifest.version.fingerprint);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

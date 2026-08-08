@@ -23,6 +23,116 @@ function stableId(key) {
     .slice(0, 20)}`;
 }
 
+/** 返回 source manifest 使用的标准 SHA-256 hex。 */
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+/** 去除 XML 标签并归一化空白；调用前必须完成 source 脱敏。 */
+function stripXml(value) {
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#\d+;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** 以固定字段顺序计算版本 fingerprint，保持与 TypeScript runtime 一致。 */
+function sourceVersionFingerprint(upstream, contentHash) {
+  return `sha256:${sha256(
+    JSON.stringify({
+      revision: upstream.revision ?? null,
+      updated_at: upstream.updated_at ?? null,
+      etag: upstream.etag ?? null,
+      commit_sha: upstream.commit_sha?.toLowerCase() ?? null,
+      opaque_version: upstream.opaque_version ?? null,
+      content_hash: contentHash
+    })
+  )}`;
+}
+
+/** 生成只受当前 section 标题路径和正文影响的稳定 section ID。 */
+function sourceSectionId(sourceId, headingPath, text) {
+  return `sec_${sha256(
+    JSON.stringify([sourceId, headingPath, sha256(text.trim())])
+  ).slice(0, 20)}`;
+}
+
+/** 从已经脱敏的飞书 XML 构建版本化 source manifest。 */
+export function buildLarkSourceManifest(input) {
+  const headings = [
+    ...input.content.matchAll(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi)
+  ].flatMap((match) => {
+    const title = stripXml(match[2] ?? "");
+    return title
+      ? [
+          {
+            level: Number.parseInt(match[1] ?? "1", 10),
+            title,
+            start: match.index ?? 0,
+            contentStart: (match.index ?? 0) + match[0].length
+          }
+        ]
+      : [];
+  });
+  let headingPath = [];
+  const sections = headings.map((heading, index) => {
+    headingPath = [
+      ...headingPath.slice(0, heading.level - 1),
+      heading.title
+    ];
+    const end = headings[index + 1]?.start ?? input.content.length;
+    const text =
+      stripXml(input.content.slice(heading.contentStart, end)) || heading.title;
+    return {
+      section_id: sourceSectionId(input.sourceId, headingPath, text),
+      heading_path: headingPath,
+      text_hash: `sha256:${sha256(text)}`,
+      char_start: heading.start,
+      char_end: Math.max(heading.start + 1, end),
+      preview: text.slice(0, 500)
+    };
+  });
+  if (sections.length === 0) {
+    const text = stripXml(input.content) || input.title;
+    sections.push({
+      section_id: sourceSectionId(input.sourceId, ["正文"], text),
+      heading_path: ["正文"],
+      text_hash: `sha256:${sha256(text)}`,
+      char_start: 0,
+      char_end: Math.max(1, input.content.length),
+      preview: text.slice(0, 500)
+    });
+  }
+  const contentHash = `sha256:${sha256(input.content)}`;
+  const upstream = {
+    ...(input.revision === undefined
+      ? {}
+      : { revision: String(input.revision) }),
+    ...(input.updatedAt ? { updated_at: input.updatedAt } : {})
+  };
+  return {
+    schema_version: 1,
+    source_id: input.sourceId,
+    connector: "lark",
+    external_key: input.externalKey,
+    title: input.title,
+    version: {
+      observed_at: input.observedAt,
+      upstream,
+      content_hash: contentHash,
+      fingerprint: sourceVersionFingerprint(upstream, contentHash)
+    },
+    processing_status: "pending",
+    sections
+  };
+}
+
 /** 从 XML 标题或 manifest 标题生成短摘要。 */
 function sourceSummary(title, content) {
   const text = content
@@ -144,7 +254,7 @@ function parseArguments(argv) {
     "lark-source-batches"
   );
   let batchSize = 20;
-  let projectId;
+  let projectKey;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--input") {
@@ -153,8 +263,8 @@ function parseArguments(argv) {
       output = path.resolve(argv[++index]);
     } else if (argument === "--batch-size") {
       batchSize = Number.parseInt(argv[++index], 10);
-    } else if (argument === "--project-id") {
-      projectId = argv[++index];
+    } else if (argument === "--project-key") {
+      projectKey = argv[++index];
     } else if (argument === "--help") {
       return { help: true };
     } else {
@@ -167,7 +277,7 @@ function parseArguments(argv) {
   if (!Number.isInteger(batchSize) || batchSize <= 0) {
     throw new Error("--batch-size must be a positive integer");
   }
-  return { help: false, input, output, batchSize, projectId };
+  return { help: false, input, output, batchSize, projectKey };
 }
 
 /** 生成 source candidate batches 和可审计映射表。 */
@@ -179,6 +289,8 @@ export async function buildLarkSourceCandidates(options) {
   );
   await rm(options.output, { recursive: true, force: true });
   await mkdir(options.output, { recursive: true });
+  const manifestsDirectory = path.join(options.output, "source-manifests");
+  await mkdir(manifestsDirectory, { recursive: true });
   const candidates = [];
   const mappings = [];
   for (const document of documents) {
@@ -194,6 +306,26 @@ export async function buildLarkSourceCandidates(options) {
       );
     }
     const id = stableId(document.key);
+    const sourceId = `src_${id.slice(2)}`;
+    const sourceManifest = buildLarkSourceManifest({
+      sourceId,
+      externalKey: document.key,
+      title: document.title,
+      content,
+      observedAt:
+        document.observedAt ?? manifest.generatedAt ?? new Date().toISOString(),
+      revision: document.revisionId,
+      updatedAt: document.upstreamUpdatedAt
+    });
+    const manifestRelativePath = path.posix.join(
+      "source-manifests",
+      `${sourceId}.json`
+    );
+    await writeFile(
+      path.join(options.output, manifestRelativePath),
+      `${JSON.stringify(sourceManifest, null, 2)}\n`,
+      "utf8"
+    );
     candidates.push({
       id,
       title: document.title,
@@ -206,17 +338,24 @@ export async function buildLarkSourceCandidates(options) {
       source_authority: "documented",
       summary: sourceSummary(document.title, content),
       content,
-      evidence: [`lark:${document.key}`],
+      evidence: [
+        `lark:${document.key}`,
+        `source:${sourceId}`,
+        `manifest:${manifestRelativePath}`
+      ],
       capture_mode: "direct_material",
       actor_type: "owner",
-      project_ids: options.projectId ? [options.projectId] : []
+      project_keys: options.projectKey ? [options.projectKey] : []
     });
     mappings.push({
       id,
       key: document.key,
       title: document.title,
       directory: document.directory,
-      contentHash: document.contentHash
+      contentHash: document.contentHash,
+      sourceId,
+      sourceManifest: manifestRelativePath,
+      sourceVersion: sourceManifest.version
     });
   }
   const batchPaths = [];
@@ -249,7 +388,7 @@ function printHelp() {
   node scripts/build-lark-source-candidates.mjs \
     --input local_exports/lark-business/manifest.json \
     [--output local_exports/organizer/lark-source-batches] \
-    [--batch-size 20] [--project-id project_xxx]`);
+    [--batch-size 20] [--project-key github.com/owner/repo]`);
 }
 
 if (path.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {

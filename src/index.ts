@@ -18,6 +18,7 @@ export * from "./storage/workspace.js";
 export * from "./storage/knowledgePaths.js";
 export * from "./storage/indexer.js";
 export * from "./storage/catalog.js";
+export * from "./storage/sourceManifest.js";
 export * from "./retrieval/query.js";
 export * from "./retrieval/contextPacket.js";
 export * from "./retrieval/eval.js";

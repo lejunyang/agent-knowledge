@@ -187,6 +187,22 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 
 现有 656 份飞书 source 和 33 条旧精炼知识只用于审计问题与构造评测，不会迁移进 V2 正式知识库。等 Vault、Connector 和蒸馏流程完成后，从原始飞书导出或重新拉取结果全量重建。
 
+可更新来源必须同时记录稳定身份和版本指纹：
+
+- 飞书：document key + `revision_id` + `updated_at/obj_edit_time` + content hash。
+- Git/GitHub：规范 remote + commit SHA + relevant path/tree hash。
+- HTTP/WebDAV：稳定 URL/object key + ETag/Last-Modified/version ID + content hash。
+- 上游不提供版本时：只能重新抓取后比较 content hash，不能把“没有版本信息”当作“没有更新”。
+
+更新检查先比较 revision/ETag/commit SHA 等轻量信号；信号未变可跳过正文下载。抓取后若只有上游 revision 或更新时间变化但 content hash 不变，记为 metadata-only，不触发重蒸馏；只有 content hash 变化才重新切 section、失效相关 claim 并生成更新 proposal。飞书递归脚本可显式执行：
+
+```bash
+node scripts/fetch-lark-corpus.mjs \
+  --root-url <wiki-or-doc-url> \
+  --output local_exports/lark \
+  --refresh-existing
+```
+
 ## 主动记忆何时发生
 
 主动记忆不是“所有对话自动写入”：

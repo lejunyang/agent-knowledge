@@ -119,3 +119,61 @@ if (args[0] === "wiki") {
     await rm(output, { recursive: true, force: true });
   }
 });
+
+test("refreshes existing documents with a cheap version probe before fetching content", async () => {
+  const output = await mkdtemp(path.join(tmpdir(), "lark-corpus-refresh-"));
+  const originalPath = process.env.PATH;
+  const fixtureBin = path.join(output, "bin");
+  const counterPath = path.join(output, "docs-fetch-count.txt");
+  const { mkdir, writeFile, chmod } = await import("node:fs/promises");
+  await mkdir(fixtureBin, { recursive: true });
+  const fakeCli = path.join(fixtureBin, "lark-cli");
+  await writeFile(
+    fakeCli,
+    `#!/usr/bin/env node
+const fs = require("fs");
+const args = process.argv.slice(2);
+const nodeIndex = args.indexOf("--node-token");
+const docIndex = args.indexOf("--doc");
+const token = nodeIndex >= 0 ? args[nodeIndex + 1] : args[docIndex + 1];
+if (args[0] === "wiki") {
+  process.stdout.write(JSON.stringify({ok:true,data:{node_token:token,obj_token:token,obj_type:"docx",title:token,updated_at:"2026-08-08T12:00:00.000Z"}}));
+} else {
+  const counter = ${JSON.stringify(counterPath)};
+  const count = fs.existsSync(counter) ? Number(fs.readFileSync(counter, "utf8")) : 0;
+  fs.writeFileSync(counter, String(count + 1));
+  process.stdout.write(JSON.stringify({ok:true,data:{document:{document_id:token,revision_id:17,content:'<h1>Version</h1><p>body</p>'}}}));
+}
+`,
+    "utf8"
+  );
+  await chmod(fakeCli, 0o755);
+  process.env.PATH = `${fixtureBin}:${originalPath}`;
+  try {
+    const first = await fetchLarkCorpus({
+      roots: ["root"],
+      output,
+      identity: "user",
+      maxDocuments: 10,
+      refreshExisting: false
+    });
+    assert.equal(first.documents["wiki:root"].lastRefreshClassification, "new");
+    assert.equal(await readFile(counterPath, "utf8"), "1");
+
+    const second = await fetchLarkCorpus({
+      roots: ["root"],
+      output,
+      identity: "user",
+      maxDocuments: 10,
+      refreshExisting: true
+    });
+    assert.equal(
+      second.documents["wiki:root"].lastRefreshClassification,
+      "unchanged"
+    );
+    assert.equal(await readFile(counterPath, "utf8"), "1");
+  } finally {
+    process.env.PATH = originalPath;
+    await rm(output, { recursive: true, force: true });
+  }
+});

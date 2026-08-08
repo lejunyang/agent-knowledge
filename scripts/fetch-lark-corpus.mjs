@@ -245,6 +245,7 @@ function parseArguments(argv) {
   let identity = "user";
   let maxDocuments = 500;
   let retryFailures = false;
+  let refreshExisting = false;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--root-url") {
@@ -257,6 +258,8 @@ function parseArguments(argv) {
       maxDocuments = Number.parseInt(argv[++index], 10);
     } else if (argument === "--retry-failures") {
       retryFailures = true;
+    } else if (argument === "--refresh-existing") {
+      refreshExisting = true;
     } else if (argument === "--help") {
       return {
         help: true,
@@ -264,7 +267,8 @@ function parseArguments(argv) {
         output,
         identity,
         maxDocuments,
-        retryFailures
+        retryFailures,
+        refreshExisting
       };
     } else {
       throw new Error(`Unknown argument: ${argument}`);
@@ -285,7 +289,8 @@ function parseArguments(argv) {
     output,
     identity,
     maxDocuments,
-    retryFailures
+    retryFailures,
+    refreshExisting
   };
 }
 
@@ -295,7 +300,21 @@ function printHelp() {
   node scripts/fetch-lark-corpus.mjs \\
     --root-url <wiki-or-doc-url> [--root-url <url> ...] \\
     [--output local_exports/lark] [--as user] [--max-documents 500] \\
-    [--retry-failures]`);
+    [--retry-failures] [--refresh-existing]`);
+}
+
+/** 把飞书秒级时间戳或 ISO 时间统一为 ISO，用于廉价版本探测。 */
+function resolveUpstreamUpdatedAt(resolved) {
+  if (typeof resolved.updated_at === "string") {
+    return resolved.updated_at;
+  }
+  if (resolved.obj_edit_time !== undefined) {
+    const timestamp = Number(resolved.obj_edit_time);
+    if (Number.isFinite(timestamp) && timestamp > 0) {
+      return new Date(timestamp * 1000).toISOString();
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -359,7 +378,10 @@ export async function fetchLarkCorpus(options) {
       delete manifest.failures[key];
     }
   }
-  const visited = new Set(Object.keys(manifest.documents));
+  // 普通续跑跳过已抓文档；refresh 模式重新遍历现有文档并先做轻量版本探测。
+  const visited = new Set(
+    options.refreshExisting ? [] : Object.keys(manifest.documents)
+  );
   if (!options.retryFailures) {
     for (const key of Object.keys(manifest.failures)) {
       visited.add(key);
@@ -378,6 +400,18 @@ export async function fetchLarkCorpus(options) {
   };
   for (const root of options.roots) {
     enqueue(rootReference(root));
+  }
+  if (options.refreshExisting) {
+    for (const document of Object.values(manifest.documents)) {
+      enqueue({
+        token: document.requestedToken,
+        fileType:
+          document.key.split(":", 1)[0] ?? document.objType ?? "wiki",
+        title: document.title,
+        source: "refresh",
+        original: document.original
+      });
+    }
   }
   // 恢复长任务时从已抓文档的引用图重建 pending queue，不能只重新处理 root。
   for (const document of Object.values(manifest.documents)) {
@@ -410,6 +444,33 @@ export async function fetchLarkCorpus(options) {
     try {
       const node = await resolveNode(reference, options.identity);
       const resolved = node?.data ?? {};
+      const previous = manifest.documents[key];
+      const probedUpdatedAt = resolveUpstreamUpdatedAt(resolved);
+      if (
+        options.refreshExisting &&
+        previous &&
+        probedUpdatedAt &&
+        previous.upstreamUpdatedAt === probedUpdatedAt
+      ) {
+        manifest.documents[key] = {
+          ...previous,
+          lastCheckedAt: new Date().toISOString(),
+          lastRefreshClassification: "unchanged"
+        };
+        for (const child of previous.documentReferences ?? []) {
+          enqueue({
+            ...child,
+            original: previous.original,
+            parent: key
+          });
+        }
+        manifest.generatedAt = new Date().toISOString();
+        await writeJson(manifestPath, manifest);
+        console.error(
+          `[${attempted}] ${key} unchanged=${probedUpdatedAt} documents=${Object.keys(manifest.documents).length}`
+        );
+        continue;
+      }
       const fetchToken =
         resolved.obj_token ??
         resolved.node_token ??
@@ -426,6 +487,15 @@ export async function fetchLarkCorpus(options) {
         throw new Error(`Document content missing for ${key}`);
       }
       const references = extractLarkReferences(documentData.content);
+      const contentHash = createHash("sha256")
+        .update(documentData.content)
+        .digest("hex");
+      const refreshClassification = previous
+        ? previous.contentHash === contentHash
+          ? "metadata_only"
+          : "content_changed"
+        : "new";
+      const checkedAt = new Date().toISOString();
       await mkdir(directory, { recursive: true });
       await writeJson(path.join(directory, "node.json"), node);
       await writeJson(path.join(directory, "document.json"), document);
@@ -449,12 +519,23 @@ export async function fetchLarkCorpus(options) {
         spaceId: resolved.space_id,
         parentNodeToken: resolved.parent_node_token,
         revisionId: documentData.revision_id,
+        upstreamUpdatedAt: probedUpdatedAt,
+        observedAt: checkedAt,
+        lastCheckedAt: checkedAt,
+        lastRefreshClassification: refreshClassification,
+        previousVersion:
+          previous && refreshClassification !== "unchanged"
+            ? {
+                revisionId: previous.revisionId,
+                upstreamUpdatedAt: previous.upstreamUpdatedAt,
+                contentHash: previous.contentHash,
+                observedAt: previous.observedAt
+              }
+            : undefined,
         source: reference.source,
         original: reference.original,
         directory: path.relative(output, directory),
-        contentHash: createHash("sha256")
-          .update(documentData.content)
-          .digest("hex"),
+        contentHash,
         documentReferences: references.documents,
         resourceReferences: references.resources
       };

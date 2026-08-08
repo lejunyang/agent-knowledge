@@ -83,6 +83,25 @@ agent-knowledge capture-material \
 
 只有 owner 的受信、含义明确且通过必要领域确认的直接材料才适合 `--target active`。外部材料或用户要求先审阅时使用 `--target inbox`；意义不明、疑似错误和需要用户领域判断的内容在确认前不写任何候选目录。
 
+### 可更新来源的版本治理
+
+Source manifest 同时保存：
+
+- 稳定身份：`source_id`、connector、external key。
+- 上游版本：revision、ETag、commit SHA、更新时间或 opaque provider version。
+- 本地确认：content hash、version fingerprint、observed time。
+- 结构：section ID、heading path、section text hash。
+
+更新流程：
+
+1. Connector 先读取廉价 upstream probe。
+2. 与上次共同版本信号相同：标记 unchanged，跳过完整正文下载。
+3. 信号变化或双方没有可比较字段：重新抓取并脱敏。
+4. content hash 相同：标记 metadata-only，只更新版本记录。
+5. content hash 变化：重新生成 section；引用已变化 section 的 claim 进入待验证状态，再生成知识更新 proposal。
+
+飞书使用 revision/更新时间，Git/GitHub 使用 commit SHA；没有上游版本信息时必须重新抓取比较 content hash，不能静默假设未变化。
+
 ## Hook、详细日志与 staging
 
 TRAE/Claude Hook 的职责分开：
