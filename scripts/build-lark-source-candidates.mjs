@@ -95,8 +95,7 @@ export function buildLarkSourceManifest(input) {
       heading_path: headingPath,
       text_hash: `sha256:${sha256(text)}`,
       char_start: heading.start,
-      char_end: Math.max(heading.start + 1, end),
-      preview: text.slice(0, 500)
+      char_end: Math.max(heading.start + 1, end)
     };
   });
   if (sections.length === 0) {
@@ -106,8 +105,7 @@ export function buildLarkSourceManifest(input) {
       heading_path: ["正文"],
       text_hash: `sha256:${sha256(text)}`,
       char_start: 0,
-      char_end: Math.max(1, input.content.length),
-      preview: text.slice(0, 500)
+      char_end: Math.max(1, input.content.length)
     });
   }
   const contentHash = `sha256:${sha256(input.content)}`;
@@ -118,7 +116,7 @@ export function buildLarkSourceManifest(input) {
     ...(input.updatedAt ? { updated_at: input.updatedAt } : {})
   };
   return {
-    schema_version: 3,
+    schema_version: 5,
     source_id: input.sourceId,
     connector: "lark",
     artifact_kind: "document",
@@ -138,6 +136,7 @@ export function buildLarkSourceManifest(input) {
       fingerprint: sourceVersionFingerprint(upstream, contentHash)
     },
     processing_status: "pending",
+    refined_knowledge_ids: [],
     sections
   };
 }

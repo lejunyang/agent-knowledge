@@ -155,8 +155,8 @@ agent-knowledge ingest git \
   --pathspec README.md docs
 ```
 
-Connector 会移除 secret/PII、跟踪 upstream/content/processing profile，并让 transcript
-manifest 不保存正文 preview。Git Connector 只读 committed blob，不读取 dirty/untracked
+Connector 会移除 secret/PII、跟踪 upstream/content/processing profile，并让所有 source
+manifest 只保存 heading/hash/range、不保存正文 preview。Git Connector 只读 committed blob，不读取 dirty/untracked
 内容，也不自动 fetch/pull；blob SHA 判断单文档更新，commit SHA 记录仓库版本。旧流程中
 已有的受治理 `source` Markdown 才使用：
 
@@ -168,6 +168,19 @@ agent-knowledge capture-material \
 ```
 
 该参数只刷新同 ID、active、documented 的 source，不能覆盖精炼知识。
+
+## source-distiller
+
+安装 skills 组件后，`source-distiller` 负责 versioned source -> candidate knowledge：
+
+1. `source list --needs-review` / `source show` 获取当前 fingerprint、review token 和 section anchors。
+2. `source export --fingerprint ... --output ...` 在 knowledge workspace 外写受控 0600 临时 evidence。
+3. 拆分成有背景、条件、例外、失败策略和 current claim anchor 的 candidate，默认写 inbox。
+4. active knowledge 形成后，使用同 fingerprint/review token `source mark --status refined --knowledge-id ...`。
+5. duplicate/obsolete/no_long_term_value/blocked 显式写不含敏感原值的 reason。
+
+Source 更新时旧 fingerprint 会拒绝 mark；content change/restored 回 pending，metadata-only
+保留 current receipt。Skill 不自动批准 inbox。
 
 Writer 应主动处理显式记忆、已验证可复用结果和 `AGENTS.md` 未覆盖的稳定项目/业务约束；不应记录一次性命令、普通源码结构或未验证推断。
 

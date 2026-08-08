@@ -71,7 +71,7 @@ agent-knowledge knowledge audit --fail-on warning
 
 审计检查正文是否过薄、frontmatter 是否压过正文、metadata 数量、source 是否已分类、supported claim 的 section/hash 是否仍有效，以及 project key 是否存在于 registry。它只输出报告，不修改知识。
 
-Source 层还报告四个正式使用覆盖率：
+Source 层还报告五个正式使用覆盖率：
 
 - `sourceCoverage`：每个 source 是否已分类处理。
 - `sourceAvailabilityCoverage`：source 当前是否仍存在于上游完整 inventory。
@@ -81,6 +81,50 @@ Source 层还报告四个正式使用覆盖率：
 
 缺失或丢失 Vault object 是 error；缺少上游版本信号或脱敏策略记录是 warning。缺少上游版本
 不阻止摄入，但后续每次检查都必须抓取全文比较 content hash。
+
+## Source 审阅与蒸馏
+
+Connector 只负责把证据安全摄入，不会自动把文档结论写成 active knowledge。查看审阅队列：
+
+```bash
+agent-knowledge source list --needs-review
+agent-knowledge source show "$SOURCE_ID"
+```
+
+`show` 返回 current fingerprint、review token、section heading/ID/hash/range、project scope 和
+export 状态，不解密完整正文。需要语义蒸馏时使用 `source-distiller` Skill，把完整 evidence
+写入 knowledge workspace 之外、owner 控制的 0600 临时文件：
+
+```bash
+agent-knowledge source export "$SOURCE_ID" \
+  --fingerprint "$EXPECTED_FINGERPRINT" \
+  --output /secure/tmp/source-evidence
+```
+
+候选默认通过 `write-candidate` 或 `capture-material --target inbox`。只有候选已经成为 active
+knowledge，且其中 supported claim 的 current anchor 指向该 source，才能：
+
+```bash
+agent-knowledge source mark "$SOURCE_ID" \
+  --fingerprint "$EXPECTED_FINGERPRINT" \
+  --review-token "$REVIEW_TOKEN" \
+  --status refined \
+  --knowledge-id "$ACTIVE_KNOWLEDGE_ID"
+```
+
+其他结果显式标为 `duplicate`、`obsolete`、`no_long_term_value` 或 `blocked`，并写不含
+secret/PII 的 reason。duplicate 必须指向存在且 available 的 source。mark 同时使用
+fingerprint 和 review token 乐观锁；source 在阅读期间更新，或其他 reviewer 已改变 receipt
+时会拒绝旧结论。
+
+export/mark 与 Connector ingestion 使用同一把本地锁，确保 fingerprint/token 校验和读取/写入
+之间不会插入并发摄入。锁只保护本机 workspace；多设备通过 private Git 同步 manifest 时仍需
+依赖 Git 冲突审阅，不能最后写入获胜。
+
+Source manifest v5 review receipt 保存 `processed_at`、`processed_content_hash` 和
+`refined_knowledge_ids`。metadata-only 更新不要求重蒸馏；content change/restored 清空 receipt
+并回 pending。missing source 先进入 missing+pending，人工审查历史 Vault evidence 与受影响
+claim 后再标 obsolete/blocked。
 
 `agent-knowledge-writer` 只输出 JSON，不调用工具、不写文件。主 Agent 负责把 JSON 保存为临时文件并执行 `write-candidate`。即使候选因 `user_confirmed` 或高置信 verified procedural 被判为 active status，文件仍先落在 `_inbox`，不会直接进入正式检索。
 
@@ -146,7 +190,7 @@ agent-knowledge ingest git \
   --pathspec README.md docs
 ```
 
-`transcripts` 强制遮蔽 secret 与 PII，manifest 不保存正文 preview；完整脱敏内容只进入 Vault。
+`transcripts` 强制遮蔽 secret 与 PII；所有 manifest 都不保存正文 preview，完整脱敏内容只进入 Vault。
 每次尝试有独立 job，失败不推进 checkpoint，同一 Connector 的并发运行由本地 lock 拒绝。
 
 Git Connector 用 blob SHA 判断单文档变化，用 commit SHA 记录仓库版本；无关代码 commit

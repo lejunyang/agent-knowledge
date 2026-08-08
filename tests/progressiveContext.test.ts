@@ -35,7 +35,8 @@ async function createGroundedKnowledge(root: string): Promise<{
     content:
       "<h1>登录态</h1><p>商业化 UID 与抖音 UID 属于不同账号组。</p>",
     observedAt: "2026-08-09T00:00:00.000Z",
-    processingStatus: "refined"
+    processingStatus: "refined",
+    refinedKnowledgeIds: ["k_account_identity_boundary"]
   });
   const manifestDirectory = path.join(
     root,

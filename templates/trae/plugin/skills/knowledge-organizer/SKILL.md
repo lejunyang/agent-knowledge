@@ -71,6 +71,9 @@ agent-knowledge ingest git \
 Git 摄入只读 committed blob，不包含 dirty/untracked 内容，也不自动 fetch/pull；完整运行会对账
 删除，恢复后的 source 回到 pending。
 
+摄入完成后委派 `source-distiller`，由它执行 `source list/show/export/mark`；manifest 不含正文
+preview，不要只根据 heading/hash 生成结论，也不要在 active knowledge/claim anchor 尚未形成时标 refined。
+
 旧流程中已存在的 source Markdown 才使用：
 
 ```bash

@@ -98,8 +98,8 @@ agent-knowledge vault put \
 
 Connector 每次 source 尝试写入：
 
-- `knowledge/source-manifests/<source-id>.json`：严格 `schema_version: 3` 的 Git 可跟踪身份、版本、availability、section hash、处理状态、
-  `redaction_policy`、`processing_profile`、脱敏计数和 `vault_object`。
+- `knowledge/source-manifests/<source-id>.json`：严格 `schema_version: 5` 的 Git 可跟踪身份、版本、availability、section heading/hash/range、处理状态、
+  review receipt、`redaction_policy`、`processing_profile`、脱敏计数和 `vault_object`。
 - `.memory/ingestion/jobs/<job-id>.json`：本次 completed/skipped/failed 审计；不保存正文。
 - `.memory/ingestion/checkpoints/<connector-hash>.json`：成功或跳过后的增量水位。
 - `.memory/ingestion/locks/<connector-hash>.lock`：同 Connector 互斥运行状态。
@@ -109,14 +109,29 @@ Connector 每次 source 尝试写入：
 处理规则版本变化会强制重抓，避免旧脱敏结果永久被当作“未更新”。
 
 旧 source manifest 不做字段补齐或原地迁移；与旧 KnowledgeDocument 一样，从原始 evidence
-重新摄入生成 v2 manifest，避免缺少 Vault、脱敏或 processing profile 的记录被误认为完整。
+重新摄入生成 v5 manifest，避免缺少 Vault、availability、receipt 或 processing profile 的记录被误认为完整。v5 不保存任何 section 正文 preview。
 
 失败 job 不推进 checkpoint，可安全重跑；metadata-only 更新保留已有 source 处理状态。
 锁归活进程所有时拒绝并发，进程崩溃留下的死 PID 锁由下一次运行恢复。
 
 完整 inventory 运行会把上次存在、本次缺失的 Git path 标记 missing/obsolete；原 Vault
-证据仍保留用于历史审计，但 missing source 不再支撑 active claim。恢复同路径时重新抓取，
-状态回到 pending。传 `--limit` 时不会做删除对账。
+证据仍保留用于历史审计，但 missing source 不再支撑 active claim。missing 先进入 pending，
+由人工 mark obsolete/blocked；恢复同路径时重新抓取并回 pending。传 `--limit` 时不会做删除对账。
+
+## Source evidence 审阅
+
+`vault get` 是底层 object 命令。正常文档蒸馏优先使用 source identity 和 fingerprint：
+
+```bash
+agent-knowledge source show "$SOURCE_ID"
+agent-knowledge source export "$SOURCE_ID" \
+  --fingerprint "$EXPECTED_FINGERPRINT" \
+  --output /secure/tmp/source-evidence
+```
+
+source export 复用 Vault 的 GCM/hash 校验和 0600 文件边界，不向 stdout 返回正文。missing source
+只要历史 Vault object 仍存在，也允许显式 export 用于删除影响分析。输出路径必须位于
+knowledge workspace 之外，处理完成后删除临时文件。
 
 ## 读取
 
@@ -152,6 +167,6 @@ agent-knowledge vault delete vault_sha256_<hash> \
 - API key、token、cookie、私钥等凭据原值仍不应进入 Vault；只保存 redaction marker。
 - `.vault/access-log` 只记录 timestamp、action、object ID、actor、bytes 和 dedupe 状态，不记录正文。
 - source manifest 可以保存 `vault_object` handle，但 Git 中不能保存解密原文。
-- transcript/tool trace manifest 不保存 section preview，只保存 range/hash、脱敏计数和 Vault handle。
+- 所有 source manifest 都不保存 section 正文 preview，只保存 heading/range/hash、脱敏计数和 Vault handle。
 - Connector 会脱敏 external key/title，但 source ID 与 connector ID 仍应使用不含个人信息的稳定标识。
 - 当前 WebDAV/S3 是 Markdown 镜像，不会上传 `.vault/`。远端加密 Vault backend 属于后续 Connector/Storage adapter 阶段。

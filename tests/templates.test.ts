@@ -73,6 +73,12 @@ describe("managed integrations", () => {
       "memory-maintainer",
       "SKILL.md"
     );
+    const distillerTarget = path.join(
+      targetDir,
+      "skills",
+      "source-distiller",
+      "SKILL.md"
+    );
 
     expect((await lstat(readerTarget)).isFile()).toBe(true);
     expect((await lstat(writerTarget)).isFile()).toBe(true);
@@ -102,6 +108,12 @@ describe("managed integrations", () => {
     );
     await expect(readFile(maintainerTarget, "utf8")).resolves.toContain(
       "用户明确决定"
+    );
+    await expect(readFile(distillerTarget, "utf8")).resolves.toContain(
+      "source list --needs-review"
+    );
+    await expect(readFile(distillerTarget, "utf8")).resolves.toContain(
+      "expectedFingerprint"
     );
     const organizer = await readFile(
       path.join(skillTarget, "SKILL.md"),

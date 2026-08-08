@@ -494,7 +494,7 @@ describe("CLI user configuration", () => {
 
     expect(first.completed).toBe(1);
     expect(manifest).toMatchObject({
-      schema_version: 3,
+      schema_version: 5,
       artifact_kind: "repository",
       project_keys: ["github.com/example/business"]
     });
@@ -524,6 +524,126 @@ describe("CLI user configuration", () => {
     };
     expect(second).toMatchObject({ completed: 0, skipped: 1 });
     expect(second.jobs[0]?.classification).toBe("unchanged");
+  });
+
+  it("reviews and exports versioned sources without printing complete evidence", async () => {
+    const temp = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-source-review-cli-")
+    );
+    tempDirs.push(temp);
+    const root = path.join(temp, "workspace");
+    const sources = path.join(temp, "sources");
+    const output = path.join(temp, "review", "source.md");
+    const completeEvidence =
+      "# Account\n\nComplete evidence body with internal workflow.";
+    const environment = {
+      AGENT_KNOWLEDGE_VAULT_KEY: Buffer.alloc(32, 22).toString("base64")
+    };
+    await mkdir(sources, { recursive: true });
+    await writeFile(
+      path.join(sources, "account.md"),
+      completeEvidence,
+      "utf8"
+    );
+    const ingested = JSON.parse(
+      await runCli(
+        [
+          "ingest",
+          "files",
+          "--root",
+          root,
+          "--connector-id",
+          "business-docs",
+          "--base-dir",
+          sources,
+          "--pattern",
+          "**/*.md",
+          "--project-key",
+          "github.com/example/business"
+        ],
+        environment
+      )
+    ) as {
+      jobs: Array<{ sourceId: string }>;
+    };
+    const sourceId = ingested.jobs[0]!.sourceId;
+    const listed = JSON.parse(
+      await runCli(
+        ["source", "list", "--root", root, "--needs-review"],
+        environment
+      )
+    ) as { total: number };
+    const showStdout = await runCli(
+      ["source", "show", sourceId, "--root", root],
+      environment
+    );
+    const shown = JSON.parse(showStdout) as {
+      expectedFingerprint: string;
+      reviewToken: string;
+    };
+    const exportStdout = await runCli(
+      [
+        "source",
+        "export",
+        sourceId,
+        "--root",
+        root,
+        "--fingerprint",
+        shown.expectedFingerprint,
+        "--output",
+        output
+      ],
+      environment
+    );
+    const marked = JSON.parse(
+      await runCli(
+        [
+          "source",
+          "mark",
+          sourceId,
+          "--root",
+          root,
+          "--fingerprint",
+          shown.expectedFingerprint,
+          "--review-token",
+          shown.reviewToken,
+          "--status",
+          "blocked",
+          "--reason",
+          "等待业务 owner 确认"
+        ],
+        environment
+      )
+    ) as { processingStatus: string; reviewState: string };
+
+    expect(listed.total).toBe(1);
+    expect(showStdout).not.toContain(completeEvidence);
+    expect(exportStdout).not.toContain(completeEvidence);
+    expect(await readFile(output, "utf8")).toBe(completeEvidence);
+    expect(marked).toMatchObject({
+      processingStatus: "blocked",
+      reviewState: "current"
+    });
+    await expect(
+      runCli(
+        [
+          "source",
+          "mark",
+          sourceId,
+          "--root",
+          root,
+          "--fingerprint",
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "--review-token",
+          shown.reviewToken,
+          "--status",
+          "blocked",
+          "--reason",
+          "stale review"
+        ],
+        environment
+      )
+    ).rejects.toThrow();
   });
 
   it("automatically scopes query to the current Git project unless project IDs are explicit", async () => {

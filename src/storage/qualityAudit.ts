@@ -25,6 +25,9 @@ export type KnowledgeQualityFindingCode =
   | "too_many_scenarios"
   | "too_many_tags"
   | "source_without_refined_knowledge"
+  | "source_review_stale"
+  | "invalid_refined_knowledge"
+  | "invalid_duplicate_source"
   | "source_missing_upstream"
   | "source_without_vault_object"
   | "missing_vault_object"
@@ -199,6 +202,11 @@ export async function auditKnowledgeQuality(
     manifests.map((manifest) => [manifest.source_id, manifest])
   );
   const knownProjectKeys = await loadKnownProjectKeys(rootDir);
+  const activeKnowledgeById = new Map(
+    loaded
+      .filter(({ document }) => document.frontmatter.status === "active")
+      .map(({ document }) => [document.frontmatter.id, document])
+  );
   const findings: KnowledgeQualityFinding[] = [];
   const activeKnowledge = loaded.filter(
     ({ document }) =>
@@ -316,7 +324,9 @@ export async function auditKnowledgeQuality(
   }
 
   const classifiedSources = manifests.filter(
-    (manifest) => manifest.processing_status !== "pending"
+    (manifest) =>
+      manifest.processing_status !== "pending" &&
+      manifest.processed_content_hash === manifest.version.content_hash
   ).length;
   const availableSources = manifests.filter(
     (manifest) => manifest.availability === "available"
@@ -340,6 +350,62 @@ export async function auditKnowledgeQuality(
         sourceId: manifest.source_id,
         message: `Source has not been classified or refined: ${manifest.title}.`
       });
+    } else if (
+      manifest.processed_content_hash !== manifest.version.content_hash
+    ) {
+      addFinding(findings, {
+        code: "source_review_stale",
+        severity: "warning",
+        sourceId: manifest.source_id,
+        message: `Source review receipt does not match the current content hash: ${manifest.title}.`
+      });
+    }
+    if (manifest.processing_status === "refined") {
+      const sections = new Map(
+        manifest.sections.map((section) => [
+          section.section_id,
+          section.text_hash
+        ])
+      );
+      for (const knowledgeId of manifest.refined_knowledge_ids) {
+        const knowledge = activeKnowledgeById.get(knowledgeId);
+        const currentAnchor = knowledge?.frontmatter.claims.some(
+          (claim) =>
+            claim.status === "supported" &&
+            claim.evidence.some(
+              (anchor) =>
+                anchor.source_id === manifest.source_id &&
+                sections.get(anchor.section_id) === anchor.quote_hash
+            )
+        );
+        if (!currentAnchor) {
+          addFinding(findings, {
+            code: "invalid_refined_knowledge",
+            severity: "error",
+            sourceId: manifest.source_id,
+            documentId: knowledgeId,
+            message: `Refined source does not resolve to active knowledge with a current claim anchor: ${knowledgeId}.`
+          });
+        }
+      }
+    }
+    if (manifest.processing_status === "duplicate") {
+      const duplicateTarget = manifest.duplicate_of
+        ? manifestsById.get(manifest.duplicate_of)
+        : undefined;
+      if (
+        !duplicateTarget ||
+        duplicateTarget.availability !== "available" ||
+        duplicateTarget.processing_status === "duplicate" ||
+        duplicateTarget.source_id === manifest.source_id
+      ) {
+        addFinding(findings, {
+          code: "invalid_duplicate_source",
+          severity: "error",
+          sourceId: manifest.source_id,
+          message: `Duplicate source target is missing, unavailable, another duplicate, or self-referential: ${manifest.duplicate_of ?? "undefined"}.`
+        });
+      }
     }
     if (!manifest.vault_object) {
       addFinding(findings, {

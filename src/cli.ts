@@ -49,7 +49,9 @@ import {
   generateMaintenanceProposals,
   initKnowledgeWorkspace,
   listKnowledge,
+  listSources,
   logMemoryFeedback,
+  markSourceReviewed,
   organizeInbox,
   planMaintenanceCleanup,
   putVaultObject,
@@ -70,6 +72,7 @@ import {
   rejectMaintenanceProposal,
   readMaintenanceObservations,
   showMaintenanceProposal,
+  showSource,
   exportKnowledgeGraph,
   expandEvidence,
   expandKnowledge,
@@ -91,6 +94,7 @@ import {
   uninstallIntegration,
   vaultKeyFromEnvironment,
   writeVaultObjectToFile,
+  exportSourceEvidence,
   deleteVaultObject,
   writeCandidateMemory,
   type CandidateMemoryInput,
@@ -1448,6 +1452,200 @@ knowledge
               options.sensitivityClearance
             )
           }
+        }),
+        null,
+        2
+      )
+    );
+  });
+
+const source = program
+  .command("source")
+  .description(
+    t(
+      "审阅 versioned source manifest 与完整 evidence",
+      "Review versioned source manifests and complete evidence"
+    )
+  );
+
+source
+  .command("list")
+  .description(
+    t(
+      "列出 pending、stale、missing 或已处理 source",
+      "List pending, stale, missing, or reviewed sources"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option(
+    "--status <status...>",
+    t("按 processing status 过滤", "filter by processing status")
+  )
+  .option(
+    "--availability <value>",
+    t("available 或 missing", "available or missing")
+  )
+  .option(
+    "--project <key...>",
+    t("按规范 project key 过滤", "filter by canonical project key")
+  )
+  .option(
+    "--needs-review",
+    t("只看 pending、stale 或 missing", "show only pending, stale, or missing"),
+    false
+  )
+  .action(async (options: {
+    root?: string;
+    status?: string[];
+    availability?: string;
+    project?: string[];
+    needsReview: boolean;
+  }) => {
+    if (
+      options.availability !== undefined &&
+      options.availability !== "available" &&
+      options.availability !== "missing"
+    ) {
+      throw new Error(
+        t(
+          "--availability 必须是 available 或 missing",
+          "--availability must be available or missing"
+        )
+      );
+    }
+    console.log(
+      JSON.stringify(
+        await listSources(resolveCliRoot(options.root), {
+          statuses: options.status,
+          availability: options.availability,
+          projectKeys: options.project,
+          needsReview: options.needsReview
+        }),
+        null,
+        2
+      )
+    );
+  });
+
+source
+  .command("show")
+  .description(
+    t(
+      "显示 source metadata、section heading/hash/range 和当前 fingerprint",
+      "Show source metadata, section heading/hash/range, and current fingerprint"
+    )
+  )
+  .argument("<source-id>", t("Source ID", "Source ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (sourceId: string, options: { root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await showSource(resolveCliRoot(options.root), sourceId),
+        null,
+        2
+      )
+    );
+  });
+
+source
+  .command("export")
+  .description(
+    t(
+      "把当前版本完整 evidence 解密到显式 0600 文件",
+      "Decrypt the current source evidence to an explicit 0600 file"
+    )
+  )
+  .argument("<source-id>", t("Source ID", "Source ID"))
+  .requiredOption(
+    "--fingerprint <sha256>",
+    t("source show 返回的 current fingerprint", "current fingerprint returned by source show")
+  )
+  .requiredOption("--output <file>", t("解密输出文件", "decrypted output file"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--overwrite", t("允许覆盖已有文件", "allow overwriting an existing file"), false)
+  .action(async (
+    sourceId: string,
+    options: {
+      fingerprint: string;
+      output: string;
+      root?: string;
+      overwrite: boolean;
+    }
+  ) => {
+    console.log(
+      JSON.stringify(
+        await exportSourceEvidence(
+          resolveCliRoot(options.root),
+          {
+            sourceId,
+            expectedFingerprint: options.fingerprint,
+            outputPath: options.output,
+            overwrite: options.overwrite
+          },
+          { key: configuredVaultKey(), actor: "source-export" }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+source
+  .command("mark")
+  .description(
+    t(
+      "用当前 fingerprint 标记 source 审阅结果",
+      "Mark the source review result using the current fingerprint"
+    )
+  )
+  .argument("<source-id>", t("Source ID", "Source ID"))
+  .requiredOption(
+    "--fingerprint <sha256>",
+    t("source show 返回的 current fingerprint", "current fingerprint returned by source show")
+  )
+  .requiredOption(
+    "--review-token <token>",
+    t("source show 返回的 review token", "review token returned by source show")
+  )
+  .requiredOption(
+    "--status <status>",
+    t(
+      "refined、duplicate、obsolete、no_long_term_value 或 blocked",
+      "refined, duplicate, obsolete, no_long_term_value, or blocked"
+    )
+  )
+  .option("--reason <reason>", t("可审计且不含敏感原值的原因", "auditable reason without sensitive raw values"))
+  .option(
+    "--knowledge-id <id...>",
+    t("refined 时必填的 active knowledge ID", "active knowledge IDs required for refined")
+  )
+  .option(
+    "--duplicate-of <source-id>",
+    t("duplicate 时必填的规范 source ID", "canonical source ID required for duplicate")
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (
+    sourceId: string,
+    options: {
+      fingerprint: string;
+      reviewToken: string;
+      status: string;
+      reason?: string;
+      knowledgeId?: string[];
+      duplicateOf?: string;
+      root?: string;
+    }
+  ) => {
+    console.log(
+      JSON.stringify(
+        await markSourceReviewed(resolveCliRoot(options.root), {
+          sourceId,
+          expectedFingerprint: options.fingerprint,
+          expectedReviewToken: options.reviewToken,
+          status: options.status,
+          reason: options.reason,
+          duplicateOf: options.duplicateOf,
+          knowledgeIds: options.knowledgeId
         }),
         null,
         2

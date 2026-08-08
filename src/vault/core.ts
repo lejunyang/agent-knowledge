@@ -14,6 +14,7 @@ import {
 import { existsSync } from "node:fs";
 import {
   appendFile,
+  chmod,
   mkdir,
   readFile,
   readdir,
@@ -421,6 +422,8 @@ export async function writeVaultObjectToFile(
     flag: input.overwrite ? "w" : "wx",
     mode: 0o600
   });
+  // 已存在文件时 mode 不会由 writeFile 重新收紧，必须显式 chmod 保证 export 边界。
+  await chmod(outputPath, 0o600);
   return {
     id: result.id,
     outputPath,

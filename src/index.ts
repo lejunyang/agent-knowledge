@@ -19,6 +19,7 @@ export * from "./storage/knowledgePaths.js";
 export * from "./storage/indexer.js";
 export * from "./storage/catalog.js";
 export * from "./storage/sourceManifest.js";
+export * from "./storage/sourceReview.js";
 export * from "./storage/qualityAudit.js";
 export * from "./storage/gitWorkspace.js";
 export * from "./retrieval/query.js";

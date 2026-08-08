@@ -36,8 +36,7 @@ describe("source manifests", () => {
             text_hash:
               "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             char_start: 0,
-            char_end: 1,
-            preview: "legacy"
+            char_end: 1
           }
         ]
       })
@@ -52,7 +51,7 @@ describe("source manifests", () => {
           content: "previous",
           observedAt
         }),
-        schema_version: 2,
+        schema_version: 4,
         availability: undefined
       })
     ).toThrow();
@@ -114,7 +113,35 @@ describe("source manifests", () => {
 
     expect(manifest.sections).toHaveLength(1);
     expect(manifest.sections[0]?.heading_path).toEqual(["正文"]);
-    expect(manifest.sections[0]?.preview).toBe("Only body text.");
+    expect(manifest.sections[0]).not.toHaveProperty("preview");
+  });
+
+  it("rejects inconsistent review receipt fields", () => {
+    const pending = buildSourceManifest({
+      sourceId: "src_receipt",
+      connector: "file",
+      externalKey: "receipt.md",
+      title: "Receipt",
+      content: "body",
+      observedAt
+    });
+
+    expect(() =>
+      SourceManifestSchema.parse({
+        ...pending,
+        processing_reason: "stale reason"
+      })
+    ).toThrow();
+    expect(() =>
+      SourceManifestSchema.parse({
+        ...pending,
+        processing_status: "blocked",
+        processing_reason: "等待确认",
+        processed_at: observedAt,
+        processed_content_hash: pending.version.content_hash,
+        refined_knowledge_ids: ["k_invalid_for_blocked"]
+      })
+    ).toThrow();
   });
 
   it("skips content fetch when a shared upstream version signal is unchanged", () => {
@@ -264,7 +291,9 @@ describe("source manifests", () => {
       availability: "missing",
       missing_since: "2026-08-10T00:00:00.000Z",
       processing_status: "obsolete",
-      processing_reason: "connector_source_missing"
+      processing_reason: "connector_source_missing",
+      processed_at: "2026-08-10T00:00:00.000Z",
+      processed_content_hash: available.version.content_hash
     });
     const restored = buildSourceManifest({
       sourceId: "src_restorable",

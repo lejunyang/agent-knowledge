@@ -17,7 +17,7 @@
 - `.memory/graph.json` 是从 Markdown/proposal 重建的知识关系图索引，不是事实源。
 - `.vault/objects` 保存 AES-256-GCM 客户端加密的完整 evidence；`.vault/tombstones` 和 `.vault/access-log` 保存删除与访问审计。Vault 不进入 Git、Markdown 同步或普通 query。
 - `.memory/ingestion/jobs` 保存每次 Connector 尝试的有界审计，`.memory/ingestion/checkpoints` 保存增量水位，`.memory/ingestion/locks` 防止同一 Connector 并发覆盖 checkpoint；三者都不是事实源。
-- `knowledge/source-manifests/*.json` 是严格 `schema_version: 3` 的 Git 可跟踪 evidence 导航，保存稳定 source 身份、上游/本地版本、availability、section hash、脱敏与处理 profile、project keys 和 Vault handle，不保存完整原文；旧 manifest 不迁移，应从原始 evidence 重建。
+- `knowledge/source-manifests/*.json` 是严格 `schema_version: 5` 的 Git 可跟踪 evidence 导航，保存稳定 source 身份、上游/本地版本、availability、section heading/hash/range、review receipt、脱敏与处理 profile、project keys 和 Vault handle，不保存正文 preview 或完整原文；旧 manifest 不迁移，应从原始 evidence 重建。
 - `agent-knowledge ingest files|transcripts` 通过统一 Connector core 执行 probe、抓取、规范化、脱敏、Vault、manifest、job 和 checkpoint；failed 不推进 checkpoint。
 - `agent-knowledge query` 输出主 agent 可注入的 Context Packet 2.0，默认只含 synopsis 与 evidence handles；`--debug` 附带 scorer/reranker 和分项分数。
 - `agent-knowledge knowledge audit` 检查正文密度、metadata 膨胀、source 处理状态、claim evidence 和 project registry；`knowledge show/evidence` 执行安全过滤后显式展开。
@@ -105,6 +105,8 @@ node dist/cli.js maintenance run --root tests/fixtures/basic-knowledge
 node dist/cli.js ingest files --root /tmp/agent-knowledge-data --connector-id smoke-docs --base-dir /tmp/source-docs --pattern '**/*.md'
 node dist/cli.js ingest transcripts --root /tmp/agent-knowledge-data --connector-id smoke-sessions --base-dir /tmp/session-jsonl
 node dist/cli.js ingest git --root /tmp/agent-knowledge-data --connector-id smoke-repo --repository /tmp/source-repo --pathspec README.md docs
+node dist/cli.js source list --root /tmp/agent-knowledge-data --needs-review
+node dist/cli.js source show src_example --root /tmp/agent-knowledge-data
 node dist/cli.js integration install --product trae --scope project --target-dir /tmp/agent-knowledge-integration-smoke
 node dist/cli.js integration doctor --product trae --scope project --target-dir /tmp/agent-knowledge-integration-smoke
 node dist/cli.js project detect
@@ -144,7 +146,7 @@ node dist/cli.js query \
 ```text
 src/core/             稳定共享契约：types、Zod schema、路径和日志
 src/cli/              CLI 交互向导和命令辅助模块
-src/storage/          Markdown 事实源、workspace、SQLite 索引和 catalog
+src/storage/          Markdown 事实源、workspace、source manifest/review、SQLite 索引和 catalog
 src/retrieval/        CJK 召回、query、scoring、embedding、reranker、graph retrieval、context packet、eval 和 feedback
 src/memory/           候选治理、inbox 写入、主动整理、observation、maintenance proposal 和审阅动作
 src/graph/            可重建知识关系图的类型、构建、查询、导出和 HTML 可视化
@@ -196,18 +198,23 @@ src/cli.ts            命令行入口和各模块编排
 - 图谱 HTML 默认只展示精炼 active 知识；结构邻居、source memory/source evidence 只能通过点击展开、证据或全图模式按需显示，不能恢复为全量节点首次布局。
 - source 原始证据导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、用户标识和个人信息；禁止把内部测试账号表原样写入长期知识。
 - 完整会话、工具轨迹和附件只能进入授权范围内的加密 Vault；凭据原值仍禁止保存。Vault key 必须从环境/KMS/密码管理器注入，CLI 不得把解密正文输出到 stdout。
-- `ingest transcripts` 必须强制内置 `secrets-and-pii`，transcript/tool trace manifest 不得保存 section preview；只保留 hash/range、脱敏计数和 Vault handle。内置确定性 detector 不是完整 DLP，姓名、地址、业务 UID 等领域 PII 必须由专用 Connector 在 normalize 阶段继续清洗并版本化 processing profile。
+- 所有 source manifest 都不得保存 section 正文 preview，只保留 heading/hash/range、脱敏计数和 Vault handle；`ingest transcripts` 还必须强制内置 `secrets-and-pii`。内置确定性 detector 不是完整 DLP，姓名、地址、业务 UID 等领域 PII 必须由专用 Connector 在 normalize 阶段继续清洗并版本化 processing profile。
 - Connector 是运行时不可信边界：descriptor 必须校验 source ID、connector ID、project key 和 probe；规范化 bytes 必须与用于 manifest 的 UTF-8 文本一致，不能让 Vault 内容和 hash/section 分叉。
 - 文件系统 Connector 只读取显式 baseDir 下 UTF-8 普通文件，不跟随 symlink；PDF/Office/二进制附件必须使用专用 Connector，不能静默 UTF-8 解码。
 - Git Connector 只读取本地 object database 中指定 ref 的 committed UTF-8 blob，不读取 dirty/untracked 文件、不 checkout、不自动 fetch/pull；origin remote 是默认 project key，无 remote 时必须显式 `local/...`。
 - Complete inventory Connector 必须提供稳定 inventory identity；Git identity 绑定 project key、解析后的 symbolic ref/分支和 pathspec。范围变化不得复用旧 Connector ID，否则必须在任何 removed 写入前失败。
 - Vault 删除必须物理移除密文并写 tombstone，不能只删除 source manifest 或对象引用；默认不得静默复活同 ID 对象。
 - 每个可更新 source 必须记录稳定 `source_id/external_key` 和版本信息。优先保存上游 revision、ETag、commit SHA、更新时间或 provider version ID，并始终保存抓取后的 content hash；没有上游版本信号时只能回退到重新抓取后比较 content hash。
+- Source review 必须通过 `source show/export/mark`：export 只写 knowledge workspace 之外的显式 0600 文件，mark 必须携带 current fingerprint 和 review token；reason 进入 Git 前执行 secret/PII 检查。
+- Source export/mark 必须与 ingestion 复用同一 Connector lock，避免 fingerprint 校验后被并发摄入覆盖；仅靠先读后写不够。
+- `refined` receipt 必须记录 active knowledge IDs，且每个 ID 至少有一个 supported claim anchor 命中当前 source section/hash。不能仅因候选已写 inbox 就标 refined。
+- metadata-only 更新保留 review receipt；content changed/restored 清空 receipt 并回 pending；removed/missing 先回 pending，人工分析历史 Vault evidence 后再标 obsolete/blocked。
 - Connector 更新检查应先做轻量 probe：共同版本信号未变且 processing profile 未变时跳过正文下载；信号变化、不可比较或 normalize/脱敏 profile 升级时抓取全文。上游 metadata 或处理 profile 变化但 content hash 不变不得触发重蒸馏并应保留 source 已分类状态；content hash 变化才重新切 section、失效受影响 claim 并生成更新 proposal。
 - 同一 workspace/Connector 禁止并发摄入；lock 归活进程时失败，死 PID 锁可恢复。每次尝试使用独立 job ID，failed 不推进 checkpoint，不能覆盖上次失败或成功的审计记录。
 - Git source 使用 blob SHA `path_hash` 优先判断单文档更新，commit SHA 记录仓库版本；无关 commit 只允许 metadata-only，不应重读正文。
 - 只有 `inventoryMode: complete` 且未被 `--limit` 截断的运行才能把缺失 source 标记 removed/missing；missing manifest 必须使 claim anchor 失效，恢复后回到 pending。
 - 质量审计必须分别报告 source 分类、上游 availability、Vault evidence、上游版本、脱敏策略和 claim anchor 覆盖率；missing source 保留历史分类与 Vault coverage，但 availability 为 0，且不能支撑 active claim。manifest 无 Vault handle 或指向丢失密文属于 error。
+- 质量审计还必须把 processed content hash 不匹配视为 stale warning，把 refined knowledge ID/anchor 无效视为 error。
 - `capture-material --replace-source` 只能刷新同 ID、active、documented 的 source 原始证据；不得覆盖 semantic/procedural/profile/episodic，精炼知识更新必须使用新知识和 `supersedes`。
 - Batch reranker 默认只在显式 `query --rerank` 或 reranked eval 中启用；Hook 热路径不得加载 cross-encoder。默认 pipeline 是融合 top 30 -> batch rerank -> threshold -> top 8。
 - Calibration 只能输出 dry-run 参数建议，不得自动改用户配置；目标函数必须优先惩罚 forbidden injection、abstention failure 和 not_useful feedback。
@@ -335,7 +342,7 @@ agent-knowledge write-candidate \
 如果使用 graph 浏览或 graph retrieval，也重新运行 `agent-knowledge graph build`。
 
 使用 `agent-knowledge integration install --product trae|trae-cn|claude-code --scope user|project` 安装产品接入。安装器不使用 symlink；hooks 结构化 merge 且只管理 `agent-knowledge hook` handler，agents/skills/plugin bundle 由本地 manifest 记录所有权。
-`knowledge-organizer` 和 `memory-maintainer` Skills 位于项目 `.trae/skills/`，这是本仓库自身的开发/测试资源，不代表已安装到用户产品目录。前者整理 inbox/直接材料，后者审阅 Subagent 日志、observations 和 proposals。
+`knowledge-organizer`、`source-distiller` 和 `memory-maintainer` Skills 位于项目 `.trae/skills/`，这是本仓库自身的开发/测试资源，不代表已安装到用户产品目录。它们分别整理直接材料/inbox、蒸馏 versioned source、维护会话 observation/proposal。
 
 Hook 主动记忆边界：
 

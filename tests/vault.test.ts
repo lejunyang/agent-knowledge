@@ -132,6 +132,14 @@ describe("Evidence Vault", () => {
         { key }
       )
     ).rejects.toMatchObject({ code: "EEXIST" });
+
+    await writeFile(output, "old", { encoding: "utf8", mode: 0o644 });
+    await writeVaultObjectToFile(
+      root,
+      { id: stored.id, outputPath: output, overwrite: true },
+      { key }
+    );
+    expect((await stat(output)).mode & 0o777).toBe(0o600);
   });
 
   it("physically deletes ciphertext, writes a tombstone, and blocks silent resurrection", async () => {

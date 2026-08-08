@@ -55,4 +55,6 @@ agent-knowledge maintenance cleanup --apply
 
 不得自动接受 proposal、批准 candidate 或安装 Skill；已有 Skill 永不覆盖。
 
-质量审计只读 V2 Markdown、source manifest 和 project registry；它可以阻止不完整知识进入下一步，但不能自行修复或激活知识。
+质量审计只读 V2 Markdown、source manifest 和 project registry；它会检查 source receipt 是否
+匹配当前 content hash、refined knowledge/anchor 是否仍有效。它可以阻止不完整知识进入下一步，
+但不能自行 export evidence、mark source、修复或激活知识；source 队列交给 `source-distiller`。

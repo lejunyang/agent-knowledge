@@ -41,6 +41,10 @@ async function writeManifest(
     upstreamVersion: { opaque_version: "fixture-v1" },
     redactionPolicy: "connector-specific",
     processingStatus,
+    refinedKnowledgeIds:
+      processingStatus === "refined"
+        ? ["k_20260705_frontend_lint_vue_sfc"]
+        : [],
     vaultObject: vaultObject?.id
   });
   const directory = path.join(root, "knowledge", "source-manifests");
@@ -194,8 +198,11 @@ describe("auditKnowledgeQuality", () => {
           ...manifest,
           availability: "missing",
           missing_since: "2026-08-10T00:00:00.000Z",
-          processing_status: "obsolete",
-          processing_reason: "connector_source_missing"
+          processing_status: "pending",
+          processing_reason: undefined,
+          processed_at: undefined,
+          processed_content_hash: undefined,
+          refined_knowledge_ids: []
         },
         null,
         2
@@ -241,7 +248,7 @@ describe("auditKnowledgeQuality", () => {
     });
 
     expect(report.summary.claimEvidenceCoverage).toBe(0);
-    expect(report.summary.sourceCoverage).toBe(1);
+    expect(report.summary.sourceCoverage).toBe(0);
     expect(report.summary.sourceAvailabilityCoverage).toBe(0);
     expect(report.summary.vaultEvidenceCoverage).toBe(1);
     expect(
@@ -254,5 +261,45 @@ describe("auditKnowledgeQuality", () => {
         (finding) => finding.code === "unknown_evidence_anchor"
       )
     ).toBe(true);
+  });
+
+  it("reports stale receipts and invalid duplicate targets", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-quality-source-review-")
+    );
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    const manifest = await writeManifest(root, "pending");
+    const manifestPath = path.join(
+      root,
+      "knowledge",
+      "source-manifests",
+      "src_lint_design.json"
+    );
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          ...manifest,
+          processing_status: "duplicate",
+          processing_reason: "与规范来源重复",
+          duplicate_of: "src_missing_canonical",
+          processed_at: "2026-08-10T00:00:00.000Z",
+          processed_content_hash:
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          refined_knowledge_ids: []
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const report = await auditKnowledgeQuality(root);
+    const codes = report.findings.map((finding) => finding.code);
+
+    expect(report.summary.sourceCoverage).toBe(0);
+    expect(codes).toContain("source_review_stale");
+    expect(codes).toContain("invalid_duplicate_source");
   });
 });

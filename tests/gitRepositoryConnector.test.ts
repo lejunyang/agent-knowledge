@@ -266,7 +266,13 @@ describe("GitRepositoryConnector", () => {
     await writeFile(
       guideManifestPath,
       `${JSON.stringify(
-        { ...refined, processing_status: "refined" },
+        {
+          ...refined,
+          processing_status: "refined",
+          processed_at: "2026-08-09T00:00:00.000Z",
+          processed_content_hash: refined.version.content_hash,
+          refined_knowledge_ids: ["k_git_guide_fixture"]
+        },
         null,
         2
       )}\n`,
@@ -310,8 +316,8 @@ describe("GitRepositoryConnector", () => {
     );
     expect(missingManifest).toMatchObject({
       availability: "missing",
-      processing_status: "obsolete",
-      processing_reason: "connector_source_missing"
+      processing_status: "pending",
+      refined_knowledge_ids: []
     });
     expect(missingManifest.missing_since).toBeDefined();
 

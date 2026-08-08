@@ -540,7 +540,7 @@ Connector 本身保持只读，不直接写 checkpoint。统一 ingestion core �
 当前已交付第一批本地 UTF-8 adapter：
 
 - `ingest files`：显式 base directory + glob，不跟随 symlink。
-- `ingest transcripts`：JSONL convenience adapter，强制 secret + PII 脱敏，manifest 不保存正文 preview。
+- `ingest transcripts`：JSONL convenience adapter，强制 secret + PII 脱敏；所有 source manifest 均不保存正文 preview。
 - `ingest git`：只读本地 committed blob；remote 作为 project key，commit SHA 记录仓库版本，
   blob SHA 作为 path hash，完整运行执行删除/恢复对账。
 

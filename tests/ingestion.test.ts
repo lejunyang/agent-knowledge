@@ -302,16 +302,19 @@ describe("connector ingestion", () => {
     };
     const first = await runConnectorIngestion(root, connector, options);
     const manifestPath = first.jobs[0]!.sourceManifestPath!;
-    const previous = JSON.parse(
-      await readFile(manifestPath, "utf8")
-    ) as Record<string, unknown>;
+    const previous = SourceManifestSchema.parse(
+      JSON.parse(await readFile(manifestPath, "utf8"))
+    );
     await writeFile(
       manifestPath,
       `${JSON.stringify(
         {
           ...previous,
           processing_status: "refined",
-          processing_profile: "legacy-pipeline-v0"
+          processing_profile: "legacy-pipeline-v0",
+          processed_at: "2026-08-09T00:00:00.000Z",
+          processed_content_hash: previous.version.content_hash,
+          refined_knowledge_ids: ["k_pipeline_fixture"]
         },
         null,
         2
@@ -500,7 +503,7 @@ describe("connector ingestion", () => {
     });
     expect(
       SourceManifestSchema.parse(JSON.parse(manifestText)).sections.every(
-        (section) => section.preview === ""
+        (section) => !("preview" in section)
       )
     ).toBe(true);
   });

@@ -221,6 +221,27 @@ async function releaseConnectorLock(lock: {
   }
 }
 
+/**
+ * 在 Connector 互斥锁内执行操作。
+ *
+ * Source review 与 ingestion 必须复用同一把锁；否则 reviewer 校验完 fingerprint 后，
+ * Connector 仍可能更新 manifest，随后旧 reviewer 会覆盖新版本。锁覆盖完整 callback，
+ * finally 只释放当前 token 持有的锁。
+ */
+export async function withConnectorIngestionLock<T>(
+  rootDir: string,
+  connectorId: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  const parsedConnectorId = ConnectorIdSchema.parse(connectorId);
+  const lock = await acquireConnectorLock(rootDir, parsedConnectorId);
+  try {
+    return await operation();
+  } finally {
+    await releaseConnectorLock(lock);
+  }
+}
+
 /** 读取 connector checkpoint；缺失时返回 null。 */
 export async function readConnectorCheckpoint(
   rootDir: string,
@@ -500,10 +521,6 @@ async function runConnectorIngestionLocked(
         redactionPolicy: options.redactionPolicy,
         processingProfile,
         redactions: redacted.counts,
-        // 会话和工具轨迹即使已脱敏，也不应在可 Git 同步的 manifest 扩散正文摘要。
-        includeSectionPreviews:
-          descriptor.artifactKind !== "transcript" &&
-          descriptor.artifactKind !== "tool_trace",
         processingStatus: "pending",
         vaultObject: vaultObject.id
       });
@@ -533,12 +550,35 @@ async function runConnectorIngestionLocked(
                 : {}),
               ...(previousManifest?.duplicate_of
                 ? { duplicate_of: previousManifest.duplicate_of }
-                : {})
+                : {}),
+              ...(previousManifest?.processed_at
+                ? { processed_at: previousManifest.processed_at }
+                : {}),
+              ...(previousManifest?.processed_content_hash
+                ? {
+                    processed_content_hash:
+                      previousManifest.processed_content_hash
+                  }
+                : {}),
+              refined_knowledge_ids:
+                previousManifest?.refined_knowledge_ids ?? []
             });
+      const reviewSafeManifest =
+        classification === "content_changed" || classification === "restored"
+          ? SourceManifestSchema.parse({
+              ...finalizedManifest,
+              processing_status: "pending",
+              processing_reason: undefined,
+              duplicate_of: undefined,
+              processed_at: undefined,
+              processed_content_hash: undefined,
+              refined_knowledge_ids: []
+            })
+          : finalizedManifest;
       const manifestPath = getSourceManifestPath(rootDir, descriptor.sourceId);
       await writeAtomic(
         manifestPath,
-        `${JSON.stringify(finalizedManifest, null, 2)}\n`
+        `${JSON.stringify(reviewSafeManifest, null, 2)}\n`
       );
       const finishedAt = (options.now?.() ?? new Date()).toISOString();
       const job: IngestionJob = {
@@ -558,7 +598,7 @@ async function runConnectorIngestionLocked(
       await writeJob(rootDir, job);
       await updateCheckpoint(rootDir, cursor, {
         sourceId: descriptor.sourceId,
-        versionFingerprint: finalizedManifest.version.fingerprint,
+        versionFingerprint: reviewSafeManifest.version.fingerprint,
         lastCheckedAt: finishedAt,
         lastClassification: classification
       });
@@ -613,8 +653,12 @@ async function runConnectorIngestionLocked(
               })
             }
           : {}),
-        processing_status: "obsolete",
-        processing_reason: "connector_source_missing"
+        processing_status: "pending",
+        processing_reason: undefined,
+        duplicate_of: undefined,
+        processed_at: undefined,
+        processed_content_hash: undefined,
+        refined_knowledge_ids: []
       });
       const manifestPath = getSourceManifestPath(rootDir, previousSourceId);
       await writeAtomic(
@@ -686,10 +730,7 @@ export async function runConnectorIngestion(
   ) {
     throw new Error("ingest limit must be a non-negative safe integer");
   }
-  const lock = await acquireConnectorLock(rootDir, connectorId);
-  try {
-    return await runConnectorIngestionLocked(rootDir, connector, options);
-  } finally {
-    await releaseConnectorLock(lock);
-  }
+  return withConnectorIngestionLock(rootDir, connectorId, () =>
+    runConnectorIngestionLocked(rootDir, connector, options)
+  );
 }

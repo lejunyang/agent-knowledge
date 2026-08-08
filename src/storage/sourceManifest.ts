@@ -1,9 +1,9 @@
 /**
  * Source manifest 把完整证据映射为稳定、可引用的 section。
  *
- * manifest 只保存内容 hash、标题路径、字符范围、脱敏 preview 和 Vault handle；它不是
- * 完整原文。调用方必须先完成隐私脱敏再构建 manifest，防止 preview 或 hash 边界泄漏
- * 未治理内容。
+ * manifest 只保存内容 hash、标题路径、字符范围、review receipt 和 Vault handle；它不保存
+ * 正文 preview 或完整原文。调用方必须先完成隐私脱敏再构建 manifest，避免可 Git 跟踪的
+ * 导航层泄漏未治理内容。
  */
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -64,16 +64,17 @@ export const SourceSectionSchema = z.object({
   heading_path: z.array(z.string().min(1)).min(1),
   text_hash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   char_start: z.number().int().nonnegative(),
-  char_end: z.number().int().positive(),
-  preview: z.string().max(500)
+  char_end: z.number().int().positive()
 });
 
 /** manifest 是 Git 可跟踪导航；完整 evidence object 只保存在加密 Vault。 */
 export const SourceManifestSchema = z
   .object({
-    schema_version: z.literal(3),
+    schema_version: z.literal(5),
     source_id: z.string().regex(/^src_[A-Za-z0-9_.-]+$/),
-    connector: z.string().min(1),
+    connector: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
     artifact_kind: z
       .enum([
         "document",
@@ -102,6 +103,14 @@ export const SourceManifestSchema = z
     processing_status: SourceProcessingStatusSchema.default("pending"),
     processing_reason: z.string().min(1).optional(),
     duplicate_of: z.string().min(1).optional(),
+    processed_at: z.string().datetime().optional(),
+    processed_content_hash: z
+      .string()
+      .regex(/^sha256:[a-f0-9]{64}$/)
+      .optional(),
+    refined_knowledge_ids: z
+      .array(z.string().regex(/^k_[a-zA-Z0-9_]+$/))
+      .default([]),
     vault_object: z
       .string()
       .regex(/^vault_sha256_[a-f0-9]{64}$/)
@@ -124,17 +133,6 @@ export const SourceManifestSchema = z
       });
     }
     if (
-      isSensitiveStream &&
-      manifest.sections.some((section) => section.preview.length > 0)
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["sections"],
-        message:
-          "transcript and tool_trace manifests cannot persist section previews"
-      });
-    }
-    if (
       manifest.availability === "missing" &&
       manifest.missing_since === undefined
     ) {
@@ -152,6 +150,85 @@ export const SourceManifestSchema = z
         code: z.ZodIssueCode.custom,
         path: ["missing_since"],
         message: "available source manifests cannot keep missing_since"
+      });
+    }
+    if (manifest.processing_status === "pending") {
+      if (
+        manifest.processed_at !== undefined ||
+        manifest.processed_content_hash !== undefined ||
+        manifest.processing_reason !== undefined ||
+        manifest.duplicate_of !== undefined ||
+        manifest.refined_knowledge_ids.length > 0
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["processing_status"],
+          message: "pending source manifests cannot keep a review receipt"
+        });
+      }
+      return;
+    }
+    if (
+      manifest.processed_at === undefined ||
+      manifest.processed_content_hash === undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["processed_content_hash"],
+        message: "reviewed source manifests require processed_at and processed_content_hash"
+      });
+    }
+    if (
+      manifest.processing_status === "refined" &&
+      manifest.refined_knowledge_ids.length === 0
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["refined_knowledge_ids"],
+        message: "refined source manifests require active knowledge IDs"
+      });
+    }
+    if (
+      manifest.processing_status !== "refined" &&
+      manifest.refined_knowledge_ids.length > 0
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["refined_knowledge_ids"],
+        message: "only refined source manifests can keep knowledge IDs"
+      });
+    }
+    if (
+      manifest.processing_status === "duplicate" &&
+      manifest.duplicate_of === undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["duplicate_of"],
+        message: "duplicate source manifests require duplicate_of"
+      });
+    }
+    if (
+      manifest.processing_status !== "duplicate" &&
+      manifest.duplicate_of !== undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["duplicate_of"],
+        message: "only duplicate source manifests can keep duplicate_of"
+      });
+    }
+    if (
+      (manifest.processing_status === "blocked" ||
+        manifest.processing_status === "obsolete" ||
+        manifest.processing_status === "no_long_term_value" ||
+        manifest.processing_status === "duplicate") &&
+      manifest.processing_reason === undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["processing_reason"],
+        message: "reviewed source status requires processing_reason"
       });
     }
   });
@@ -407,15 +484,19 @@ export function buildSourceManifest(input: {
   redactionPolicy?: z.input<typeof SourceManifestSchema>["redaction_policy"];
   processingProfile?: string;
   redactions?: Record<string, number>;
-  includeSectionPreviews?: boolean;
   upstreamVersion?: z.input<typeof UpstreamVersionSchema>;
   processingStatus?: z.input<typeof SourceProcessingStatusSchema>;
   processingReason?: string;
   duplicateOf?: string;
+  processedAt?: string;
+  processedContentHash?: string;
+  refinedKnowledgeIds?: string[];
   vaultObject?: string;
 }): SourceManifest {
   const headings = headingsIn(input.content);
   const sections: Array<z.input<typeof SourceSectionSchema>> = [];
+  const contentHash = `sha256:${sha256(input.content)}`;
+  const processingStatus = input.processingStatus ?? "pending";
   let headingPath: string[] = [];
 
   for (const [index, heading] of headings.entries()) {
@@ -435,11 +516,7 @@ export function buildSourceManifest(input: {
       heading_path: headingPath,
       text_hash: `sha256:${sha256(normalizedText)}`,
       char_start: heading.start,
-      char_end: Math.max(heading.start + 1, end),
-      preview:
-        input.includeSectionPreviews === false
-          ? ""
-          : normalizedText.slice(0, 500)
+      char_end: Math.max(heading.start + 1, end)
     });
   }
 
@@ -450,13 +527,12 @@ export function buildSourceManifest(input: {
       heading_path: ["正文"],
       text_hash: `sha256:${sha256(text)}`,
       char_start: 0,
-      char_end: Math.max(1, input.content.length),
-      preview: input.includeSectionPreviews === false ? "" : text.slice(0, 500)
+      char_end: Math.max(1, input.content.length)
     });
   }
 
   return SourceManifestSchema.parse({
-    schema_version: 3,
+    schema_version: 5,
     source_id: input.sourceId,
     connector: input.connector,
     artifact_kind: input.artifactKind ?? "document",
@@ -472,14 +548,21 @@ export function buildSourceManifest(input: {
     availability: "available",
     version: buildSourceVersion({
       observedAt: input.observedAt,
-      contentHash: `sha256:${sha256(input.content)}`,
+      contentHash,
       upstream: input.upstreamVersion
     }),
-    processing_status: input.processingStatus ?? "pending",
+    processing_status: processingStatus,
     ...(input.processingReason
       ? { processing_reason: input.processingReason }
       : {}),
     ...(input.duplicateOf ? { duplicate_of: input.duplicateOf } : {}),
+    ...(processingStatus === "pending"
+      ? {}
+      : {
+          processed_at: input.processedAt ?? input.observedAt,
+          processed_content_hash: input.processedContentHash ?? contentHash
+        }),
+    refined_knowledge_ids: input.refinedKnowledgeIds ?? [],
     ...(input.vaultObject ? { vault_object: input.vaultObject } : {}),
     sections
   });

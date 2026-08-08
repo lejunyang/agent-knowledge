@@ -98,7 +98,7 @@ agent-knowledge ingest git \
 ```
 
 `ingest` 只输出 job、manifest 和 Vault handle，不输出正文。`files` 默认遮蔽内置规则可识别的
-secret；`transcripts` 强制应用内置 secret + PII 规则，且 Git manifest 不保存 transcript
+secret；`transcripts` 强制应用内置 secret + PII 规则，且所有 source manifest 都不保存
 正文 preview。确定性 detector 目前覆盖私钥、常见 token/key、密码/cookie、邮箱、中国手机号
 和身份证号，不等同于完整 DLP；姓名、地址、业务 UID 等领域 PII 应由专用 Connector 在
 `normalize` 阶段继续清洗，未确认授权范围的材料不得摄入。
@@ -161,11 +161,17 @@ agent-knowledge index
 推荐的每周维护：
 
 ```bash
+agent-knowledge source list --needs-review
 agent-knowledge maintenance run
 agent-knowledge maintenance list --status pending
 agent-knowledge list
 agent-knowledge organize-inbox
 ```
+
+已经 ingest 的文档不会自动变成长期知识。使用 `source-distiller` Skill 逐条执行
+`source show -> source export -> write-candidate/capture-material --target inbox -> source mark`；
+完整 evidence 只写受控 0600 临时文件。`source mark` 必须携带 show 返回的 fingerprint，
+版本变化时在任何写入前失败。
 
 `maintenance` 会读取 `.memory/logs` 中的 usefulness feedback。同一 `memoryId + queryRunId` 的重复上报只采用最新一条，不能通过重复日志放大票数；Skill proposal 的净正反馈数量必须至少覆盖独立 session 数。如果 feedback 晚于 observation 到达，下次 `maintenance run/watch` 会重新检查已消费 observation，不需要重置 watermark。
 
@@ -223,7 +229,14 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 
 `layer: knowledge` 的非 profile 正文少于 300 字时，无论来源看起来多可信，都强制保持 proposed 并标记 `knowledge_body_too_thin`。这防止系统再次退化为“只有一句结论、metadata 很多”的卡片库；人工可以补充背景、条件、例外、失败策略和验证后再批准。
 
-用户明确指定拉取的正式文档可以先由 `knowledge-organizer` 拆成精炼知识，同时把经过治理的证据保存为 `kind: source`、`layer: evidence`。source 导入前必须遮蔽测试账号、验证码、密码、token、用户标识和个人信息；同一外部文档更新或脱敏规则升级时，使用 `capture-material --replace-source` 刷新稳定 ID 对应的 active documented source。该参数不能覆盖精炼知识，semantic/procedural/profile/episodic/principle 更新仍应新增版本并使用 `supersedes`。
+用户指定的正式文档先经 `ingest files|git` 写入加密 Vault 和 versioned source manifest，再由
+`source-distiller` 拆成精炼知识候选。候选默认进入 inbox；只有成为 active knowledge 且
+current claim anchor 指向 source 当前 section/hash 后，才可 `source mark --status refined`。
+旧的 `capture-material --replace-source` 只兼容已有受治理 source Markdown，不是新流程。
+
+`source export` 的输出必须位于 knowledge workspace 之外，防止完整 evidence 被 private Git
+或同步误收录；`source mark` 同时要求 `expectedFingerprint` 和 `reviewToken`，分别阻止 source
+版本变化和同版本并发 reviewer 覆盖。
 
 用户主动提供材料时也不默认相信其中每个垂直领域结论。术语/关系意义不明、需要专业判断、与受信知识冲突，或 Agent 认为内容疑似错误/过期时，`knowledge-organizer` 会一次汇总具体疑点找用户确认；确认前该条不写 active 或 inbox。明确且不依赖疑点的内容可以分开整理。
 
@@ -234,7 +247,7 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 3. evidence：source manifest 保存 source/section/hash、版本、脱敏摘要和 Vault handle；完整
    原文进入客户端加密 Evidence Vault，不进入普通 query 或 Git。
 
-现有 656 份飞书 source 和 33 条旧精炼知识只用于审计问题与构造评测，不会迁移进 V2 正式知识库。等 Vault、Connector 和蒸馏流程完成后，从原始飞书导出或重新拉取结果全量重建。
+现有 656 份飞书 source 和 33 条旧精炼知识只用于审计问题与构造评测，不会迁移进 V2 正式知识库。使用 Connector、Vault、source manifest v5 和 source-distiller 从原始飞书导出或重新拉取结果全量重建。
 
 可更新来源必须同时记录稳定身份和版本指纹：
 
@@ -257,6 +270,11 @@ Connector 还会把 normalize/脱敏规则版本写入 `processing_profile`。�
 `refined/duplicate/obsolete/no_long_term_value/blocked` 状态。每次尝试独立写入
 `.memory/ingestion/jobs/`，failed 不推进 checkpoint；同一 Connector 并发运行由本地锁拒绝，
 进程崩溃留下的死 PID 锁可在下次运行时恢复。
+
+Source manifest v5 保存 review receipt：`processed_at`、`processed_content_hash` 和
+`refined_knowledge_ids`。metadata-only 更新保留 current receipt；content change/restored
+清空 receipt 并回 pending；完整 inventory 删除生成 missing+pending，人工审查后再标
+obsolete/blocked。`source list --needs-review` 会列出 pending、stale 和尚未处理的 missing。
 
 完整 inventory Connector（当前为 `ingest git`）在未传 `--limit` 的完整运行中还会对账删除：
 上次存在而本次 ref/pathspec 中缺失的 source 标记为 `availability: missing` 和 `obsolete`，
@@ -386,6 +404,12 @@ agent-knowledge graph export --format html --output knowledge-graph.html
 agent-knowledge knowledge audit --fail-on warning
 agent-knowledge knowledge show <knowledge-id> --layer knowledge
 agent-knowledge knowledge evidence <claim-id>
+
+# Source 审阅与蒸馏
+agent-knowledge source list --needs-review
+agent-knowledge source show <source-id>
+agent-knowledge source export <source-id> --fingerprint <sha256> --output /secure/tmp/evidence
+agent-knowledge source mark <source-id> --fingerprint <sha256> --review-token <token> --status refined --knowledge-id <active-id>
 
 # 加密完整 evidence
 agent-knowledge vault status
