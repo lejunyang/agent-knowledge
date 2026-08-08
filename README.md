@@ -1,6 +1,8 @@
 # Agent Knowledge
 
-Agent Knowledge 是一个本地、可审计的 Agent 知识持久化工具。正式 KnowledgeDocument Markdown 是唯一事实源；SQLite、embedding、日志和 staging 都是可重建的机器产物。`_inbox`、`_archive` 和 `_inbox-skills` 是审阅产物，不属于正式事实。
+Agent Knowledge 是一个本地、可审计的 Agent 知识持久化工具。V2 正式 KnowledgeDocument Markdown 是人类可读事实源；SQLite、embedding、graph、日志和 staging 都是可重建的机器产物。`_inbox`、`_archive` 和 `_inbox-skills` 是审阅产物，不属于正式事实。
+
+当前主分支使用不兼容的 `schema_version: 2`：知识类型 `kind` 与抽象层 `layer` 分离，`synopsis` 负责路由，正文负责解释，supported claim 必须带 evidence anchor。旧 KnowledgeDocument 不会被静默读取或迁移，应从原始 evidence 重新提炼。
 
 ## 功能目录
 
@@ -62,6 +64,20 @@ agent-knowledge integration install
 agent-knowledge init
 agent-knowledge index
 agent-knowledge query --task "审查 Vue SFC lint 迁移方案"
+```
+
+项目作用域使用规范化 Git remote，例如 `github.com/lejunyang/agent-knowledge`。普通 query 会自动发现当前仓库 remote；跨项目诊断使用：
+
+```bash
+agent-knowledge query \
+  --project github.com/example/project \
+  --task "当前任务"
+```
+
+没有 Git remote 的本地仓库必须在 `project detect` 时显式提供可读 key：
+
+```bash
+agent-knowledge project detect --project-key local/owner/private-prototype
 ```
 
 默认 `lexical` 检索不需要下载模型。需要语义检索时再执行：
@@ -159,16 +175,17 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 
 一旦传 `--approve`，该次命令只处理列出的 ID；未知 ID 会在写文件前报错。
 
-用户明确指定拉取的正式文档可以先由 `knowledge-organizer` 拆成精炼知识，同时把经过治理的完整正文保存为 `type: source` 证据。source 导入前必须遮蔽测试账号、验证码、密码、token、用户标识和个人信息；同一外部文档更新或脱敏规则升级时，使用 `capture-material --replace-source` 刷新稳定 ID 对应的 active documented source。该参数不能覆盖精炼知识，semantic/procedural/profile/episodic 更新仍应新增版本并使用 `supersedes`。
+用户明确指定拉取的正式文档可以先由 `knowledge-organizer` 拆成精炼知识，同时把经过治理的证据保存为 `kind: source`、`layer: evidence`。source 导入前必须遮蔽测试账号、验证码、密码、token、用户标识和个人信息；同一外部文档更新或脱敏规则升级时，使用 `capture-material --replace-source` 刷新稳定 ID 对应的 active documented source。该参数不能覆盖精炼知识，semantic/procedural/profile/episodic/principle 更新仍应新增版本并使用 `supersedes`。
 
 用户主动提供材料时也不默认相信其中每个垂直领域结论。术语/关系意义不明、需要专业判断、与受信知识冲突，或 Agent 认为内容疑似错误/过期时，`knowledge-organizer` 会一次汇总具体疑点找用户确认；确认前该条不写 active 或 inbox。明确且不依赖疑点的内容可以分开整理。
 
-批量导入正式文档时推荐按“两层语料”处理：
+批量导入正式文档时使用渐进三层：
 
-1. 完整脱敏正文保存为 `source`，用于审计、graph/source 关系和后续重新整理，不进入 FTS/embedding。
-2. 用 `knowledge-organizer` 从 source 拆出小而稳定的 semantic/procedural 知识，显式关联 source ID，再用真实问题反复评测。
+1. `synopsis`：只负责低成本路由和首次上下文。
+2. knowledge 正文：保存背景、条件、例外、步骤、失败策略和验证方式。
+3. evidence：保存 source/section/hash 引用；完整敏感原文未来由加密 Evidence Vault 管理。
 
-本项目首批 5 个飞书入口递归遍历后，成功保存 656 份可访问文档并记录 864 个嵌入资源；不可访问或失效引用保留失败清单，不伪装成已拉取。真实检索只使用 33 条精炼知识（24 条已有 + 9 条新增），避免 656 份长原文污染召回。
+现有 656 份飞书 source 和 33 条旧精炼知识只用于审计问题与构造评测，不会迁移进 V2 正式知识库。等 Vault、Connector 和蒸馏流程完成后，从原始飞书导出或重新拉取结果全量重建。
 
 ## 主动记忆何时发生
 
@@ -196,7 +213,7 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 - 不保存完整客户隐私、凭据或未授权 transcript。
 - 客户陈述只是 observation，不能成为 `user_confirmed`。
 - 同一客户或同一 session 重复多次不算独立佐证。
-- 按租户或业务边界使用独立 root/project ID；不要让一个客户的候选进入另一个客户的检索范围。
+- 按租户或业务边界使用独立 root/project key；不要让一个客户的候选进入另一个客户的检索范围。
 - `maintenance watch` 只负责生成提案；不要自动执行 `maintenance accept` 或 `organize-inbox --approve`。
 - 接受业务事实前，应对照受信文档、owner 确认或多个独立来源。
 
@@ -237,7 +254,9 @@ agent-knowledge query --task "当前任务" --retrieval hybrid-graph
 
 ## 核心原则
 
-- `knowledge/` 中排除 generated、`_inbox`、`_archive`、`_inbox-skills` 后的 KnowledgeDocument Markdown 是唯一事实源。
+- `knowledge/` 中排除 generated、`_inbox`、`_archive`、`_inbox-skills` 后的 `schema_version: 2` KnowledgeDocument Markdown 是正式可读事实源。
+- `kind` 表达 profile/semantic/procedural/episodic/principle/source，`layer` 表达 synopsis/knowledge/evidence。
+- `aliases`、`scenarios` 和 `tags` 都带权重与来源；supported claim 必须带 source/section/hash evidence。
 - `_inbox` 和 `_archive` 永远不会进入正式检索。
 - `_inbox-skills` 使用 Skill frontmatter，只供人工审阅/安装；不会进入 index、embedding、catalog、graph 或同步。
 - 自动会话和客户陈述只能生成 proposed observation，不能直接激活。

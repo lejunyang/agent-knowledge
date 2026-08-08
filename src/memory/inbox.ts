@@ -6,7 +6,11 @@
  */
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { decideCandidateStatus, type CandidateMemoryInput } from "./governance.js";
+import {
+  decideCandidateStatus,
+  normalizeCandidateInput,
+  type CandidateMemoryInput
+} from "./governance.js";
 import { parseKnowledgeMarkdown, serializeKnowledgeMarkdown } from "../storage/markdown.js";
 import { resolveWorkspacePath } from "../core/paths.js";
 import { KnowledgeDocumentSchema } from "../core/schema.js";
@@ -64,6 +68,7 @@ function idFromCandidate(input: CandidateMemoryInput): string {
  */
 export async function writeCandidateMemory(rootDir: string, input: CandidateMemoryInput): Promise<WriteCandidateResult> {
   const decision = decideCandidateStatus(input);
+  const normalized = normalizeCandidateInput(input);
   const actorType = input.actor_type ?? "owner";
   const sourceAuthority =
     input.actor_type === "customer" ? "model_inferred" : input.source_authority;
@@ -77,24 +82,28 @@ export async function writeCandidateMemory(rootDir: string, input: CandidateMemo
   const document: KnowledgeDocument = {
     filePath: relativePath,
     frontmatter: {
+      schema_version: 2,
       id,
-      type: input.memory_type,
+      kind: normalized.kind,
+      layer: normalized.layer,
       title: input.title,
-      aliases: input.aliases ?? [],
+      synopsis: normalized.synopsis,
+      aliases: normalized.aliases,
       domain: input.domain,
       related_domains: input.related_domains,
-      scenario: input.scenario,
-      tags: input.tags,
+      scenarios: normalized.scenarios,
+      tags: normalized.tags,
       status: decision.status,
       confidence: input.confidence,
       source_authority: sourceAuthority,
       source: input.evidence,
+      claims: normalized.claims,
       related_knowledge: input.related_knowledge ?? [],
       supersedes: input.supersedes ?? [],
       conflicts_with: input.conflicts_with ?? [],
       visibility: input.visibility ?? "project",
       sensitivity: input.sensitivity ?? "internal",
-      project_ids: input.project_ids ?? [],
+      project_keys: normalized.project_keys,
       capture_mode: input.capture_mode ?? "direct_material",
       actor_type: actorType,
       corroboration_count: input.corroboration_count ?? 1,
@@ -105,12 +114,9 @@ export async function writeCandidateMemory(rootDir: string, input: CandidateMemo
       valid_until: null
     },
     body:
-      input.content ??
-      `# ${input.title}
-
-## 结论
-
-${input.summary}
+      normalized.layer === "evidence"
+        ? normalized.explanation
+        : `${normalized.explanation.trimEnd()}
 
 ## 审阅
 
@@ -125,9 +131,8 @@ ${input.summary}
     const existing = parseKnowledgeMarkdown(relativePath, await readFile(absolutePath, "utf8"));
     if (
       existing.frontmatter.id === id &&
-      (input.content
-        ? existing.body === input.content.trimStart()
-        : existing.body.includes(input.summary))
+      existing.frontmatter.synopsis === normalized.synopsis &&
+      existing.body.startsWith(normalized.explanation.trimStart())
     ) {
       return {
         id,

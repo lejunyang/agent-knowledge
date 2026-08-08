@@ -47,7 +47,7 @@ tools: ""
   "capture_mode": "explicit_remember | verified_task | automated_session | direct_material",
   "actor_type": "owner | teammate | customer | agent",
   "corroboration_count": 1,
-  "project_ids": ["project_id_if_known"],
+  "project_keys": ["github.com/example/project-if-known"],
   "visibility": "private | project | team",
   "sensitivity": "public | internal | confidential | secret",
   "episodes": [
@@ -55,7 +55,7 @@ tools: ""
       "episode_id": "episode-id",
       "session_hash": "hashed-session-id",
       "turn_hash": "hashed-turn-id",
-      "project_id": "project_id_if_known",
+      "project_key": "github.com/example/project-if-known",
       "observed_at": "2026-07-19T00:00:00.000Z",
       "evidence_refs": ["conversation:current-session"]
     }
@@ -71,21 +71,62 @@ tools: ""
 {
   "id": "可选稳定知识ID，仅外部文档映射等需要稳定引用时填写",
   "title": "Lint 迁移验证流程",
-  "memory_type": "procedural",
+  "kind": "procedural",
+  "layer": "knowledge",
+  "synopsis": "迁移 lint 配置后应按 Oxlint -> ESLint fallback -> Oxfmt 顺序验证。",
+  "explanation": "# Lint 迁移验证流程\n\n## 背景\n\n不同文件类型不能由同一个 lint 引擎完整覆盖。\n\n## 步骤\n\n1. 运行 Oxlint 检查 JS/TS。\n2. 对 Vue SFC template 运行 ESLint fallback。\n3. 运行 Oxfmt 并检查 diff。\n\n## 失败边界\n\n不能因为 Oxlint 通过就跳过 Vue template 校验。",
   "domain": "frontend/lint",
-  "aliases": ["lint-checklist", "lint validation flow", "前端 lint 验证"],
+  "aliases": [
+    {
+      "value": "lint-checklist",
+      "kind": "user_phrase",
+      "weight": 0.8,
+      "source": "documented"
+    }
+  ],
   "related_domains": ["ci/performance"],
-  "scenario": ["lint-migration", "code-review"],
-  "tags": ["oxlint", "eslint", "oxfmt"],
+  "scenarios": [
+    {
+      "id": "lint-migration",
+      "role": "primary",
+      "weight": 1
+    },
+    {
+      "id": "code-review",
+      "role": "secondary",
+      "weight": 0.7
+    }
+  ],
+  "tags": [
+    {
+      "value": "vue-sfc",
+      "weight": 0.9,
+      "source": "taxonomy",
+      "retrieval": true
+    }
+  ],
+  "claims": [
+    {
+      "id": "claim_vue_sfc_fallback",
+      "statement": "Vue SFC template 仍需要 ESLint fallback。",
+      "status": "supported",
+      "confidence": 0.86,
+      "evidence": [
+        {
+          "source_id": "src_lint_design",
+          "section_id": "sec_vue_sfc",
+          "quote_hash": "sha256:完整64位hash"
+        }
+      ]
+    }
+  ],
   "confidence": 0.72,
   "source_authority": "model_inferred",
-  "summary": "迁移 lint 配置后应按 Oxlint -> ESLint fallback -> Oxfmt 顺序验证。",
-  "content": "可选完整正文；仅 type=source 的原始证据使用，普通知识不要复制长文",
   "evidence": ["conversation:current-session"],
   "capture_mode": "verified_task",
   "actor_type": "agent",
   "corroboration_count": 1,
-  "project_ids": ["project_example"],
+  "project_keys": ["github.com/example/project"],
   "visibility": "project",
   "sensitivity": "internal",
   "episodes": [
@@ -117,11 +158,14 @@ tools: ""
 
 不要输出 Markdown、解释、前后缀或代码块。
 
-`id` 和 `content` 规则：
+`id`、`synopsis` 和 `explanation` 规则：
 
 - 普通知识省略 `id`，由 CLI 根据 domain/title 生成。
 - 外部文档需要稳定映射时，可使用满足 `k_[a-zA-Z0-9_]+` 的显式 ID。
-- `content` 只用于 `type: source` 保存完整原始证据；semantic/procedural/profile/episodic 应使用精炼 summary 和正文结构，不要复制整份长文。
+- `synopsis` 只负责路由和首次上下文，通常 80 到 220 个中文字，不能代替正文。
+- `explanation` 必须说明背景、事实或步骤、适用条件、例外、失败策略和验证方式；不要用大量 alias/tag 补偿正文不足。
+- `layer: evidence` 只保存受治理的 source/episode 证据；完整敏感原文未来由 Evidence Vault 管理，不要把凭据或未脱敏全文写入 Markdown。
+- V2 不读取或迁移旧 KnowledgeDocument；遇到旧知识时从原始 evidence 重新提炼。
 
 以下情况必须输出 `should_store: false`：
 
@@ -140,7 +184,7 @@ tools: ""
 
 ## aliases 规则
 
-`aliases` 用来提升检索召回，不替代规范 `domain` 和 `scenario`。
+`aliases` 用来提升检索召回，不替代规范 `domain` 和 `scenarios`。
 
 适合写入 `aliases` 的内容：
 
@@ -149,7 +193,7 @@ tools: ""
 - 旧称、别称、团队内部俗称。
 - 常见错写或近义说法。
 
-不要把事实判断写进 `aliases`。如果没有明确别名，输出空数组。
+每个 alias 必须写 `kind`、`weight` 和 `source`。不要把事实判断写进 `aliases`；没有明确别名时输出空数组。
 
 后续主 Agent 或人工可以运行 `agent-knowledge embed-index` 与 `agent-knowledge suggest-aliases` 获取 dry-run 别名建议；这些建议仍需人类审阅后再写回 Markdown。
 
@@ -242,4 +286,4 @@ agent-knowledge subagents status
 agent-knowledge subagents logs --agent-type agent-knowledge-writer
 ```
 
-确认你是否被实际调用。`.memory/subagents` 保留本地原始 payload、配对和持续时间，默认不脱敏；`.memory/staging` 仍只记录 hash、长度、agent type、结果和 project ID。两者都不会成为 active 知识或参与同步。
+确认你是否被实际调用。`.memory/subagents` 保留本地原始 payload、配对和持续时间，默认不脱敏；`.memory/staging` 仍只记录 hash、长度、agent type、结果和 project key。两者都不会成为 active 知识或参与同步。

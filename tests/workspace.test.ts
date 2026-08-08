@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -22,6 +22,15 @@ describe("initKnowledgeWorkspace", () => {
     await expect(stat(path.join(root, "knowledge", "_inbox"))).resolves.toBeDefined();
     await expect(stat(path.join(root, "knowledge", "semantic"))).resolves.toBeDefined();
     await expect(stat(path.join(root, "knowledge", "procedural"))).resolves.toBeDefined();
+    await expect(
+      access(path.join(root, "knowledge", "source-manifests"))
+    ).resolves.toBeUndefined();
+    await expect(
+      access(path.join(root, "knowledge", "principle"))
+    ).resolves.toBeUndefined();
+    await expect(
+      access(path.join(root, "events", "support"))
+    ).resolves.toBeUndefined();
   });
 });
 

@@ -71,21 +71,30 @@ describe("graph retrieval", () => {
     await writeFile(
       path.join(guardDirectory, "guard.md"),
       `---
+schema_version: 2
 id: k_eval_second_hop_guard
-type: semantic
+kind: semantic
+layer: knowledge
 title: CI safety guard
+synopsis: Release validation requires an independent CI safety guard.
 aliases: []
 domain: ci/safety
 related_domains: []
-scenario:
-  - release-safety
+scenarios:
+  - id: release-safety
+    role: primary
+    weight: 1
 tags:
-  - ci
+  - value: ci
+    weight: 0.8
+    source: taxonomy
+    retrieval: true
 status: active
 confidence: 0.9
 source_authority: documented
 source:
   - test
+claims: []
 related_knowledge:
   - id: k_eval_third_hop_checklist
     relation: supports
@@ -94,7 +103,7 @@ supersedes: []
 conflicts_with: []
 visibility: project
 sensitivity: internal
-project_ids: []
+project_keys: []
 capture_mode: direct_material
 actor_type: owner
 corroboration_count: 1
@@ -114,27 +123,36 @@ Release validation requires an independent CI safety guard.
     await writeFile(
       path.join(guardDirectory, "checklist.md"),
       `---
+schema_version: 2
 id: k_eval_third_hop_checklist
-type: semantic
+kind: semantic
+layer: knowledge
 title: Final release checklist
+synopsis: The final checklist validates the CI guard before release.
 aliases: []
 domain: ci/checklist
 related_domains: []
-scenario:
-  - release-safety
+scenarios:
+  - id: release-safety
+    role: primary
+    weight: 1
 tags:
-  - checklist
+  - value: checklist
+    weight: 0.8
+    source: taxonomy
+    retrieval: true
 status: active
 confidence: 0.9
 source_authority: documented
 source:
   - test
+claims: []
 related_knowledge: []
 supersedes: []
 conflicts_with: []
 visibility: project
 sensitivity: internal
-project_ids: []
+project_keys: []
 capture_mode: direct_material
 actor_type: owner
 corroboration_count: 1

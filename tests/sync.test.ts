@@ -45,26 +45,32 @@ function knowledgeMarkdown(
   options: { id?: string; visibility?: string; sensitivity?: string } = {}
 ): string {
   return `---
+schema_version: 2
 id: ${options.id ?? "k_20260719_sync_test_fact"}
-type: semantic
+kind: semantic
+layer: knowledge
 title: Sync test fact
+synopsis: ${summary}
 aliases: []
 domain: sync/test
 related_domains: []
-scenario:
-  - sync-test
+scenarios:
+  - id: sync-test
+    role: primary
+    weight: 1
 tags: []
 status: active
 confidence: 0.9
 source_authority: user_confirmed
 source:
   - test
+claims: []
 related_knowledge: []
 supersedes: []
 conflicts_with: []
 visibility: ${options.visibility ?? "project"}
 sensitivity: ${options.sensitivity ?? "internal"}
-project_ids: []
+project_keys: []
 capture_mode: direct_material
 actor_type: owner
 corroboration_count: 1

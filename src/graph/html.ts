@@ -26,8 +26,8 @@ function browserNode(node: KnowledgeGraph["nodes"][number]): {
   data: Record<string, unknown>;
   classes: string;
 } {
-  const projectIds = Array.isArray(node.metadata.projectIds)
-    ? node.metadata.projectIds
+  const projectKeys = Array.isArray(node.metadata.projectKeys)
+    ? node.metadata.projectKeys
     : [];
   const sourceMemory =
     node.type === "knowledge" && node.metadata.memoryType === "source";
@@ -41,7 +41,7 @@ function browserNode(node: KnowledgeGraph["nodes"][number]): {
       status: node.metadata.status ?? "",
       domain:
         node.metadata.domain ?? (node.type === "domain" ? node.label : ""),
-      projectIds,
+      projectKeys,
       searchText: [
         node.id,
         node.label,
@@ -243,7 +243,7 @@ function passesFilters(node){
   if(controls.status.value&&data.status!==controls.status.value)return false;
   if(controls.domain.value&&data.domain!==controls.domain.value)return false;
   if(controls.project.value){
-    const projects=Array.isArray(data.projectIds)?data.projectIds:[];
+    const projects=Array.isArray(data.projectKeys)?data.projectKeys:[];
     if(data.type!=='project'&&!projects.includes(controls.project.value))return false;
     if(data.type==='project'&&data.label!==controls.project.value)return false;
   }

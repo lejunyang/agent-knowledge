@@ -107,7 +107,7 @@ describe("runEvalCase", () => {
       task: "审查 Vue SFC lint 迁移方案，需要关注 ESLint fallback",
       domains: ["frontend/lint"],
       scenarios: ["lint-migration"],
-      max_tokens: 200,
+      max_tokens: 180,
       expected_memories: ["k_20260705_frontend_lint_vue_sfc"],
       forbidden_memories: ["k_20260705_lint_validation_flow"]
     });
@@ -159,9 +159,9 @@ describe("runEvalCase", () => {
           tags: ["project"],
           confidence: 0.95,
           source_authority: "user_confirmed",
-          summary: "该发布流程只适用于 project_alpha。",
+          summary: "该发布流程只适用于 github.com/example/project-alpha。",
           evidence: ["test:project"],
-          project_ids: ["project_alpha"]
+          project_keys: ["github.com/example/project-alpha"]
         }
       ],
       { target: "active", rebuild: true }
@@ -171,7 +171,7 @@ describe("runEvalCase", () => {
       task: "project release marker",
       domains: [],
       scenarios: [],
-      project_ids: ["project_alpha"],
+      project_keys: ["github.com/example/project-alpha"],
       expected_memories: ["k_eval_project_scoped"],
       forbidden_memories: []
     });
@@ -179,7 +179,7 @@ describe("runEvalCase", () => {
       task: "project release marker",
       domains: [],
       scenarios: [],
-      project_ids: ["project_beta"],
+      project_keys: ["github.com/example/project-beta"],
       expected_memories: [],
       forbidden_memories: ["k_eval_project_scoped"],
       abstain: true

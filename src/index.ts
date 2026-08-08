@@ -6,6 +6,8 @@
  */
 export * from "./core/types.js";
 export * from "./core/schema.js";
+export * from "./core/knowledgeV2.js";
+export * from "./core/knowledgeText.js";
 export * from "./core/paths.js";
 export * from "./core/logging.js";
 export * from "./core/config.js";

@@ -18,7 +18,7 @@ export type StagedEvent = {
   turnHash?: string;
   agentHash?: string;
   agentType?: string;
-  projectId?: string;
+  projectKey?: string;
   cwdHash?: string;
   reason?: string;
   promptLength?: number;
@@ -156,7 +156,10 @@ export async function stageHookEvent(
         : typeof payload.subagent_name === "string"
           ? payload.subagent_name.slice(0, 80)
           : undefined,
-    projectId: typeof payload.project_id === "string" ? payload.project_id.slice(0, 80) : undefined,
+    projectKey:
+      typeof payload.project_key === "string"
+        ? payload.project_key.slice(0, 240)
+        : undefined,
     cwdHash: hashIdentifier(payload.cwd),
     reason: typeof payload.reason === "string" ? payload.reason.slice(0, 120) : undefined,
     promptLength: stringLength(payload.prompt),

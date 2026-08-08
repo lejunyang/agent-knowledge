@@ -33,6 +33,7 @@ import {
   applyBatchRerank,
   type BatchCandidateReranker
 } from "./reranker.js";
+import { aliasValues } from "../core/knowledgeText.js";
 
 const require = createRequire(import.meta.url);
 // 与 indexer 保持一致，使用 Node 内置 sqlite 读取 FTS5 索引。
@@ -41,12 +42,14 @@ const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
 type MemoryRow = {
   id: string;
   file_path: string;
-  type: string;
+  kind: string;
+  layer: string;
   title: string;
+  synopsis: string;
   aliases: string;
   domain: string;
   related_domains: string;
-  scenario: string;
+  scenarios: string;
   status: string;
   confidence: number;
   source_authority: SourceAuthority;
@@ -55,7 +58,7 @@ type MemoryRow = {
   body: string;
   visibility: string;
   sensitivity: string;
-  project_ids: string;
+  project_keys: string;
   valid_from: string;
   valid_until: string | null;
   rank_score?: number;
@@ -242,7 +245,7 @@ function domainIntersects(left: string[], right: string[]): boolean {
 /** 给 metadata exact-match 通道计算离散分数，随后仅用于生成 rank。 */
 function metadataMatchScore(row: MemoryRow, request: MemoryQueryRequest): number {
   const domains = [row.domain, ...parseJsonArray(row.related_domains)];
-  const scenarios = parseJsonArray(row.scenario);
+  const scenarios = parseJsonArray(row.scenarios);
   const aliases = parseJsonArray(row.aliases);
   let score = 0;
 
@@ -275,7 +278,7 @@ const SENSITIVITY_LEVEL = {
  * 该函数被 direct、related 和 graph 扩展共同复用，保证关系边只能发现候选，不能授予权限。
  */
 function rowIsAccessible(row: MemoryRow, request: MemoryQueryRequest): boolean {
-  const projectIds = parseJsonArray(row.project_ids);
+  const projectKeys = parseJsonArray(row.project_keys);
   const visibilityOk = request.visibilityScopes.includes(
     row.visibility as MemoryQueryRequest["visibilityScopes"][number]
   );
@@ -286,8 +289,8 @@ function rowIsAccessible(row: MemoryRow, request: MemoryQueryRequest): boolean {
   const validUntilOk = row.valid_until === null || row.valid_until >= request.now;
   const projectOk =
     row.visibility !== "project" ||
-    projectIds.length === 0 ||
-    projectIds.some((projectId) => request.projectIds.includes(projectId));
+    projectKeys.length === 0 ||
+    projectKeys.some((projectKey) => request.projectKeys.includes(projectKey));
 
   return row.status === "active" && visibilityOk && sensitivityOk && validFromOk && validUntilOk && projectOk;
 }
@@ -324,7 +327,7 @@ function expandRequestWithAliases(request: MemoryQueryRequest, rows: MemoryRow[]
   for (const row of rows) {
     const rowAliases = parseJsonArray(row.aliases);
     const rowDomains = [row.domain, ...parseJsonArray(row.related_domains)];
-    const rowScenarios = parseJsonArray(row.scenario);
+    const rowScenarios = parseJsonArray(row.scenarios);
     const rowTerms = [...rowDomains, ...rowScenarios, ...rowAliases];
 
     const domainMatched =
@@ -363,7 +366,7 @@ function expandRequestWithAliases(request: MemoryQueryRequest, rows: MemoryRow[]
  */
 function rowMatchesRequest(row: MemoryRow, request: MemoryQueryRequest): boolean {
   const relatedDomains = parseJsonArray(row.related_domains);
-  const scenarios = parseJsonArray(row.scenario);
+  const scenarios = parseJsonArray(row.scenarios);
   const aliases = parseJsonArray(row.aliases);
   const domainPool = [row.domain, ...relatedDomains];
   const scenarioPool = [...scenarios, ...aliases];
@@ -372,7 +375,9 @@ function rowMatchesRequest(row: MemoryRow, request: MemoryQueryRequest): boolean
     domainIntersects(domainPool, request.domains) ||
     fuzzyIntersects(aliases, request.domains);
   const scenarioOk = request.scenarios.length === 0 || fuzzyIntersects(scenarioPool, request.scenarios);
-  const typeOk = request.includeTypes.includes(row.type as MemoryQueryRequest["includeTypes"][number]);
+  const typeOk = request.includeTypes.includes(
+    row.kind as MemoryQueryRequest["includeTypes"][number]
+  );
 
   return rowIsAccessible(row, request) && domainOk && scenarioOk && typeOk;
 }
@@ -431,7 +436,7 @@ function hasSufficientLexicalEvidence(
     ...parseJsonArray(row.aliases),
     row.domain,
     ...parseJsonArray(row.related_domains),
-    ...parseJsonArray(row.scenario),
+    ...parseJsonArray(row.scenarios),
     ...parseJsonArray(row.tags),
     row.summary,
     row.body
@@ -459,7 +464,7 @@ function scoreRow(
   embeddingScorer: EmbeddingScorer,
   reranker: MemoryReranker
 ): Omit<RankedMemory, "document"> {
-  const scenarios = parseJsonArray(row.scenario);
+  const scenarios = parseJsonArray(row.scenarios);
   const aliases = parseJsonArray(row.aliases);
   const scenarioScore = request.scenarios.length > 0 && fuzzyIntersects(scenarios, request.scenarios) ? 1 : 0.3;
   const lexicalScore = Math.max(
@@ -761,7 +766,9 @@ function rankSelectedRows(
       // 显式关系允许跨 domain/scenario，但绝不能绕过访问控制或 includeTypes。
       rowIsAccessible(row, expandedRequest) &&
       !directIds.has(row.id) &&
-      expandedRequest.includeTypes.includes(row.type as MemoryQueryRequest["includeTypes"][number])
+      expandedRequest.includeTypes.includes(
+        row.kind as MemoryQueryRequest["includeTypes"][number]
+      )
   );
 
   const metadataRanks = new Map(
@@ -942,7 +949,7 @@ export function loadAccessibleMemoriesByIds(
       (row) =>
         rowIsAccessible(row, request) &&
         request.includeTypes.includes(
-          row.type as MemoryQueryRequest["includeTypes"][number]
+          row.kind as MemoryQueryRequest["includeTypes"][number]
         )
     )
     .map((row) => {
@@ -984,7 +991,7 @@ export async function queryMemoriesRerankedWithDebug(
       id: memory.document.frontmatter.id,
       text: [
         memory.document.frontmatter.title,
-        memory.document.frontmatter.aliases.join(" "),
+        aliasValues(memory.document.frontmatter).join(" "),
         memory.document.body
       ].join("\n"),
       baseScore: memory.finalScore

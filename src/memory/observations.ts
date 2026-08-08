@@ -114,8 +114,9 @@ function observationFromSubagentStop(
     stringField(structured, "title") ??
     record.agentType ??
     "Subagent observation";
-  const projectId =
-    stringValue(payload.project_id) ?? stringField(structured, "project_id");
+  const projectKey =
+    stringValue(payload.project_key) ??
+    stringField(structured, "project_key");
   const episode: EpisodeProvenance = {
     episode_id: `episode_${hash({
       timestamp: record.timestamp,
@@ -125,7 +126,7 @@ function observationFromSubagentStop(
     })}`,
     session_hash: record.sessionId ?? "unknown-session",
     turn_hash: record.turnId,
-    project_id: projectId,
+    project_key: projectKey,
     observed_at: record.timestamp,
     evidence_refs: [
       `subagent:${record.agentType ?? "unknown"}`,
@@ -139,7 +140,9 @@ function observationFromSubagentStop(
       task.trim().replace(/\s+/g, " ").slice(0, 120),
     domain:
       stringField(structured, "domain") ??
-      (projectId ? `project/${projectId}` : `agent/${record.agentType ?? "unknown"}`),
+      (projectKey
+        ? `project/${projectKey}`
+        : `agent/${record.agentType ?? "unknown"}`),
     summary,
     sessionHash: episode.session_hash,
     sourceAuthority: normalizeAuthority(

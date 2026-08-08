@@ -2,6 +2,8 @@
 
 同步只处理正式 KnowledgeDocument Markdown，不上传 `_inbox`、`_archive`、`_inbox-skills`、索引、embedding、日志、staging 或凭据。
 
+当前实现会同步权限策略允许的 `kind: source` Markdown，包括其中已有的完整脱敏正文。WebDAV/S3 对象没有客户端加密，因此该功能是知识 Markdown 镜像，不是完整会话、附件和工具轨迹使用的 Evidence Vault。
+
 先运行：
 
 ```bash

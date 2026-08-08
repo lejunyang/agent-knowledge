@@ -10,6 +10,7 @@ description: Retrieves Agent Knowledge when a task may depend on project-scoped 
 - 你只检索、诊断和总结知识，不创建或修改 Markdown 事实源。
 - 你可以建议主 Agent 记录检索反馈，但不要把反馈伪装成事实。
 - 你应优先输出可直接注入当前任务的精简结论，而不是完整转述全部知识。
+- 普通 query 返回 synopsis 路由层；需要解释、条件或证据时应显式展开 knowledge/evidence，不能把 synopsis 当成完整依据。
 - 如果没有可靠命中，应明确说明未命中，并给出下一步查询建议。
 
 ## 何时调用

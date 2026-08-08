@@ -36,10 +36,17 @@ function normalizeYamlDates(value: unknown): unknown {
  */
 export function parseKnowledgeMarkdown(filePath: string, markdown: string): KnowledgeDocument {
   const parsed = matter(markdown);
+  const frontmatter = normalizeYamlDates(parsed.data) as Record<string, unknown>;
+  // V1 资料必须从原始 evidence 重建；静默默认或转换会把旧的弱元数据伪装成 V2 事实。
+  if (frontmatter.schema_version !== 2) {
+    throw new Error(
+      `Unsupported knowledge schema in ${filePath}; expected schema_version: 2. Rebuild this knowledge from original evidence instead of migrating it.`
+    );
+  }
 
   return KnowledgeDocumentSchema.parse({
     filePath,
-    frontmatter: normalizeYamlDates(parsed.data),
+    frontmatter,
     body: parsed.content.trimStart()
   });
 }

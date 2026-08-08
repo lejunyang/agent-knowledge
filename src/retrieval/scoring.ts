@@ -6,6 +6,11 @@
  * 或更复杂的重排器时，不需要改动 CLI 输出协议。
  */
 import type { KnowledgeDocument, MemoryQueryRequest, RankedMemory, SourceAuthority } from "../core/types.js";
+import {
+  aliasValues,
+  scenarioIds,
+  searchableTagValues
+} from "../core/knowledgeText.js";
 
 export type ScoreFeatures = Omit<RankedMemory, "document" | "finalScore">;
 
@@ -118,11 +123,15 @@ export class DefaultLocalEmbeddingScorer implements EmbeddingScorer {
     ]);
     const documentVector = toWeightedVector([
       { text: input.document.frontmatter.title, weight: 2 },
-      { text: input.document.frontmatter.aliases.join(" "), weight: 1.5 },
+      { text: aliasValues(input.document.frontmatter).join(" "), weight: 1.5 },
       { text: input.document.frontmatter.domain, weight: 1.5 },
       { text: input.document.frontmatter.related_domains.join(" "), weight: 1 },
-      { text: input.document.frontmatter.scenario.join(" "), weight: 1.5 },
-      { text: input.document.frontmatter.tags.join(" "), weight: 1 },
+      { text: scenarioIds(input.document.frontmatter).join(" "), weight: 1.5 },
+      {
+        text: searchableTagValues(input.document.frontmatter).join(" "),
+        weight: 1
+      },
+      { text: input.document.frontmatter.synopsis, weight: 1.3 },
       { text: input.document.body, weight: 0.7 }
     ]);
 

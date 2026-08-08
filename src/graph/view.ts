@@ -133,7 +133,7 @@ export function buildKnowledgeGraphView(
   );
   const projects = sortedUnique(
     graph.nodes.flatMap((node) => [
-      ...metadataStrings(node, "projectIds"),
+      ...metadataStrings(node, "projectKeys"),
       ...(node.type === "project" ? [node.label] : [])
     ])
   );

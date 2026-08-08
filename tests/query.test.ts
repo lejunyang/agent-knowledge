@@ -433,7 +433,8 @@ describe("queryMemories", () => {
     rebuildIndex(root);
     const embeddingScorer: EmbeddingScorer = {
       name: "test-procedural-boost",
-      score: ({ document }) => (document.frontmatter.type === "procedural" ? 1 : 0)
+      score: ({ document }) =>
+        document.frontmatter.kind === "procedural" ? 1 : 0
     };
     const reranker: MemoryReranker = {
       name: "test-embedding-only",
@@ -530,7 +531,12 @@ describe("queryMemories", () => {
       {
         id: "k_20260705_other_project",
         title: "Other project lint rule",
-        changes: [["visibility: project", "visibility: project\nproject_ids:\n  - project_other"]]
+        changes: [
+          [
+            "project_keys: []",
+            "project_keys:\n  - github.com/example/project-other"
+          ]
+        ]
       }
     ];
     for (const variant of variants) {
@@ -553,7 +559,7 @@ describe("queryMemories", () => {
       now: "2026-07-19",
       visibilityScopes: ["project", "team"],
       sensitivityClearance: "internal",
-      projectIds: ["project_current"]
+      projectKeys: ["github.com/example/project-current"]
     });
     const ids = ranked.map((item) => item.document.frontmatter.id);
 
@@ -645,7 +651,7 @@ describe("buildContextPacket", () => {
       now: "2026-07-19",
       visibilityScopes: ["private", "project", "team"],
       sensitivityClearance: "internal",
-      projectIds: []
+      projectKeys: []
     };
     const ranked = queryMemories(root, request);
 
@@ -672,7 +678,7 @@ describe("buildContextPacket", () => {
       now: "2026-07-19",
       visibilityScopes: ["private", "project", "team"],
       sensitivityClearance: "internal",
-      projectIds: []
+      projectKeys: []
     };
     const packet = buildContextPacket({ request, ranked: queryMemories(root, request) });
     const { estimateContextPacketTokens } = await import("../src/retrieval/contextPacket.js");
@@ -702,7 +708,7 @@ describe("buildContextPacket", () => {
       now: "2026-07-19",
       visibilityScopes: ["private", "project", "team"],
       sensitivityClearance: "internal",
-      projectIds: []
+      projectKeys: []
     };
     const ranked = queryMemories(root, request);
     const strongest = ranked[0]!;

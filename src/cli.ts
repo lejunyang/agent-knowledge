@@ -189,15 +189,15 @@ function resolveSensitivityClearance(
 /**
  * 解析普通 query 的项目作用域。
  *
- * 显式 `--project-id` 完全优先，便于跨项目诊断和自动化测试；未显式指定时才从当前 Git
- * 工作树注册稳定 project ID。Git 不可用或目录不在仓库中时回退空数组，保持全局知识查询兼容。
+ * 显式 `--project` 完全优先；未显式指定时从当前 Git remote 自动发现规范 project key。
+ * Git 不可用、无 remote 或探测失败时回退空数组，避免路径/hash 被静默写入知识作用域。
  */
-async function resolveQueryProjectIds(
+async function resolveQueryProjectKeys(
   rootDir: string,
-  explicitProjectIds?: string[]
+  explicitProjectKeys?: string[]
 ): Promise<string[]> {
-  if (explicitProjectIds !== undefined) {
-    return explicitProjectIds;
+  if (explicitProjectKeys !== undefined) {
+    return explicitProjectKeys;
   }
   const runtimeContext = getGitRuntimeContext();
   if (!runtimeContext.isGit) {
@@ -206,7 +206,7 @@ async function resolveQueryProjectIds(
   const detected = await detectProject(rootDir, runtimeContext.cwd).catch(
     () => undefined
   );
-  return detected ? [detected.id] : [];
+  return detected ? [detected.key] : [];
 }
 
 /**
@@ -652,7 +652,10 @@ program
   .option("--scenario <scenario...>", t("场景过滤", "scenarios"))
   .option("--visibility <scope...>", t("允许的可见范围：private、project、team", "allowed visibility scopes: private, project, team"))
   .option("--sensitivity-clearance <level>", t("敏感级别权限：public、internal、confidential、secret", "public, internal, confidential, or secret"))
-  .option("--project-id <id...>", t("允许的项目 ID", "allowed project IDs"))
+  .option(
+    "--project <key...>",
+    t("允许的项目 key 或 alias", "allowed project keys or aliases")
+  )
   .option("--agent-role <role>", t("Agent 角色", "agent role"), "main")
   .option("--debug", t("在 JSON 中包含检索调试信息", "include retrieval debug details in JSON output"), false)
   .option("--retrieval <mode>", t("lexical、hybrid、graph 或 hybrid-graph；默认读取用户配置", "lexical, hybrid, graph, or hybrid-graph; defaults to user config"))
@@ -671,7 +674,7 @@ program
     scenario?: string[];
     visibility?: string[];
     sensitivityClearance?: string;
-    projectId?: string[];
+    project?: string[];
     agentRole: string;
     debug: boolean;
     retrieval?: string;
@@ -703,7 +706,7 @@ program
     const visibilityScopes = resolveVisibilityScopes(options.visibility);
     const sensitivityClearance = resolveSensitivityClearance(options.sensitivityClearance);
     const root = resolveCliRoot(options.root);
-    const projectIds = await resolveQueryProjectIds(root, options.projectId);
+    const projectKeys = await resolveQueryProjectKeys(root, options.project);
     const request = MemoryQueryRequestSchema.parse({
       task: options.task,
       agentRole: options.agentRole,
@@ -711,7 +714,7 @@ program
       scenarios: options.scenario ?? [],
       visibilityScopes,
       sensitivityClearance,
-      projectIds
+      projectKeys
     });
     const embeddingProvider = createEmbeddingProvider({
       provider: providerName,
@@ -1375,8 +1378,20 @@ project
   .command("detect")
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--cwd <dir>", t("要检查的目录", "directory to inspect"), process.cwd())
-  .action(async (options: { root?: string; cwd: string }) => {
-    console.log(JSON.stringify(await detectProject(resolveCliRoot(options.root), options.cwd), null, 2));
+  .option(
+    "--project-key <key>",
+    t("无 Git remote 时使用的显式 local project key", "explicit local project key when no Git remote exists")
+  )
+  .action(async (options: { root?: string; cwd: string; projectKey?: string }) => {
+    console.log(
+      JSON.stringify(
+        await detectProject(resolveCliRoot(options.root), options.cwd, {
+          projectKey: options.projectKey
+        }),
+        null,
+        2
+      )
+    );
   });
 
 const graph = program
@@ -1637,7 +1652,7 @@ program
 const hook = program.command("hook").description(t("供 TRAE hooks.json 调用的内部命令", "Internal commands called by TRAE hooks.json"));
 
 /**
- * 为当前 Hook 补充自动发现的 project ID，再写入脱敏 staging 和运行摘要。
+ * 为当前 Hook 补充自动发现的 project key，再写入脱敏 staging 和运行摘要。
  * Git 探测失败只降级为无 project，不得阻塞宿主 Agent 生命周期。
  */
 async function stageCurrentHook(root: string): Promise<void> {
@@ -1650,7 +1665,7 @@ async function stageCurrentHook(root: string): Promise<void> {
     : undefined;
   const staged = await stageHookEvent(root, {
     ...input,
-    project_id: detectedProject?.id
+    project_key: detectedProject?.key
   });
   appendJsonlLog(root, {
     event: "hook.lifecycle_staged",
@@ -1659,7 +1674,7 @@ async function stageCurrentHook(root: string): Promise<void> {
         ? String(input.hook_event_name ?? input.event_type).slice(0, 80)
         : "unknown",
     agentType: typeof input.agent_type === "string" ? input.agent_type.slice(0, 80) : undefined,
-    projectId: detectedProject?.id,
+    projectKey: detectedProject?.key,
     stagingSequence: staged.sequence
   });
 }
@@ -1698,7 +1713,7 @@ hook
       : undefined;
     await stageHookEvent(root, {
       ...input,
-      project_id: detectedProject?.id
+      project_key: detectedProject?.key
     });
   });
 
@@ -1720,13 +1735,13 @@ hook
       event: "hook.session_start",
       root,
       runtimeContext,
-      projectId: detectedProject?.id
+      projectKey: detectedProject?.key
     });
     hookContext(
       "SessionStart",
       t(
-        `Agent Knowledge 已启用。知识库：${root}。${detectedProject ? `项目 ID：${detectedProject.id}。` : ""}\n\nHook 运行环境：\n${formatRuntimeContext(runtimeContext)}`,
-        `Agent Knowledge is enabled. Knowledge root: ${root}. ${detectedProject ? `Project ID: ${detectedProject.id}.` : ""}\n\nHook runtime context:\n${formatRuntimeContext(runtimeContext)}`
+        `Agent Knowledge 已启用。知识库：${root}。${detectedProject ? `项目：${detectedProject.key}。` : ""}\n\nHook 运行环境：\n${formatRuntimeContext(runtimeContext)}`,
+        `Agent Knowledge is enabled. Knowledge root: ${root}. ${detectedProject ? `Project: ${detectedProject.key}.` : ""}\n\nHook runtime context:\n${formatRuntimeContext(runtimeContext)}`
       )
     );
   });
@@ -1782,7 +1797,7 @@ hook
         maxTokens: hookConfig.maxTokens,
         visibilityScopes: resolveVisibilityScopes(),
         sensitivityClearance: resolveSensitivityClearance(),
-        projectIds: detectedProject ? [detectedProject.id] : []
+        projectKeys: detectedProject ? [detectedProject.key] : []
       });
       const { ranked, debug } = queryMemoriesWithDebug(root, request);
       const packet = buildContextPacket({ request, ranked });
@@ -1805,7 +1820,7 @@ hook
         fallbackUsed: debug.fallbackUsed,
         fallbackSuppressedReason: debug.fallbackSuppressedReason,
         runtimeContext,
-        projectId: detectedProject?.id,
+        projectKey: detectedProject?.key,
         latencyMs: performance.now() - startedAt
       });
 

@@ -8,37 +8,75 @@
 import type {
   ActorType,
   CaptureMode,
+  KnowledgeClaim,
+  KnowledgeKind,
+  KnowledgeLayer,
   MemoryStatus,
-  MemoryType,
   RelatedKnowledge,
-  SourceAuthority
+  SourceAuthority,
+  WeightedAlias,
+  WeightedScenario,
+  WeightedTag
 } from "../core/types.js";
 import type { EpisodeProvenance } from "../core/types.js";
 
 export type CandidateMemoryInput = {
   id?: string;
   title: string;
-  aliases?: string[];
-  memory_type: MemoryType;
+  kind?: KnowledgeKind;
+  memory_type?: KnowledgeKind;
+  layer?: KnowledgeLayer;
+  synopsis?: string;
+  explanation?: string;
+  aliases?: WeightedAlias[] | string[];
   domain: string;
   related_domains: string[];
-  scenario: string[];
-  tags: string[];
+  scenarios?: WeightedScenario[];
+  scenario?: string[];
+  tags: WeightedTag[] | string[];
+  claims?: KnowledgeClaim[];
   confidence: number;
   source_authority: SourceAuthority;
-  summary: string;
+  summary?: string;
   content?: string;
   evidence: string[];
   related_knowledge?: RelatedKnowledge[];
   capture_mode?: CaptureMode;
   actor_type?: ActorType;
   corroboration_count?: number;
+  project_keys?: string[];
   project_ids?: string[];
   supersedes?: string[];
   conflicts_with?: string[];
   visibility?: "private" | "project" | "team";
   sensitivity?: "public" | "internal" | "confidential" | "secret";
   episodes?: EpisodeProvenance[];
+};
+
+export type NormalizedCandidateMemoryInput = Omit<
+  CandidateMemoryInput,
+  | "kind"
+  | "memory_type"
+  | "layer"
+  | "synopsis"
+  | "explanation"
+  | "aliases"
+  | "scenarios"
+  | "scenario"
+  | "tags"
+  | "claims"
+  | "project_keys"
+  | "project_ids"
+> & {
+  kind: KnowledgeKind;
+  layer: KnowledgeLayer;
+  synopsis: string;
+  explanation: string;
+  aliases: WeightedAlias[];
+  scenarios: WeightedScenario[];
+  tags: WeightedTag[];
+  claims: KnowledgeClaim[];
+  project_keys: string[];
 };
 
 export type GovernanceDecision = {
@@ -66,6 +104,114 @@ export function assertNoSecretLikeContent(input: CandidateMemoryInput): void {
   }
 }
 
+/** 把历史命令输入的字符串 metadata 归一化为 V2 结构，不兼容读取旧 Markdown。 */
+function normalizeAliases(input: CandidateMemoryInput): WeightedAlias[] {
+  return (input.aliases ?? []).map((alias) =>
+    typeof alias === "string"
+      ? {
+          value: alias,
+          kind: "user_phrase",
+          weight: 0.5,
+          source:
+            input.source_authority === "user_confirmed"
+              ? "user_confirmed"
+              : input.source_authority === "documented"
+                ? "documented"
+                : "query_observed",
+          evidence_refs: [],
+          positive_hits: 0,
+          negative_hits: 0
+        }
+      : alias
+  );
+}
+
+/** 把旧 scenario 字符串按第一个 primary、其余 secondary 转成显式权重。 */
+function normalizeScenarios(input: CandidateMemoryInput): WeightedScenario[] {
+  if (input.scenarios) {
+    return input.scenarios;
+  }
+  return (input.scenario ?? []).map((id, index) => ({
+    id,
+    role: index === 0 ? "primary" : "secondary",
+    weight: index === 0 ? 0.8 : 0.5
+  }));
+}
+
+/** 把旧 tag 字符串转成中性检索 tag；新调用方应显式传权重和 retrieval。 */
+function normalizeTags(input: CandidateMemoryInput): WeightedTag[] {
+  return input.tags.map((tag) =>
+    typeof tag === "string"
+      ? {
+          value: tag,
+          weight: 0.5,
+          source:
+            input.source_authority === "documented" ? "documented" : "observed",
+          retrieval: tag !== "internal-doc"
+        }
+      : tag
+  );
+}
+
+/** 把旧不可读 project ID 限制到显式 local namespace，避免写入裸 hash。 */
+function normalizeProjectKey(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized.startsWith("local/") ||
+    /^[a-z0-9.-]+\/[a-z0-9._/-]+$/.test(normalized)
+  ) {
+    return normalized;
+  }
+  return `local/${normalized.replace(/[^a-z0-9._/-]+/g, "-")}`;
+}
+
+/**
+ * 在 CLI/Skill 输入边界生成完整 V2 candidate。
+ *
+ * 该函数允许现有 JSON 命令字段继续工作，目的是给接入方平滑升级；输出始终是 V2，
+ * 不提供任何 V1 Markdown parser 或 migration。
+ */
+export function normalizeCandidateInput(
+  input: CandidateMemoryInput
+): NormalizedCandidateMemoryInput {
+  const kind = input.kind ?? input.memory_type;
+  if (!kind) {
+    throw new Error("Candidate requires kind");
+  }
+  const synopsis = input.synopsis ?? input.summary;
+  if (!synopsis) {
+    throw new Error("Candidate requires synopsis");
+  }
+  const scenarios = normalizeScenarios(input);
+  if (scenarios.length === 0) {
+    throw new Error("Candidate requires at least one scenario");
+  }
+  const explanation =
+    input.explanation ??
+    input.content ??
+    `# ${input.title}
+
+## 结论
+
+${synopsis}
+`;
+
+  return {
+    ...input,
+    kind,
+    layer: input.layer ?? (kind === "source" ? "evidence" : "knowledge"),
+    synopsis,
+    explanation,
+    aliases: normalizeAliases(input),
+    scenarios,
+    tags: normalizeTags(input),
+    claims: input.claims ?? [],
+    project_keys: [...(input.project_keys ?? input.project_ids ?? [])].map(
+      normalizeProjectKey
+    )
+  };
+}
+
 /**
  * 决定候选知识的默认治理状态。
  *
@@ -73,6 +219,7 @@ export function assertNoSecretLikeContent(input: CandidateMemoryInput): void {
  */
 export function decideCandidateStatus(input: CandidateMemoryInput): GovernanceDecision {
   assertNoSecretLikeContent(input);
+  const normalized = normalizeCandidateInput(input);
 
   if (input.capture_mode === "automated_session" || input.actor_type === "customer") {
     return {
@@ -104,7 +251,11 @@ export function decideCandidateStatus(input: CandidateMemoryInput): GovernanceDe
     };
   }
 
-  if (input.source_authority === "verified_task" && input.memory_type === "procedural" && input.confidence >= 0.75) {
+  if (
+    input.source_authority === "verified_task" &&
+    normalized.kind === "procedural" &&
+    input.confidence >= 0.75
+  ) {
     return {
       status: "active",
       review_required: false,

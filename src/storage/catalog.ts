@@ -4,11 +4,16 @@
  * `list` 偏运行时摘要，`catalog` 则提供稳定 API/CLI，并可刷新 `knowledge/_catalog.md`。
  */
 import { readFile, writeFile } from "node:fs/promises";
-import { extractSummary, parseKnowledgeMarkdown } from "./markdown.js";
+import { parseKnowledgeMarkdown } from "./markdown.js";
 import { resolveWorkspacePath } from "../core/paths.js";
 import type { KnowledgeDocument, MemoryStatus, MemoryType } from "../core/types.js";
 import { discoverKnowledgeFiles, initKnowledgeWorkspace } from "./workspace.js";
 import { appendJsonlLog } from "../core/logging.js";
+import {
+  aliasValues,
+  scenarioIds,
+  tagValues
+} from "../core/knowledgeText.js";
 
 export type CatalogItem = {
   id: string;
@@ -154,17 +159,17 @@ export async function catalogKnowledge(rootDir: string, options: CatalogOptions 
     .map((document) => ({
       id: document.frontmatter.id,
       title: document.frontmatter.title,
-      aliases: document.frontmatter.aliases,
-      type: document.frontmatter.type,
+      aliases: aliasValues(document.frontmatter),
+      type: document.frontmatter.kind,
       status: document.frontmatter.status,
       domain: document.frontmatter.domain,
-      scenarios: document.frontmatter.scenario,
-      tags: document.frontmatter.tags,
+      scenarios: scenarioIds(document.frontmatter),
+      tags: tagValues(document.frontmatter),
       confidence: document.frontmatter.confidence,
       sourceAuthority: document.frontmatter.source_authority,
       updatedAt: document.frontmatter.updated_at,
       filePath: document.filePath,
-      summary: extractSummary(document.body)
+      summary: document.frontmatter.synopsis
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
   const byStatus = countBy(items, (item) => item.status);

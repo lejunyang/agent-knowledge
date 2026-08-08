@@ -9,7 +9,11 @@
  */
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { decideCandidateStatus, type CandidateMemoryInput } from "./governance.js";
+import {
+  decideCandidateStatus,
+  normalizeCandidateInput,
+  type CandidateMemoryInput
+} from "./governance.js";
 import { parseKnowledgeMarkdown, serializeKnowledgeMarkdown } from "../storage/markdown.js";
 import { resolveWorkspacePath } from "../core/paths.js";
 import { KnowledgeDocumentSchema } from "../core/schema.js";
@@ -148,7 +152,7 @@ function activeRelativePath(frontmatter: KnowledgeFrontmatter): string {
   const date = frontmatter.created_at || today();
   return path.posix.join(
     "knowledge",
-    frontmatter.type,
+    frontmatter.kind,
     domainDirectory(frontmatter.domain),
     `${date}-${slugify(frontmatter.title)}.md`
   );
@@ -237,7 +241,8 @@ export async function listKnowledge(rootDir: string): Promise<KnowledgeListSumma
   for (const document of documents) {
     const frontmatter = document.frontmatter;
     summary.byStatus[frontmatter.status] = (summary.byStatus[frontmatter.status] ?? 0) + 1;
-    summary.byType[frontmatter.type] = (summary.byType[frontmatter.type] ?? 0) + 1;
+    summary.byType[frontmatter.kind] =
+      (summary.byType[frontmatter.kind] ?? 0) + 1;
     summary.byDomain[frontmatter.domain] = (summary.byDomain[frontmatter.domain] ?? 0) + 1;
 
     if (document.filePath.startsWith("knowledge/_inbox/")) {
@@ -245,7 +250,7 @@ export async function listKnowledge(rootDir: string): Promise<KnowledgeListSumma
         id: frontmatter.id,
         title: frontmatter.title,
         status: frontmatter.status,
-        type: frontmatter.type,
+        type: frontmatter.kind,
         domain: frontmatter.domain,
         filePath: document.filePath
       });
@@ -339,6 +344,7 @@ export async function organizeInbox(
 /** 把已结构化材料转换为 Markdown 文档，并复用候选治理决定初始状态。 */
 function documentFromMaterialInput(input: CandidateMemoryInput): KnowledgeDocument {
   const decision = decideCandidateStatus(input);
+  const normalized = normalizeCandidateInput(input);
   const date = today();
   const status = decision.status === "rejected" || decision.status === "deprecated" ? "proposed" : decision.status;
   const actorType = input.actor_type ?? "owner";
@@ -346,24 +352,28 @@ function documentFromMaterialInput(input: CandidateMemoryInput): KnowledgeDocume
   return KnowledgeDocumentSchema.parse({
     filePath: "knowledge/_material/pending.md",
     frontmatter: {
+      schema_version: 2,
       id: idFromInput(input),
-      type: input.memory_type,
+      kind: normalized.kind,
+      layer: normalized.layer,
       title: input.title,
-      aliases: input.aliases ?? [],
+      synopsis: normalized.synopsis,
+      aliases: normalized.aliases,
       domain: input.domain,
       related_domains: input.related_domains,
-      scenario: input.scenario,
-      tags: input.tags,
+      scenarios: normalized.scenarios,
+      tags: normalized.tags,
       status,
       confidence: input.confidence,
       source_authority: input.source_authority,
       source: input.evidence,
+      claims: normalized.claims,
       related_knowledge: input.related_knowledge ?? [],
       supersedes: input.supersedes ?? [],
       conflicts_with: input.conflicts_with ?? [],
       visibility: input.visibility ?? "project",
       sensitivity: input.sensitivity ?? "internal",
-      project_ids: input.project_ids ?? [],
+      project_keys: normalized.project_keys,
       capture_mode: input.capture_mode ?? "direct_material",
       actor_type: actorType,
       corroboration_count: input.corroboration_count ?? 1,
@@ -373,14 +383,7 @@ function documentFromMaterialInput(input: CandidateMemoryInput): KnowledgeDocume
       valid_from: date,
       valid_until: null
     },
-    body:
-      input.content ??
-      `# ${input.title}
-
-## 结论
-
-${input.summary}
-`
+    body: normalized.explanation
   });
 }
 
@@ -404,9 +407,10 @@ export async function captureMaterial(
   for (const input of inputs) {
     const existing = input.id ? existingById.get(input.id) : undefined;
     if (existing) {
-      const contentMatches = input.content
-        ? existing.body === input.content.trimStart()
-        : existing.body.includes(input.summary);
+      const normalized = normalizeCandidateInput(input);
+      const contentMatches =
+        existing.frontmatter.synopsis === normalized.synopsis &&
+        existing.body === normalized.explanation.trimStart();
       if (contentMatches) {
         written.push({
           id: existing.frontmatter.id,
@@ -424,10 +428,10 @@ export async function captureMaterial(
       // 原始证据会随上游文档或脱敏规则变化，允许显式刷新；精炼知识仍必须通过 supersedes 演进。
       if (
         options.target !== "active" ||
-        existing.frontmatter.type !== "source" ||
+        existing.frontmatter.kind !== "source" ||
         existing.frontmatter.status !== "active" ||
         existing.frontmatter.source_authority !== "documented" ||
-        input.memory_type !== "source" ||
+        normalized.kind !== "source" ||
         input.source_authority !== "documented"
       ) {
         throw new Error(

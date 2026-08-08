@@ -26,7 +26,7 @@ describe("maintenance observation extraction", () => {
       turn_id: "turn-1",
       agent_id: "agent-1",
       agent_type: "memory-writer",
-      project_id: "project-1",
+      project_key: "github.com/example/project-1",
       task: "Summarize refund review procedure",
       result: {
         title: "Refund review procedure",
@@ -61,7 +61,7 @@ describe("maintenance observation extraction", () => {
     expect(observations[0]?.episode).toMatchObject({
       session_hash: "session-1",
       turn_hash: "turn-1",
-      project_id: "project-1"
+      project_key: "github.com/example/project-1"
     });
   });
 

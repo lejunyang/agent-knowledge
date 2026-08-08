@@ -14,7 +14,7 @@ Hook / Subagent 原始信号
 - `.memory/subagents`、`.memory/staging`、`.memory/observations` 和 `.memory/proposals` 是调试/审阅产物，不是正式知识。
 - `knowledge/_inbox` 是候选 Markdown，索引器和 embedding 明确排除它。
 - `knowledge/_inbox-skills` 是 Skill 草稿，使用 Skill frontmatter；index、embedding、catalog、graph、list 和同步都会在解析前排除。
-- `knowledge/<type>/<domain>/**/*.md` 中的 active Markdown 才是可检索事实源。
+- `knowledge/<kind>/<domain>/**/*.md` 中的 active V2 Markdown 才是可检索事实源。
 
 任何自动流程都不能跨过 proposal、inbox 和人工审阅边界直接激活知识。
 
@@ -70,7 +70,7 @@ agent-knowledge capture-material --input material.json --target active
 
 直接材料进入 active 前仍要经过领域确认门禁。术语或关系意义不明、需要垂直领域判断、与受信知识冲突，或 Agent 根据现有证据认为内容疑似错误/过期时，必须引用具体原文并一次汇总疑点向用户确认。确认前该条不得写入 active 或 inbox，不能用低 confidence 代替确认；不依赖疑点的明确条目可以分开处理。
 
-`type: source` 只保存经过治理的原始证据：导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、飞书用户标识和个人信息。上游文档内容变化或脱敏规则升级时，可以刷新稳定 ID 对应的来源证据：
+`kind: source` / `layer: evidence` 只保存经过治理的 evidence：导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、飞书用户标识和个人信息。上游文档内容变化或脱敏规则升级时，可以刷新稳定 ID 对应的来源证据：
 
 ```bash
 agent-knowledge capture-material \
@@ -79,7 +79,7 @@ agent-knowledge capture-material \
   --replace-source
 ```
 
-`--replace-source` 只允许替换同 ID、`active`、`documented` 的 `type: source` 文档。它不能覆盖 semantic/procedural/profile/episodic；精炼知识发生变化时应新增版本并用 `supersedes` 保留历史。
+`--replace-source` 只允许替换同 ID、`active`、`documented` 的 `kind: source` 文档。它不能覆盖 semantic/procedural/profile/episodic/principle；精炼知识发生变化时应新增版本并用 `supersedes` 保留历史。
 
 只有 owner 的受信、含义明确且通过必要领域确认的直接材料才适合 `--target active`。外部材料或用户要求先审阅时使用 `--target inbox`；意义不明、疑似错误和需要用户领域判断的内容在确认前不写任何候选目录。
 
@@ -108,7 +108,7 @@ TRAE/Claude Hook 的职责分开：
 }
 ```
 
-Staging 只保存 hash、长度、agent type、reason 和 project ID：
+Staging 只保存 hash、长度、agent type、reason 和 project key：
 
 ```bash
 agent-knowledge staging status
@@ -192,7 +192,7 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 
 不传 `--approve` 的普通 `organize-inbox --apply` 只批量处理受信 candidate；客户和自动会话候选继续阻止。
 
-知识 frontmatter 可选保存结构化 `episodes`，包含 session/turn/project hash、观察时间和 evidence refs，用于时间更新和独立证据判断。
+知识 frontmatter 可选保存结构化 `episodes`，包含 session/turn hash、project key、观察时间和 evidence refs，用于时间更新和独立证据判断。
 
 ## Skill 沉淀生命周期
 

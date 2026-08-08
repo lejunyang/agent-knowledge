@@ -35,13 +35,13 @@ agent-knowledge query \
 
 查询先执行 active、validity、visibility、sensitivity、project、type、domain/scenario 过滤，再排序。没有 domain/scenario 且 lexical 无可靠命中时，不会回退全表，避免无关知识污染上下文。
 
-普通 `query` 未显式传 `--project-id` 时，会自动发现当前 Git 工作树并使用稳定 project ID；从仓库任意子目录执行都能召回绑定当前项目的知识。显式传入 `--project-id` 时完全以参数为准，便于跨项目诊断；非 Git 目录或探测失败时使用空项目作用域，只召回未绑定项目的知识。
+普通 `query` 未显式传 `--project` 时，会自动发现当前 Git 工作树的 `remote.origin.url`，规范化为 `github.com/owner/repo` 形式的 project key；从仓库任意子目录执行都能召回绑定当前项目的知识。显式传入 `--project` 时完全以参数为准，便于跨项目诊断；非 Git、无 remote 或探测失败时使用空项目作用域，只召回未绑定项目的知识。
 
 基础查询仍保留 `related_knowledge` 的受控一跳扩展，但只允许 `depends_on`、`refines`、`supports`、`often_used_with`。完整多跳遍历请显式使用 graph 模式。
 
 只有真实 lexical 命中的候选才获得 lexical 分；dense-only、graph 或关系扩展候选不能因为内部占位分数获得虚假的 lexical 信用。Metadata RRF 通道同样只接收实际命中 domain、scenario 或完整 alias 的候选，0 分候选不参与该通道排名。
 
-Alias 的强排序加分按其对当前任务有效词项的覆盖比例计算。`uid`、`商家中心` 等短通用 alias 仍可帮助召回，但不能在长问题中仅凭一次出现获得满分；完整术语或多个 alias 共同覆盖查询时才获得强 boost，避免宽泛概览压过具体 SOP。
+Alias 除了 query 覆盖率，还保存显式 weight/source/kind。`uid`、`商家中心` 等短通用 alias 仍可帮助召回，但不能在长问题中仅凭一次出现获得满分；低权重、低特异性 metadata 不能压过具体术语和正文证据。
 
 构建 context packet 时还会过滤低相关长尾：所有候选至少需要 `finalScore >= 0.35`；普通直接候选还需达到首条结果分数的 65%，明确 `related_knowledge` 扩展只豁免这条相对门槛。该门控只减少最终注入，不删除 `query --debug` 中的候选和分项分数，便于人工继续诊断召回。
 
@@ -207,7 +207,7 @@ agent-knowledge eval-calibrate --input calibration-observations.json
 
 `eval-calibrate` 对候选 base/reranker score、forbidden/abstain case 和 usefulness feedback 做有限 grid search。它只输出 dry-run 参数建议，不自动修改配置。
 
-评测 case 可用 `project_ids` 声明调用方项目作用域，用 `max_tokens` 复现 Hook 或其他调用方的 context packet 预算；完整 fixture 的 document 也可用 `project_ids` 绑定项目。`expected_memories`、`forbidden_memories` 和 abstain 按最终 `injectedIds` 判断，`matchedIds`、`rankById` 继续用于候选召回与排序诊断，避免把“进入候选池但因 token 预算未注入”误判为上下文污染。
+评测 case 可用 `project_keys` 声明调用方项目作用域，用 `max_tokens` 复现 Hook 或其他调用方的 context packet 预算；完整 fixture 的 document 也可用 `project_keys` 绑定项目。`expected_memories`、`forbidden_memories` 和 abstain 按最终 `injectedIds` 判断，`matchedIds`、`rankById` 继续用于候选召回与排序诊断，避免把“进入候选池但因 token 预算未注入”误判为上下文污染。
 
 Eval pipeline 默认不写 `.memory/logs`，避免合成 query 污染真实 alias 建议、反馈分析和运行指标。普通 `query`、Hook 和人工调试仍保留 query 日志。
 

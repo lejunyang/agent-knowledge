@@ -5,7 +5,7 @@
  * - Markdown 是事实源，`.memory/index.sqlite` 只是缓存。
  * - 索引可以随时删除并重建。
  * - 只有 `status: active` 且可进入普通 query 的知识类型进入索引。
- * - `type: source` 保存完整证据，但不进入 FTS，避免长原文污染召回。
+ * - `kind: source` 保存完整证据索引，但不进入 FTS，避免长原文污染召回。
  */
 import { mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -13,6 +13,14 @@ import path from "node:path";
 import { extractSummary, parseKnowledgeMarkdown } from "./markdown.js";
 import { resolveWorkspacePath } from "../core/paths.js";
 import type { KnowledgeDocument } from "../core/types.js";
+import {
+  aliasValues,
+  scenarioIds,
+  searchableAliasValues,
+  searchableScenarioIds,
+  searchableTagValues,
+  tagValues
+} from "../core/knowledgeText.js";
 import { cjkNgrams } from "../retrieval/cjk.js";
 import { isDiscoverableKnowledgeFile } from "./knowledgePaths.js";
 
@@ -81,13 +89,18 @@ function openIndexDatabase(rootDir: string): DatabaseConnection {
     CREATE TABLE memories (
       id TEXT PRIMARY KEY,
       file_path TEXT NOT NULL,
-      type TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      layer TEXT NOT NULL,
       title TEXT NOT NULL,
+      synopsis TEXT NOT NULL,
       aliases TEXT NOT NULL,
+      weighted_aliases TEXT NOT NULL,
       domain TEXT NOT NULL,
       related_domains TEXT NOT NULL,
-      scenario TEXT NOT NULL,
+      scenarios TEXT NOT NULL,
+      weighted_scenarios TEXT NOT NULL,
       tags TEXT NOT NULL,
+      weighted_tags TEXT NOT NULL,
       status TEXT NOT NULL,
       confidence REAL NOT NULL,
       source_authority TEXT NOT NULL,
@@ -97,7 +110,8 @@ function openIndexDatabase(rootDir: string): DatabaseConnection {
       conflicts_with TEXT NOT NULL,
       visibility TEXT NOT NULL,
       sensitivity TEXT NOT NULL,
-      project_ids TEXT NOT NULL,
+      project_keys TEXT NOT NULL,
+      claims TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       valid_from TEXT NOT NULL,
       valid_until TEXT,
@@ -110,9 +124,9 @@ function openIndexDatabase(rootDir: string): DatabaseConnection {
       title,
       aliases,
       domain,
-      scenario,
+      scenarios,
       tags,
-      summary,
+      synopsis,
       body,
       cjk_ngrams
     );
@@ -129,23 +143,38 @@ function openIndexDatabase(rootDir: string): DatabaseConnection {
 function insertDocument(db: DatabaseConnection, document: KnowledgeDocument): void {
   const frontmatter = document.frontmatter;
   const summary = extractSummary(document.body);
+  const aliases = aliasValues(frontmatter);
+  const scenarios = scenarioIds(frontmatter);
+  const tags = tagValues(frontmatter);
+  const searchableAliases = searchableAliasValues(frontmatter);
+  const searchableScenarios = searchableScenarioIds(frontmatter);
+  const searchableTags = searchableTagValues(frontmatter);
 
   db.prepare(`
     INSERT INTO memories (
-      id, file_path, type, title, aliases, domain, related_domains, scenario, tags, status,
+      id, file_path, kind, layer, title, synopsis, aliases, weighted_aliases,
+      domain, related_domains, scenarios, weighted_scenarios, tags, weighted_tags, status,
       confidence, source_authority, source, related_knowledge, supersedes,
-      conflicts_with, visibility, sensitivity, updated_at, valid_until, summary, body
-      , project_ids, valid_from
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      conflicts_with, visibility, sensitivity, project_keys, claims, updated_at,
+      valid_from, valid_until, summary, body
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?
+    )
   `).run(
     frontmatter.id,
     document.filePath,
-    frontmatter.type,
+    frontmatter.kind,
+    frontmatter.layer,
     frontmatter.title,
+    frontmatter.synopsis,
+    JSON.stringify(aliases),
     JSON.stringify(frontmatter.aliases),
     frontmatter.domain,
     JSON.stringify(frontmatter.related_domains),
-    JSON.stringify(frontmatter.scenario),
+    JSON.stringify(scenarios),
+    JSON.stringify(frontmatter.scenarios),
+    JSON.stringify(tags),
     JSON.stringify(frontmatter.tags),
     frontmatter.status,
     frontmatter.confidence,
@@ -156,34 +185,35 @@ function insertDocument(db: DatabaseConnection, document: KnowledgeDocument): vo
     JSON.stringify(frontmatter.conflicts_with),
     frontmatter.visibility,
     frontmatter.sensitivity,
+    JSON.stringify(frontmatter.project_keys),
+    JSON.stringify(frontmatter.claims),
     frontmatter.updated_at,
+    frontmatter.valid_from,
     frontmatter.valid_until,
     summary,
-    document.body,
-    JSON.stringify(frontmatter.project_ids),
-    frontmatter.valid_from
+    document.body
   );
 
   db.prepare(`
-    INSERT INTO memory_fts (id, title, aliases, domain, scenario, tags, summary, body, cjk_ngrams)
+    INSERT INTO memory_fts (id, title, aliases, domain, scenarios, tags, synopsis, body, cjk_ngrams)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     frontmatter.id,
     frontmatter.title,
-    frontmatter.aliases.join(" "),
+    searchableAliases.join(" "),
     frontmatter.domain,
-    frontmatter.scenario.join(" "),
-    frontmatter.tags.join(" "),
-    summary,
+    searchableScenarios.join(" "),
+    searchableTags.join(" "),
+    frontmatter.synopsis,
     document.body,
     cjkNgrams(
       [
         frontmatter.title,
-        frontmatter.aliases.join(" "),
+        searchableAliases.join(" "),
         frontmatter.domain,
-        frontmatter.scenario.join(" "),
-        frontmatter.tags.join(" "),
-        summary,
+        searchableScenarios.join(" "),
+        searchableTags.join(" "),
+        frontmatter.synopsis,
         document.body
       ].join("\n")
     ).join(" ")
@@ -217,7 +247,7 @@ export function rebuildIndex(rootDir: string): RebuildIndexResult {
 
         if (
           document.frontmatter.status !== "active" ||
-          document.frontmatter.type === "source"
+          document.frontmatter.kind === "source"
         ) {
           continue;
         }

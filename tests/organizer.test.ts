@@ -141,7 +141,7 @@ describe("organizeInbox", () => {
           capture_mode: "automated_session",
           actor_type: "customer",
           corroboration_count: 1,
-          project_ids: ["project_support"]
+          project_keys: ["github.com/example/support"]
         }
       ],
       { target: "active", rebuild: false }
@@ -312,7 +312,9 @@ describe("captureMaterial", () => {
     const content = await readFile(result.written[0]!.filePath, "utf8");
     const document = parseKnowledgeMarkdown("captured.md", content);
 
-    expect(document.frontmatter.aliases).toContain("account relation");
+    expect(document.frontmatter.aliases.map((alias) => alias.value)).toContain(
+      "account relation"
+    );
     expect(document.frontmatter.related_knowledge).toEqual([
       {
         id: "k_20260705_company_business_account_system_account_model",
@@ -353,7 +355,7 @@ describe("captureMaterial", () => {
     );
 
     expect(document.frontmatter.id).toBe("k_lark_source_material_001");
-    expect(document.frontmatter.type).toBe("source");
+    expect(document.frontmatter.kind).toBe("source");
     expect(document.body).toBe(content);
     expect(result.written[0]?.filePath).toContain(
       "knowledge/source/bytedance/business/source/lark/"

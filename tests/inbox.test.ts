@@ -94,7 +94,7 @@ describe("writeCandidateMemory", () => {
       capture_mode: "automated_session",
       actor_type: "customer",
       corroboration_count: 1,
-      project_ids: ["project_support"]
+      project_keys: ["github.com/example/support"]
     });
     const content = await readFile(result.filePath, "utf8");
 
@@ -103,7 +103,7 @@ describe("writeCandidateMemory", () => {
     expect(content).toContain("capture_mode: automated_session");
     expect(content).toContain("actor_type: customer");
     expect(content).toContain("corroboration_count: 1");
-    expect(content).toContain("project_support");
+    expect(content).toContain("github.com/example/support");
   });
 
   it("keeps all automated-session candidates proposed regardless of verified-task claims", async () => {
@@ -124,7 +124,7 @@ describe("writeCandidateMemory", () => {
       capture_mode: "automated_session",
       actor_type: "agent",
       corroboration_count: 1,
-      project_ids: ["project_support"]
+      project_keys: ["github.com/example/support"]
     });
 
     expect(result.status).toBe("proposed");

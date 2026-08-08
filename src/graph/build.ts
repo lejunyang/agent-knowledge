@@ -8,8 +8,12 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolveWorkspacePath } from "../core/paths.js";
 import { discoverKnowledgeFiles } from "../storage/workspace.js";
-import { parseKnowledgeMarkdown, extractSummary } from "../storage/markdown.js";
+import { parseKnowledgeMarkdown } from "../storage/markdown.js";
 import { readMaintenanceProposals } from "../memory/proposals.js";
+import {
+  aliasValues,
+  scenarioIds
+} from "../core/knowledgeText.js";
 import type {
   GraphEdge,
   GraphEdgeType,
@@ -35,16 +39,17 @@ export async function buildKnowledgeGraph(rootDir: string): Promise<KnowledgeGra
       label: document.frontmatter.title,
       metadata: {
         memoryId: document.frontmatter.id,
-        memoryType: document.frontmatter.type,
+        memoryType: document.frontmatter.kind,
+        memoryLayer: document.frontmatter.layer,
         status: document.frontmatter.status,
         domain: document.frontmatter.domain,
-        scenarios: document.frontmatter.scenario,
-        aliases: document.frontmatter.aliases,
-        summary: extractSummary(document.body),
+        scenarios: scenarioIds(document.frontmatter),
+        aliases: aliasValues(document.frontmatter),
+        summary: document.frontmatter.synopsis,
         confidence: document.frontmatter.confidence,
         visibility: document.frontmatter.visibility,
         sensitivity: document.frontmatter.sensitivity,
-        projectIds: document.frontmatter.project_ids,
+        projectKeys: document.frontmatter.project_keys,
         validFrom: document.frontmatter.valid_from,
         validUntil: document.frontmatter.valid_until,
         filePath
@@ -60,7 +65,7 @@ export async function buildKnowledgeGraph(rootDir: string): Promise<KnowledgeGra
     });
     addEdge(edges, knowledgeId, domainId, "belongs_to_domain");
 
-    for (const scenario of document.frontmatter.scenario) {
+    for (const scenario of scenarioIds(document.frontmatter)) {
       const scenarioId = `scenario:${scenario}`;
       addNode(nodes, {
         id: scenarioId,
@@ -70,12 +75,12 @@ export async function buildKnowledgeGraph(rootDir: string): Promise<KnowledgeGra
       });
       addEdge(edges, knowledgeId, scenarioId, "used_in_scenario");
     }
-    for (const projectId of document.frontmatter.project_ids) {
-      const graphProjectId = `project:${projectId}`;
+    for (const projectKey of document.frontmatter.project_keys) {
+      const graphProjectId = `project:${projectKey}`;
       addNode(nodes, {
         id: graphProjectId,
         type: "project",
-        label: projectId,
+        label: projectKey,
         metadata: {}
       });
       addEdge(edges, knowledgeId, graphProjectId, "belongs_to_project");

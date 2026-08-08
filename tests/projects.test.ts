@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { realpathSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
@@ -36,11 +35,23 @@ describe("project identity", () => {
     await writeFile(path.join(nested, "AGENTS.override.md"), "nested override", "utf8");
 
     const project = await detectProject(knowledgeRoot, nested);
-    const registry = await readFile(getProjectRegistryPath(knowledgeRoot, project.id), "utf8");
+    const registry = await readFile(
+      getProjectRegistryPath(knowledgeRoot, project.key),
+      "utf8"
+    );
 
-    expect(project.id).toMatch(/^project_[a-f0-9]{16}$/);
+    expect(project.key).toBe("github.com/example/repo");
+    expect(project.displayName).toBe("repo");
+    expect(project.aliases).toEqual(["example/repo", "repo"]);
+    expect(project).not.toHaveProperty("id");
     expect(project.identitySource).toBe("git_remote");
-    expect(project.remote).toBe("github.com/example/repo");
+    expect(project.remotes).toEqual([
+      {
+        role: "origin",
+        normalized: "github.com/example/repo",
+        rawRedacted: "git@github.com:Example/Repo.git"
+      }
+    ]);
     expect(project.agentInstructions.map((item) => item.path)).toEqual([
       "AGENTS.md",
       "packages/app/AGENTS.override.md"
@@ -50,17 +61,24 @@ describe("project identity", () => {
     expect(registry).not.toContain("nested override");
   });
 
-  it("falls back to a local path identity when no remote exists", async () => {
+  it("requires an explicit local key when no remote exists", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-project-local-"));
     const knowledgeRoot = path.join(root, "memory-root");
     tempDirs.push(root);
     await execFileAsync("git", ["init"], { cwd: root });
 
-    const first = await detectProject(knowledgeRoot, root);
-    const second = await detectProject(knowledgeRoot, root);
+    await expect(detectProject(knowledgeRoot, root)).rejects.toThrow(
+      /explicit project key/i
+    );
+    const first = await detectProject(knowledgeRoot, root, {
+      projectKey: "local/lejunyang/private-prototype"
+    });
+    const second = await detectProject(knowledgeRoot, root, {
+      projectKey: "local/lejunyang/private-prototype"
+    });
 
-    expect(first.identitySource).toBe("git_path");
-    expect(first.id).toBe(second.id);
-    expect(first.gitRoot).toBe(realpathSync(root));
+    expect(first.identitySource).toBe("explicit_local_key");
+    expect(first.key).toBe("local/lejunyang/private-prototype");
+    expect(first.key).toBe(second.key);
   });
 });

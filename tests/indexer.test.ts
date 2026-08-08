@@ -117,7 +117,8 @@ describe("rebuildIndex", () => {
       path.join(sourceDir, "raw-source.md"),
       source
         .replace("k_20260705_frontend_lint_vue_sfc", "k_20260719_source_raw")
-        .replace("type: semantic", "type: source")
+        .replace("kind: semantic", "kind: source")
+        .replace("layer: knowledge", "layer: evidence")
         .replace("title: Vue SFC lint 迁移约束", "title: Raw source evidence"),
       "utf8"
     );

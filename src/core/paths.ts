@@ -14,7 +14,14 @@ export const KNOWLEDGE_DIRS = [
   "knowledge/semantic",
   "knowledge/episodic",
   "knowledge/procedural",
-  "knowledge/sources"
+  "knowledge/principle",
+  "knowledge/skills",
+  "knowledge/source-manifests",
+  "events/support",
+  "events/projects",
+  "events/conversations",
+  "proposals",
+  "reviews"
 ] as const;
 
 /**

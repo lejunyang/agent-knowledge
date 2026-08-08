@@ -15,7 +15,7 @@ describe("knowledge graph HTML", () => {
           metadata: {
             status: "active",
             domain: "support/refund",
-            projectIds: ["project-1"],
+            projectKeys: ["github.com/example/project-1"],
             summary: "Refunds require review."
           }
         },

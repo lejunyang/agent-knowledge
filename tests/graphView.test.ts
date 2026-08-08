@@ -16,7 +16,7 @@ describe("knowledge graph view", () => {
             memoryType: "procedural",
             status: "active",
             domain: "support/refund",
-            projectIds: ["project-1"]
+            projectKeys: ["github.com/example/project-1"]
           }
         },
         {
@@ -42,9 +42,9 @@ describe("knowledge graph view", () => {
           metadata: {}
         },
         {
-          id: "project:project-1",
+          id: "project:github.com/example/project-1",
           type: "project",
-          label: "project-1",
+          label: "github.com/example/project-1",
           metadata: {}
         },
         {
@@ -78,7 +78,7 @@ describe("knowledge graph view", () => {
         {
           id: "e-project",
           source: "knowledge:k_refined",
-          target: "project:project-1",
+          target: "project:github.com/example/project-1",
           type: "belongs_to_project",
           metadata: {}
         },
@@ -120,7 +120,7 @@ describe("knowledge graph view", () => {
       "domain:support/refund",
       "episode:one",
       "knowledge:k_refined",
-      "project:project-1",
+      "project:github.com/example/project-1",
       "scenario:customer-support",
       "source:doc:refund"
     ]);
@@ -134,7 +134,7 @@ describe("knowledge graph view", () => {
       "source"
     ]);
     expect(view.filters.domains).toEqual(["support/refund", "support/source"]);
-    expect(view.filters.projects).toEqual(["project-1"]);
+    expect(view.filters.projects).toEqual(["github.com/example/project-1"]);
     expect(view.filters.statuses).toEqual(["active"]);
   });
 });

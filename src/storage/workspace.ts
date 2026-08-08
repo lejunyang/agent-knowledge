@@ -11,16 +11,21 @@ import { isDiscoverableKnowledgeFile } from "./knowledgePaths.js";
 
 const README = `# Knowledge Base
 
-This directory is the human-readable fact source for agent memory.
+This directory is the V2 human-readable fact source for agent memory.
 
 - \`profile/\`: stable preferences and project rules.
 - \`semantic/\`: business facts, concepts, system boundaries.
 - \`episodic/\`: historical tasks, incidents, lessons.
 - \`procedural/\`: reusable procedures and SOPs.
-- \`sources/\`: source summaries and provenance.
+- \`principle/\`: evidence-tested reasoning and memory-use principles.
+- \`skills/\`: reviewed reusable capabilities represented as knowledge.
+- \`source-manifests/\`: source hashes, sections, and Vault handles; not raw evidence bodies.
 - \`_inbox/\`: proposed memories awaiting review.
 - \`_archive/\`: deprecated or rejected memories.
 - \`_inbox-skills/\`: reviewed Skill drafts; not knowledge facts.
+
+Only \`schema_version: 2\` KnowledgeDocument Markdown is accepted. Rebuild older
+knowledge from original evidence instead of migrating weak metadata forward.
 `;
 
 /** 只创建缺失的 workspace 模板文件，绝不覆盖用户已有 Markdown。 */

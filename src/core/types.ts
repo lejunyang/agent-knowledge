@@ -1,93 +1,41 @@
 /**
- * 全局类型定义是本项目的领域语言。
+ * 全局类型定义是项目内部共享的领域语言。
  *
- * 这些类型刻意保持为纯 TypeScript type，不包含运行时逻辑：
- * - 运行时校验放在 `schema.ts`，避免类型和校验规则分散。
- * - 业务模块只依赖这里的稳定契约，降低模块之间的耦合。
- * - 字段名使用 Markdown frontmatter 的蛇形命名，方便人类直接阅读文件。
+ * 知识事实类型由 `knowledgeV2.ts` 的 Zod schema 单点生成；这里仅补充 query、排序和
+ * context packet 等运行时协议，避免 TypeScript 类型与外部输入校验再次分叉。
  */
-export type MemoryType = "profile" | "semantic" | "episodic" | "procedural" | "source";
-export type MemoryStatus = "proposed" | "active" | "deprecated" | "rejected";
-export type SourceAuthority = "user_confirmed" | "model_inferred" | "documented" | "verified_task";
-export type Visibility = "private" | "project" | "team";
-export type Sensitivity = "public" | "internal" | "confidential" | "secret";
-export type CaptureMode = "explicit_remember" | "verified_task" | "automated_session" | "direct_material";
-export type ActorType = "owner" | "teammate" | "customer" | "agent";
+export type {
+  ActorType,
+  CaptureMode,
+  EpisodeProvenance,
+  EvidenceAnchor,
+  KnowledgeClaim,
+  KnowledgeDocument,
+  KnowledgeFrontmatter,
+  KnowledgeKind,
+  KnowledgeLayer,
+  KnowledgeRelation,
+  MemoryStatus,
+  RelatedKnowledge,
+  Sensitivity,
+  SourceAuthority,
+  Visibility,
+  WeightedAlias,
+  WeightedScenario,
+  WeightedTag
+} from "./knowledgeV2.js";
 
-export type KnowledgeRelation =
-  | "depends_on"
-  | "refines"
-  | "supports"
-  | "conflicts_with"
-  | "supersedes"
-  | "often_used_with";
+import type {
+  KnowledgeDocument,
+  KnowledgeKind,
+  Sensitivity,
+  Visibility
+} from "./knowledgeV2.js";
 
 /**
- * 精确知识关系用于一跳扩展。
- *
- * 这里不建完整图谱，只表达 MVP 必需的轻量关系。真正的 temporal graph
- * 可以在未来基于这些字段迁移，而不需要改变 Markdown 事实源。
+ * 内部模块暂用该别名表达知识 kind；它不代表旧 Markdown `type` 字段兼容。
  */
-export type RelatedKnowledge = {
-  id: string;
-  relation: KnowledgeRelation;
-  reason: string;
-};
-
-export type EpisodeProvenance = {
-  episode_id: string;
-  session_hash: string;
-  turn_hash?: string;
-  project_id?: string;
-  observed_at: string;
-  evidence_refs: string[];
-};
-
-/**
- * 一条 Markdown 知识的 frontmatter。
- *
- * 注意：`related_domains` 是粗粒度领域扩展，`related_knowledge` 是精确条目关系。
- * 二者分开能避免把“领域相关”和“事实依赖”混为一谈。
- */
-export type KnowledgeFrontmatter = {
-  id: string;
-  type: MemoryType;
-  title: string;
-  aliases: string[];
-  domain: string;
-  related_domains: string[];
-  scenario: string[];
-  tags: string[];
-  status: MemoryStatus;
-  confidence: number;
-  source_authority: SourceAuthority;
-  source: string[];
-  related_knowledge: RelatedKnowledge[];
-  supersedes: string[];
-  conflicts_with: string[];
-  visibility: Visibility;
-  sensitivity: Sensitivity;
-  project_ids: string[];
-  capture_mode: CaptureMode;
-  actor_type: ActorType;
-  corroboration_count: number;
-  episodes: EpisodeProvenance[];
-  created_at: string;
-  updated_at: string;
-  valid_from: string;
-  valid_until: string | null;
-};
-
-/**
- * Markdown 文件解析后的统一表示。
- *
- * `filePath` 使用 workspace 内相对路径，方便索引可重建，也避免把本机绝对路径写入知识库。
- */
-export type KnowledgeDocument = {
-  filePath: string;
-  frontmatter: KnowledgeFrontmatter;
-  body: string;
-};
+export type MemoryType = KnowledgeKind;
 
 /**
  * 查询请求是其他 agent 调用本工具时的核心输入。
@@ -101,11 +49,13 @@ export type MemoryQueryRequest = {
   domains: string[];
   scenarios: string[];
   maxTokens: number;
-  includeTypes: Array<"profile" | "semantic" | "episodic" | "procedural">;
+  includeTypes: Array<
+    "profile" | "semantic" | "episodic" | "procedural" | "principle"
+  >;
   now: string;
   visibilityScopes: Visibility[];
   sensitivityClearance: Sensitivity;
-  projectIds: string[];
+  projectKeys: string[];
 };
 
 /**

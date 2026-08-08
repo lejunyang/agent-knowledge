@@ -199,7 +199,7 @@ describe("CLI user configuration", () => {
           source_authority: "user_confirmed",
           summary: "只有当前 Git 项目可以检索这条知识。",
           evidence: ["test:project-scope"],
-          project_ids: [project.id]
+          project_keys: [project.key]
         }
       ],
       { target: "active", rebuild: true }
@@ -233,8 +233,8 @@ describe("CLI user configuration", () => {
           "alpha-scope-marker",
           "--retrieval",
           "lexical",
-          "--project-id",
-          "project_other"
+          "--project",
+          "github.com/example/project-other"
         ],
         { TEST_CWD: nested }
       )

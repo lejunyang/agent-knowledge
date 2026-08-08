@@ -100,7 +100,7 @@ agent-knowledge config sources
 ### visibilityScopes
 
 - `private`：仅本地个人范围。
-- `project`：只在匹配 `project_ids` 的项目上下文中可见；没有 project ID 时作为未绑定项目知识处理。
+- `project`：只在匹配 `project_keys` 的项目上下文中可见。key 默认是规范化 Git remote，例如 `github.com/example/repo`；无 remote 项目必须显式使用 `local/...`。空数组表示未绑定项目知识。
 - `team`：允许团队共享场景读取。
 
 查询必须同时满足 caller 的可见范围和知识 frontmatter 的 `visibility`。

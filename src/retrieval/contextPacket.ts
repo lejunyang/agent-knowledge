@@ -4,7 +4,6 @@
  * 这样做的原因是：主 agent 不应该直接消费原始 Markdown 或排序结果。
  * 它需要的是按用途分区的上下文：稳定规则、相关事实、流程、案例、风险和来源。
  */
-import { extractSummary } from "../storage/markdown.js";
 import type { ContextPacket, ContextPacketItem, MemoryQueryRequest, RankedMemory } from "../core/types.js";
 
 type BuildContextPacketInput = {
@@ -38,7 +37,7 @@ function toItem(memory: RankedMemory): ContextPacketItem {
   return {
     id: document.frontmatter.id,
     title: document.frontmatter.title,
-    content: extractSummary(document.body, 360),
+    content: document.frontmatter.synopsis,
     confidence: document.frontmatter.confidence,
     source: document.frontmatter.source
   };
@@ -119,7 +118,7 @@ export function buildContextPacket(input: BuildContextPacketInput): ContextPacke
   for (const ranked of input.ranked.filter((memory) =>
     relevantForPacket(memory, topScore)
   )) {
-    const type = ranked.document.frontmatter.type;
+    const type = ranked.document.frontmatter.kind;
     const item = toItem(ranked);
 
     if (type === "profile") {

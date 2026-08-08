@@ -36,7 +36,7 @@ describe("knowledge graph", () => {
             {
               episode_id: "episode-1",
               session_hash: "session-1",
-              project_id: "project-1",
+              project_key: "github.com/example/project-1",
               observed_at: "2026-07-19T00:00:00.000Z",
               evidence_refs: ["doc:account"]
             }

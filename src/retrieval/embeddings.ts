@@ -10,10 +10,18 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { extractSummary, parseKnowledgeMarkdown } from "../storage/markdown.js";
+import { parseKnowledgeMarkdown } from "../storage/markdown.js";
 import { resolveWorkspacePath } from "../core/paths.js";
 import { discoverKnowledgeFiles } from "../storage/workspace.js";
 import type { KnowledgeDocument } from "../core/types.js";
+import {
+  aliasValues,
+  scenarioIds,
+  searchableAliasValues,
+  searchableScenarioIds,
+  searchableTagValues,
+  tagValues
+} from "../core/knowledgeText.js";
 
 export type EmbeddingProvider = {
   name: string;
@@ -211,12 +219,12 @@ function documentEmbeddingText(document: KnowledgeDocument): string {
   const frontmatter = document.frontmatter;
   return [
     frontmatter.title,
-    frontmatter.aliases.join(" "),
+    searchableAliasValues(frontmatter).join(" "),
     frontmatter.domain,
     frontmatter.related_domains.join(" "),
-    frontmatter.scenario.join(" "),
-    frontmatter.tags.join(" "),
-    extractSummary(document.body),
+    searchableScenarioIds(frontmatter).join(" "),
+    searchableTagValues(frontmatter).join(" "),
+    frontmatter.synopsis,
     document.body
   ]
     .filter(Boolean)
@@ -238,11 +246,11 @@ function toEmbeddingRecord(document: KnowledgeDocument, provider: EmbeddingProvi
     embeddedAt: new Date().toISOString(),
     text: {
       title: frontmatter.title,
-      aliases: frontmatter.aliases,
+      aliases: aliasValues(frontmatter),
       domain: frontmatter.domain,
-      scenarios: frontmatter.scenario,
-      tags: frontmatter.tags,
-      summary: extractSummary(document.body)
+      scenarios: scenarioIds(frontmatter),
+      tags: tagValues(frontmatter),
+      summary: frontmatter.synopsis
     },
     vector
   };
@@ -272,7 +280,7 @@ async function loadActiveDocuments(rootDir: string): Promise<KnowledgeDocument[]
     const document = parseKnowledgeMarkdown(filePath, await readFile(resolveWorkspacePath(rootDir, filePath), "utf8"));
     if (
       document.frontmatter.status === "active" &&
-      document.frontmatter.type !== "source"
+      document.frontmatter.kind !== "source"
     ) {
       documents.push(document);
     }
@@ -345,11 +353,13 @@ function candidateTermsForDocument(document: KnowledgeDocument, logTerms: Set<st
     add(term, "matched query log domain/scenario");
   }
 
-  for (const term of [...frontmatter.tags, ...frontmatter.related_domains]) {
+  for (const term of [...tagValues(frontmatter), ...frontmatter.related_domains]) {
     add(term, "document metadata term");
   }
 
-  const sourceTokens = tokenize([frontmatter.title, extractSummary(document.body), document.body].join(" "));
+  const sourceTokens = tokenize(
+    [frontmatter.title, frontmatter.synopsis, document.body].join(" ")
+  );
   for (const token of sourceTokens) {
     add(token, "document text token");
   }
@@ -366,11 +376,11 @@ function existingTerms(document: KnowledgeDocument): Set<string> {
   return new Set(
     [
       frontmatter.title,
-      ...frontmatter.aliases,
+      ...aliasValues(frontmatter),
       frontmatter.domain,
       ...frontmatter.related_domains,
-      ...frontmatter.scenario,
-      ...frontmatter.tags
+      ...scenarioIds(frontmatter),
+      ...tagValues(frontmatter)
     ].map(normalizeForCompare)
   );
 }

@@ -10,6 +10,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveWorkspacePath } from "../core/paths.js";
+import { ProjectKeySchema } from "../core/schema.js";
 
 export type ProjectInstructionFingerprint = {
   path: string;
@@ -17,11 +18,17 @@ export type ProjectInstructionFingerprint = {
 };
 
 export type ProjectRegistry = {
-  version: 1;
-  id: string;
-  identitySource: "git_remote" | "git_path";
+  version: 2;
+  key: string;
+  displayName: string;
+  aliases: string[];
+  identitySource: "git_remote" | "explicit_local_key";
   gitRoot: string;
-  remote?: string;
+  remotes: Array<{
+    role: "origin";
+    normalized: string;
+    rawRedacted: string;
+  }>;
   detectedAt: string;
   agentInstructions: ProjectInstructionFingerprint[];
 };
@@ -62,9 +69,35 @@ export function normalizeGitRemote(remote: string): string {
   }
 }
 
-/** 从规范化 remote 或真实路径生成短而稳定的 project ID。 */
-function projectId(identity: string): string {
-  return `project_${sha256(identity).slice(0, 16)}`;
+/** 从规范 project key 生成 registry 文件名；该 hash 不进入公共身份或知识 frontmatter。 */
+function registryFileId(projectKey: string): string {
+  return sha256(projectKey).slice(0, 16);
+}
+
+/** 从规范 remote 最后一段生成 CLI 默认显示名。 */
+export function projectDisplayName(projectKey: string): string {
+  const segments = projectKey.split("/").filter(Boolean);
+  return segments.at(-1) ?? projectKey;
+}
+
+/** 生成不含 host 的短别名，便于用户查询和 registry 路由。 */
+export function projectAliases(projectKey: string): string[] {
+  const segments = projectKey.split("/").filter(Boolean);
+  return segments.length >= 2
+    ? [segments.slice(-2).join("/"), projectDisplayName(projectKey)]
+    : [projectKey];
+}
+
+/** URL remote 必须移除 userinfo；SCP remote 的 SSH 用户不是凭据，可原样保留。 */
+export function redactGitRemote(remote: string): string {
+  try {
+    const url = new URL(remote);
+    url.username = "";
+    url.password = "";
+    return url.toString();
+  } catch {
+    return remote;
+  }
 }
 
 /** 收集 Git root 到当前目录链上的 AGENTS 指令文件，不读取或复制其他项目文档。 */
@@ -94,17 +127,29 @@ function instructionCandidates(gitRoot: string, cwd: string): string[] {
 }
 
 /** 返回可重建项目 registry 路径；registry 用于隔离检索，不是业务事实源。 */
-export function getProjectRegistryPath(rootDir: string, id: string): string {
-  return resolveWorkspacePath(rootDir, ".memory", "projects", `${id}.json`);
+export function getProjectRegistryPath(
+  rootDir: string,
+  projectKey: string
+): string {
+  return resolveWorkspacePath(
+    rootDir,
+    ".memory",
+    "projects",
+    `${registryFileId(projectKey)}.json`
+  );
 }
 
 /**
- * 从任意子目录发现 Git root，并注册稳定 project ID。
+ * 从任意子目录发现 Git root，并注册人类可读的稳定 project key。
  *
- * 有 remote 时优先使用规范化 remote，使不同机器映射到同一项目；没有 remote 时回退真实路径，
- * 避免把非 Git 目录或同名目录误认为同一项目。
+ * 有 remote 时直接使用规范 remote；没有 remote 时必须显式提供 `local/...` key，
+ * 避免把绝对路径或不可读 hash 写进长期知识。
  */
-export async function detectProject(rootDir: string, cwd = process.cwd()): Promise<ProjectRegistry> {
+export async function detectProject(
+  rootDir: string,
+  cwd = process.cwd(),
+  options: { projectKey?: string } = {}
+): Promise<ProjectRegistry> {
   const gitRootRaw = runGit(cwd, ["rev-parse", "--show-toplevel"]);
   if (!gitRootRaw) {
     throw new Error(`Current directory is not inside a Git work tree: ${cwd}`);
@@ -112,9 +157,13 @@ export async function detectProject(rootDir: string, cwd = process.cwd()): Promi
   const gitRoot = realpathSync(gitRootRaw);
   const rawRemote = runGit(gitRoot, ["config", "--get", "remote.origin.url"]);
   const remote = rawRemote ? normalizeGitRemote(rawRemote) : undefined;
-  const identitySource = remote ? "git_remote" : "git_path";
-  const identity = remote ?? gitRoot;
-  const id = projectId(identity);
+  if (!remote && !options.projectKey) {
+    throw new Error(
+      "Git remote is missing; provide an explicit project key such as local/owner/project"
+    );
+  }
+  const key = ProjectKeySchema.parse(remote ?? options.projectKey);
+  const identitySource = remote ? "git_remote" : "explicit_local_key";
   const agentInstructions: ProjectInstructionFingerprint[] = [];
 
   for (const filePath of instructionCandidates(gitRoot, cwd)) {
@@ -125,15 +174,26 @@ export async function detectProject(rootDir: string, cwd = process.cwd()): Promi
   }
 
   const registry: ProjectRegistry = {
-    version: 1,
-    id,
+    version: 2,
+    key,
+    displayName: projectDisplayName(key),
+    aliases: projectAliases(key),
     identitySource,
     gitRoot,
-    ...(remote ? { remote } : {}),
+    remotes:
+      remote && rawRemote
+        ? [
+            {
+              role: "origin",
+              normalized: remote,
+              rawRedacted: redactGitRemote(rawRemote)
+            }
+          ]
+        : [],
     detectedAt: new Date().toISOString(),
     agentInstructions
   };
-  const target = getProjectRegistryPath(rootDir, id);
+  const target = getProjectRegistryPath(rootDir, key);
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, `${JSON.stringify(registry, null, 2)}\n`, "utf8");
   return registry;

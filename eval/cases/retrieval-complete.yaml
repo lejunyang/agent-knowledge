@@ -1,7 +1,7 @@
 documents:
   - id: k_eval_vue_lint
     title: Vue SFC lint fallback
-    type: semantic
+    kind: semantic
     domain: frontend/vue-lint
     scenarios: [lint-migration]
     aliases: [vue-lint, sfc fallback]
@@ -10,7 +10,7 @@ documents:
 
   - id: k_eval_react_lint
     title: React lint fast path
-    type: semantic
+    kind: semantic
     domain: frontend/react-lint
     scenarios: [lint-migration]
     aliases: [react-lint]
@@ -19,7 +19,7 @@ documents:
 
   - id: k_eval_mysql_migration
     title: MySQL online schema migration
-    type: procedural
+    kind: procedural
     domain: data/mysql-migration
     scenarios: [schema-migration]
     aliases: [online ddl, mysql ddl]
@@ -28,7 +28,7 @@ documents:
 
   - id: k_eval_redis_migration
     title: Redis key migration
-    type: procedural
+    kind: procedural
     domain: data/redis-migration
     scenarios: [schema-migration]
     aliases: [redis migration]
@@ -37,7 +37,7 @@ documents:
 
   - id: k_eval_refund_approval
     title: Refund approval boundary
-    type: semantic
+    kind: semantic
     domain: support/refund-approval
     scenarios: [customer-support]
     aliases: [refund review]
@@ -46,7 +46,7 @@ documents:
 
   - id: k_eval_refund_status
     title: Refund status explanation
-    type: semantic
+    kind: semantic
     domain: support/refund-status
     scenarios: [customer-support]
     aliases: [refund progress]
@@ -55,7 +55,7 @@ documents:
 
   - id: k_eval_oauth_rotation
     title: OAuth client secret rotation
-    type: procedural
+    kind: procedural
     domain: security/oauth-rotation
     scenarios: [credential-rotation]
     aliases: [oauth rotation]
@@ -64,7 +64,7 @@ documents:
 
   - id: k_eval_oauth_login
     title: OAuth login troubleshooting
-    type: procedural
+    kind: procedural
     domain: security/oauth-login
     scenarios: [credential-rotation]
     aliases: [oauth login]
@@ -73,7 +73,7 @@ documents:
 
   - id: k_eval_webdav_conflict
     title: WebDAV three-way conflict
-    type: semantic
+    kind: semantic
     domain: sync/webdav-conflict
     scenarios: [knowledge-sync]
     aliases: [webdav conflict]
@@ -82,7 +82,7 @@ documents:
 
   - id: k_eval_s3_path_style
     title: S3-compatible path style
-    type: semantic
+    kind: semantic
     domain: sync/s3-path-style
     scenarios: [knowledge-sync]
     aliases: [minio path style]
@@ -91,7 +91,7 @@ documents:
 
   - id: k_eval_git_identity
     title: Git project identity
-    type: semantic
+    kind: semantic
     domain: project/git-identity
     scenarios: [project-detection]
     aliases: [project id]
@@ -100,7 +100,7 @@ documents:
 
   - id: k_eval_agents_inventory
     title: AGENTS inventory fingerprint
-    type: semantic
+    kind: semantic
     domain: project/agents-inventory
     scenarios: [project-detection]
     aliases: [agents hash]
@@ -109,7 +109,7 @@ documents:
 
   - id: k_eval_hook_relevance
     title: Quiet hook relevance gate
-    type: procedural
+    kind: procedural
     domain: agent/hook-relevance
     scenarios: [hook-injection]
     aliases: [quiet hook]
@@ -118,7 +118,7 @@ documents:
 
   - id: k_eval_hook_lifecycle
     title: Hook lifecycle staging
-    type: procedural
+    kind: procedural
     domain: agent/hook-lifecycle
     scenarios: [hook-injection]
     aliases: [hook staging]
@@ -127,7 +127,7 @@ documents:
 
   - id: k_eval_embedding_cache
     title: Embedding cache compatibility
-    type: semantic
+    kind: semantic
     domain: retrieval/embedding-cache
     scenarios: [hybrid-retrieval]
     aliases: [embedding manifest]
@@ -136,7 +136,7 @@ documents:
 
   - id: k_eval_rerank_threshold
     title: Rerank injection threshold
-    type: semantic
+    kind: semantic
     domain: retrieval/rerank-threshold
     scenarios: [hybrid-retrieval]
     aliases: [injection threshold]
@@ -145,7 +145,7 @@ documents:
 
   - id: k_eval_temporal_current
     title: Current account review policy
-    type: semantic
+    kind: semantic
     domain: business/account-review
     scenarios: [temporal-update]
     aliases: [current review policy]
@@ -155,7 +155,7 @@ documents:
 
   - id: k_eval_temporal_old
     title: Deprecated account review policy
-    type: semantic
+    kind: semantic
     domain: business/account-review-legacy
     scenarios: [temporal-update]
     aliases: [old review policy]

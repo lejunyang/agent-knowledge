@@ -6,7 +6,7 @@
 
 本项目实现一个本地 agent 知识持久化工具：
 
-- `knowledge/` 中排除 generated、`_inbox`、`_archive`、`_inbox-skills` 后的 KnowledgeDocument Markdown 是人类可读事实源。
+- `knowledge/` 中排除 generated、`_inbox`、`_archive`、`_inbox-skills` 后的 `schema_version: 2` KnowledgeDocument Markdown 是人类可读事实源。
 - `.memory/index.sqlite` 是可重建索引。
 - `.memory/embeddings/index.jsonl` 是可重建本地 embedding 缓存，不是事实源。
 - `.memory/embeddings/manifest.json` 保存 embedding profile/generation，不是事实源。
@@ -22,7 +22,9 @@
 - `agent-knowledge sync run|watch` 通过配置的 WebDAV/S3 backend 只同步正式 Markdown，冲突不自动覆盖。
 - `agent-knowledge maintenance` 从 SubagentStop 日志抽取 observation 并生成可审阅 proposal，不直接修改 active 知识。
 - `agent-knowledge graph` 构建、查询和导出轻量知识关系图；`query --retrieval graph|hybrid-graph` 才会让图遍历参与检索。
-- 知识 frontmatter 支持可选 `aliases`，用于查询别名扩展和 catalog registry 暴露，不替代规范 `domain` / `scenario`。
+- V2 frontmatter 使用 `kind` + `layer`：`kind` 表达 profile/semantic/procedural/episodic/principle/skill/source，`layer` 表达 synopsis/knowledge/evidence。
+- `aliases`、`scenarios`、`tags` 是带 `weight/source` 的结构化 metadata，不替代规范 `domain`；supported claim 必须包含 source/section/hash evidence anchor。
+- 项目作用域使用规范化 Git remote `project_keys`，例如 `github.com/lejunyang/agent-knowledge`；hash 只允许作为可重建 registry 文件名内部实现。
 
 不要把索引当成事实源。任何知识更新都应先落到 Markdown，再重建索引。
 
@@ -158,7 +160,7 @@ src/cli.ts            命令行入口和各模块编排
 - 项目配置行为变化时同步更新 `src/core/projectConfig.ts`、CLI source/scope 测试、`.gitignore` 和配置指南；`.agent-knowledge.local.json` 不得提交。
 - CLI/Hook 人类文案统一通过 `src/i18n/`；首发支持 `zh-CN` 和 `en`，默认 `auto`，未知系统语言回退中文。JSON 字段、frontmatter key 和知识 ID 不翻译。
 - 四阶段路线的完成证据维护在 `docs/research/2026-07-18-hivemind-memory-and-embeddings-evaluation.md`；新增检索、reranker 或 maintenance 行为时同步更新对应勾选项和证据。
-- 修改 schema 时同步更新 README、AGENTS 和测试夹具。`aliases` 字段是可选数组，默认空数组；新增知识如有常用简称、旧称或用户自然说法，应写入 `aliases`，但不要把它当作事实来源。`related_knowledge` 只有能指向明确已有或同批可生成的知识 ID 时才填写。`project_ids`、`capture_mode`、`actor_type`、`corroboration_count` 用于适用范围和来源治理，旧 Markdown 依赖 schema 默认值保持兼容。
+- 修改 schema 时同步更新 README、AGENTS 和测试夹具。V2 是 breaking schema，不提供 V1 Markdown fallback 或 migration；旧知识从原始 evidence 重建。`aliases` 默认空数组，每项必须写 kind/weight/source；`scenarios` 区分 primary/secondary 并带 weight；`tags` 可用 retrieval=false 保留纯 provenance。`related_knowledge` 只有能指向明确已有或同批可生成的知识 ID 时才填写。`project_keys`、`capture_mode`、`actor_type`、`corroboration_count` 用于适用范围和来源治理。
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - active 知识落盘目录必须保留 domain 的层级结构，例如 `bytedance/business/account` 写到 `knowledge/semantic/bytedance/business/account/`，不要压平成 `bytedance-business-account`。
 - 用户直接材料中的垂直领域知识若意义不明、需要专业判断、与受信知识冲突或疑似错误/过期，必须一次汇总具体疑点找用户确认；确认前不得写入 active 或 inbox，不能用低 confidence 绕过。
@@ -174,17 +176,17 @@ src/cli.ts            命令行入口和各模块编排
 - Alias 排序加分必须考虑其对完整任务的覆盖率；短通用 alias 只能作为弱证据，不能在长查询中自动获得满分并压过具体知识。
 - direct result 和 related expansion 必须执行相同的 validity、visibility、sensitivity、project 和 type 过滤。
 - Context packet 必须过滤低相关 direct 长尾，同时保留 query debug 候选；显式关系扩展可越过相对分数门槛，但不能越过安全过滤。
-- 普通 `query` 未传 `--project-id` 时必须自动发现当前 Git 项目的稳定 ID；显式参数完全优先，非 Git 或探测失败回退空项目作用域。
+- 普通 `query` 未传 `--project` 时必须自动发现当前 Git remote 的规范 project key；显式参数完全优先，非 Git、无 remote 或探测失败回退空项目作用域。无 remote 项目必须由 `project detect --project-key local/...` 显式命名。
 - `_inbox` / `_archive` 必须按路径硬排除，不能只依赖 status。
 - `_inbox-skills` 保存 Skill proposal 草稿，使用 Skill frontmatter 而不是 KnowledgeDocument schema；index、embedding、catalog、graph、list 和同步必须在解析前按路径硬排除。
 - embedding query 必须校验 manifest/profile，不能对不同模型、维度、pooling 或 prefix 的向量静默 cosine。
-- `type: source` 保存完整证据，不属于默认 query includeTypes，也不得进入 SQLite/FTS 或 embedding 缓存；检索内容应由 organizer 拆成 semantic/procedural/episodic/profile。
+- `kind: source` / `layer: evidence` 保存证据引用或受治理的 evidence，不属于默认 query includeTypes，也不得进入 SQLite/FTS 或 embedding 缓存；检索内容应由 organizer 拆成 semantic/procedural/episodic/profile/principle。
 - 图谱 HTML 默认只展示精炼 active 知识；结构邻居、source memory/source evidence 只能通过点击展开、证据或全图模式按需显示，不能恢复为全量节点首次布局。
 - source 原始证据导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、用户标识和个人信息；禁止把内部测试账号表原样写入长期知识。
 - `capture-material --replace-source` 只能刷新同 ID、active、documented 的 source 原始证据；不得覆盖 semantic/procedural/profile/episodic，精炼知识更新必须使用新知识和 `supersedes`。
 - Batch reranker 默认只在显式 `query --rerank` 或 reranked eval 中启用；Hook 热路径不得加载 cross-encoder。默认 pipeline 是融合 top 30 -> batch rerank -> threshold -> top 8。
 - Calibration 只能输出 dry-run 参数建议，不得自动改用户配置；目标函数必须优先惩罚 forbidden injection、abstention failure 和 not_useful feedback。
-- 共享同步默认不包含 `private` 或高于 `internal` 的知识；如修改默认策略，必须更新威胁模型和测试。
+- 共享同步默认不包含 `private` 或高于 `internal` 的知识；当前实现会同步允许范围内的正式 `kind: source` Markdown，且不提供客户端加密，因此不能把它当作完整会话/附件 Evidence Vault。修改同步范围或加密策略时必须更新威胁模型和测试。
 - 定时同步使用前台 `agent-knowledge sync watch` 循环；不要在安装或配置命令中静默创建 cron、launchd 或 systemd 任务。需要后台常驻时由用户显式交给系统进程管理器托管。
 - `sync.intervalMinutes: 0` 表示禁用定时同步；`sync watch` 要求正数间隔，并在单次失败后记录错误、等待下一周期重试。
 - Maintenance worker 只能写 `.memory/proposals` 和 watermark/lock，禁止直接修改 active Markdown。Skill proposal 必须满足至少 3 个独立 session、trusted authority、positive feedback、无 unresolved conflict，并且不得自动写入或安装 `.trae/skills`。

@@ -32,7 +32,7 @@ export type EvalCase = {
   task: string;
   domains: string[];
   scenarios: string[];
-  project_ids?: string[];
+  project_keys?: string[];
   max_tokens?: number;
   expected_memories: string[];
   expected_ranks?: Record<string, number>;
@@ -104,7 +104,7 @@ const EvalCaseSchema = z.object({
   task: z.string().min(1),
   domains: z.array(z.string()).default([]),
   scenarios: z.array(z.string()).default([]),
-  project_ids: z.array(z.string().min(1)).default([]),
+  project_keys: z.array(z.string().min(1)).default([]),
   max_tokens: z.number().int().positive().default(4500),
   expected_memories: z.array(z.string()).default([]),
   expected_ranks: z.record(z.number().int().positive()).optional(),
@@ -123,12 +123,12 @@ const EvalSuiteSchema = z.object({
 const EvalFixtureDocumentSchema = z.object({
   id: z.string().regex(/^k_[a-zA-Z0-9_]+$/),
   title: z.string().min(1),
-  type: z.enum(["profile", "semantic", "episodic", "procedural"]),
+  kind: z.enum(["profile", "semantic", "episodic", "procedural", "principle"]),
   domain: z.string().min(1),
   scenarios: z.array(z.string().min(1)).min(1),
   aliases: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
-  project_ids: z.array(z.string().min(1)).default([]),
+  project_keys: z.array(z.string().min(1)).default([]),
   body: z.string().min(1),
   status: z.enum(["active", "deprecated"]).default("active"),
   valid_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default("2026-01-01"),
@@ -170,7 +170,7 @@ export async function materializeEvalCorpus(rootDir: string, corpus: EvalCorpus)
   for (const item of corpus.documents) {
     const relativePath = path.posix.join(
       "knowledge",
-      item.type,
+      item.kind,
       ...item.domain.split("/"),
       `${item.id}.md`
     );
@@ -179,24 +179,42 @@ export async function materializeEvalCorpus(rootDir: string, corpus: EvalCorpus)
     const document = KnowledgeDocumentSchema.parse({
       filePath: relativePath,
       frontmatter: {
+        schema_version: 2,
         id: item.id,
-        type: item.type,
+        kind: item.kind,
+        layer: "knowledge",
         title: item.title,
-        aliases: item.aliases,
+        synopsis: item.body.slice(0, 500),
+        aliases: item.aliases.map((value) => ({
+          value,
+          kind: "user_phrase",
+          weight: 0.8,
+          source: "documented"
+        })),
         domain: item.domain,
         related_domains: [],
-        scenario: item.scenarios,
-        tags: item.tags,
+        scenarios: item.scenarios.map((id, index) => ({
+          id,
+          role: index === 0 ? "primary" : "secondary",
+          weight: index === 0 ? 1 : 0.7
+        })),
+        tags: item.tags.map((value) => ({
+          value,
+          weight: 0.7,
+          source: "taxonomy",
+          retrieval: true
+        })),
         status: item.status,
         confidence: 0.9,
         source_authority: "documented",
         source: ["eval:retrieval-complete"],
+        claims: [],
         related_knowledge: [],
         supersedes: [],
         conflicts_with: [],
         visibility: "project",
         sensitivity: "internal",
-        project_ids: item.project_ids,
+        project_keys: item.project_keys,
         capture_mode: "direct_material",
         actor_type: "owner",
         corroboration_count: 1,
@@ -287,7 +305,7 @@ export async function runEvalCase(
     now,
     visibilityScopes: ["private", "project", "team"],
     sensitivityClearance: "internal",
-    projectIds: evalCase.project_ids
+    projectKeys: evalCase.project_keys
   });
   let ranked;
   if (pipelineOptions.pipeline === "hybrid") {

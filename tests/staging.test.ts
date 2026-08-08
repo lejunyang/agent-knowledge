@@ -32,7 +32,7 @@ describe("proactive memory staging", () => {
       last_assistant_message: "a".repeat(10_000),
       cwd: "/tmp/project",
       reason: "completed",
-      project_id: "project_123"
+      project_key: "github.com/example/project-123"
     });
     const raw = await readFile(result.eventsPath, "utf8");
     const event = JSON.parse(raw.trim()) as Record<string, unknown>;
@@ -42,6 +42,7 @@ describe("proactive memory staging", () => {
     expect(event.turnHash).toMatch(/^[a-f0-9]{16}$/);
     expect(event.agentHash).toMatch(/^[a-f0-9]{16}$/);
     expect(event.agentType).toBe("memory-writer");
+    expect(event.projectKey).toBe("github.com/example/project-123");
     expect(event.promptLength).toBe("please remember private raw prompt".length);
     expect(event.responseLength).toBe(10_000);
     expect(event).not.toHaveProperty("prompt");

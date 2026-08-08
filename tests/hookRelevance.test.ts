@@ -38,24 +38,47 @@ function makeRanked(score: number): RankedMemory[] {
       document: {
         filePath: "knowledge/semantic/lint.md",
         frontmatter: {
+          schema_version: 2,
           id: "k_lint",
-          type: "semantic",
+          kind: "semantic",
+          layer: "knowledge",
           title: "Vue lint 规则",
-          aliases: ["vue-lint"],
+          synopsis: "Vue SFC template 需要 ESLint fallback。",
+          aliases: [
+            {
+              value: "vue-lint",
+              kind: "user_phrase",
+              weight: 0.9,
+              source: "documented",
+              evidence_refs: [],
+              positive_hits: 0,
+              negative_hits: 0
+            }
+          ],
           domain: "frontend/lint",
           related_domains: [],
-          scenario: ["lint-migration"],
-          tags: ["vue"],
+          scenarios: [
+            { id: "lint-migration", role: "primary", weight: 1 }
+          ],
+          tags: [
+            {
+              value: "vue",
+              weight: 0.8,
+              source: "taxonomy",
+              retrieval: true
+            }
+          ],
           status: "active",
           confidence: 0.9,
           source_authority: "documented",
           source: ["test"],
+          claims: [],
           related_knowledge: [],
           supersedes: [],
           conflicts_with: [],
           visibility: "project",
           sensitivity: "internal",
-          project_ids: [],
+          project_keys: [],
           capture_mode: "direct_material",
           actor_type: "owner",
           corroboration_count: 1,

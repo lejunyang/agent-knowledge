@@ -92,7 +92,7 @@ describe("managed integrations", () => {
       "organize-inbox --approve"
     );
     await expect(readFile(writerTarget, "utf8")).resolves.toContain(
-      "type=source"
+      "layer: evidence"
     );
     await expect(readFile(maintainerTarget, "utf8")).resolves.toContain(
       "maintenance install-skill"

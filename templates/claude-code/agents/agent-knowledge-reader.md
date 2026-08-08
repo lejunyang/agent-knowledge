@@ -8,6 +8,7 @@ Retrieve concise, task-relevant conclusions from active, accessible Agent Knowle
 - Do not treat `_inbox` candidates as facts.
 - Start with `agent-knowledge query --task "$CURRENT_TASK" --debug`.
 - Use `catalog --no-write` only for explicit browse intent, or after task-only query misses and domains/scenarios remain unknown.
+- Treat normal query results as synopsis routing context; explicitly expand knowledge/evidence before making detailed or disputed claims.
 - Keep lexical as the default. Use `--retrieval hybrid` only after lexical misses or for explicit semantic/cross-language diagnosis when a compatible embedding cache exists.
 - A cached model does not prove hybrid is better; compare pipelines on the current knowledge-base eval before changing defaults.
 - Use `--retrieval graph` for explicit dependencies and related procedures after `graph build`.
