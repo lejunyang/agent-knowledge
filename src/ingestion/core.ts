@@ -57,6 +57,23 @@ import {
  */
 export const INGESTION_CORE_PROFILE = "ingestion-core-v1";
 
+/**
+ * 统一生成 source processing profile。
+ *
+ * 摄入与 probe-only 更新检查必须使用同一计算，否则规则升级可能在检查时被误判为 unchanged，
+ * 直到下一次完整抓取才暴露。所有输入继续经过 runtime schema 校验。
+ */
+export function buildIngestionProcessingProfile(
+  connector: KnowledgeConnector,
+  redactionPolicy: EvidenceRedactionPolicy
+): string {
+  return `${INGESTION_CORE_PROFILE}:${ConnectorProcessingProfileSchema.parse(
+    connector.processingProfile
+  )}:${EVIDENCE_REDACTION_PROFILE}:${EvidenceRedactionPolicySchema.parse(
+    redactionPolicy
+  )}`;
+}
+
 /** 生成 job/checkpoint 文件名使用的稳定短 hash。 */
 function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 20);
@@ -409,9 +426,6 @@ async function runConnectorIngestionLocked(
   }
 ): Promise<IngestionRunResult> {
   const connectorId = ConnectorIdSchema.parse(connector.id);
-  const connectorProcessingProfile = ConnectorProcessingProfileSchema.parse(
-    connector.processingProfile
-  );
   if (
     connector.requiredRedactionPolicy !== undefined &&
     options.redactionPolicy !==
@@ -421,7 +435,10 @@ async function runConnectorIngestionLocked(
       `Connector requires ${connector.requiredRedactionPolicy} redaction: ${connector.id}`
     );
   }
-  const processingProfile = `${INGESTION_CORE_PROFILE}:${connectorProcessingProfile}:${EVIDENCE_REDACTION_PROFILE}:${options.redactionPolicy}`;
+  const processingProfile = buildIngestionProcessingProfile(
+    connector,
+    options.redactionPolicy
+  );
   const previousCursor = await readConnectorCheckpoint(rootDir, connector.id);
   const rawInventoryIdentity =
     await connector.inventoryIdentity?.() ?? undefined;
