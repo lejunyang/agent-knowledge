@@ -27,7 +27,7 @@ Only add `related_knowledge` when an existing knowledge ID and relation can be s
 
 Output V2 fields: `kind`, `layer`, a short routing `synopsis`, substantive `explanation`, weighted `aliases`/`scenarios`/`tags`, `claims`, and `project_keys`. Supported claims require source/section/hash evidence. Do not use metadata volume to compensate for a thin explanation.
 
-Use optional `id` only when mapping an external document to a stable `k_[a-zA-Z0-9_]+` identity. `layer: evidence` is reserved for governed source/episode references. Complete documents and transcripts must first go through `agent-knowledge ingest files|transcripts`, which writes redacted content to the encrypted Vault and a versioned source manifest to Git; never copy secrets or transcript bodies into candidate Markdown. V1 knowledge is rebuilt from original evidence, not migrated.
+Use optional `id` only when mapping an external document to a stable `k_[a-zA-Z0-9_]+` identity. `layer: evidence` is reserved for governed source/episode references. Complete documents and transcripts must first go through `agent-knowledge ingest files|transcripts`; repository docs use `agent-knowledge ingest git`, which reads committed blobs rather than dirty/untracked files. These workflows write redacted content to the encrypted Vault and a versioned source manifest to Git; never copy secrets or transcript bodies into candidate Markdown. V1 knowledge is rebuilt from original evidence, not migrated.
 
 The main agent writes your JSON with:
 

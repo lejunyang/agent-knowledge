@@ -40,6 +40,7 @@ export const UpstreamVersionSchema = z.object({
   updated_at: z.string().datetime().optional(),
   etag: z.string().min(1).optional(),
   commit_sha: z.string().regex(/^[a-fA-F0-9]{7,64}$/).optional(),
+  path_hash: z.string().regex(/^[a-fA-F0-9]{7,64}$/).optional(),
   opaque_version: z.string().min(1).optional()
 });
 
@@ -70,7 +71,7 @@ export const SourceSectionSchema = z.object({
 /** manifest 是 Git 可跟踪导航；完整 evidence object 只保存在加密 Vault。 */
 export const SourceManifestSchema = z
   .object({
-    schema_version: z.literal(2),
+    schema_version: z.literal(3),
     source_id: z.string().regex(/^src_[A-Za-z0-9_.-]+$/),
     connector: z.string().min(1),
     artifact_kind: z
@@ -95,6 +96,8 @@ export const SourceManifestSchema = z
       ]),
     processing_profile: z.string().min(1),
     redactions: z.record(z.string(), z.number().int().positive()),
+    availability: z.enum(["available", "missing"]),
+    missing_since: z.string().datetime().optional(),
     version: SourceVersionSchema,
     processing_status: SourceProcessingStatusSchema.default("pending"),
     processing_reason: z.string().min(1).optional(),
@@ -131,6 +134,26 @@ export const SourceManifestSchema = z
           "transcript and tool_trace manifests cannot persist section previews"
       });
     }
+    if (
+      manifest.availability === "missing" &&
+      manifest.missing_since === undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["missing_since"],
+        message: "missing source manifests require missing_since"
+      });
+    }
+    if (
+      manifest.availability === "available" &&
+      manifest.missing_since !== undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["missing_since"],
+        message: "available source manifests cannot keep missing_since"
+      });
+    }
   });
 
 export type SourceManifest = z.output<typeof SourceManifestSchema>;
@@ -141,7 +164,9 @@ export type SourceUpdateClassification =
   | "new"
   | "unchanged"
   | "metadata_only"
-  | "content_changed";
+  | "content_changed"
+  | "removed"
+  | "restored";
 export type SourceRefreshDecision = {
   action: "skip" | "fetch";
   comparison: SourceProbeComparison;
@@ -168,6 +193,7 @@ export function sourceVersionFingerprint(input: {
       updated_at: upstream.updated_at ?? null,
       etag: upstream.etag ?? null,
       commit_sha: upstream.commit_sha?.toLowerCase() ?? null,
+      path_hash: upstream.path_hash?.toLowerCase() ?? null,
       opaque_version: upstream.opaque_version ?? null,
       content_hash: input.contentHash
     })
@@ -197,6 +223,7 @@ export function buildSourceVersion(input: {
 type ComparableVersionField = keyof z.output<typeof UpstreamVersionSchema>;
 
 const VERSION_FIELD_PRIORITY: ComparableVersionField[] = [
+  "path_hash",
   "commit_sha",
   "revision",
   "etag",
@@ -204,13 +231,13 @@ const VERSION_FIELD_PRIORITY: ComparableVersionField[] = [
   "updated_at"
 ];
 
-/** 比较单个上游版本字段；commit SHA 忽略大小写，其他字段做精确比较。 */
+/** 比较单个上游版本字段；Git hash 忽略大小写，其他字段做精确比较。 */
 function sameVersionField(
   field: ComparableVersionField,
   left: string,
   right: string
 ): boolean {
-  return field === "commit_sha"
+  return field === "commit_sha" || field === "path_hash"
     ? left.toLowerCase() === right.toLowerCase()
     : left === right;
 }
@@ -275,6 +302,18 @@ export function classifySourceUpdate(
     return "new";
   }
   const before = SourceManifestSchema.parse(previous);
+  if (
+    before.availability === "available" &&
+    next.availability === "missing"
+  ) {
+    return "removed";
+  }
+  if (
+    before.availability === "missing" &&
+    next.availability === "available"
+  ) {
+    return "restored";
+  }
   if (before.version.content_hash !== next.version.content_hash) {
     return "content_changed";
   }
@@ -417,7 +456,7 @@ export function buildSourceManifest(input: {
   }
 
   return SourceManifestSchema.parse({
-    schema_version: 2,
+    schema_version: 3,
     source_id: input.sourceId,
     connector: input.connector,
     artifact_kind: input.artifactKind ?? "document",
@@ -430,6 +469,7 @@ export function buildSourceManifest(input: {
     redaction_policy: input.redactionPolicy ?? "not-applied",
     processing_profile: input.processingProfile ?? "legacy-unversioned",
     redactions: input.redactions ?? {},
+    availability: "available",
     version: buildSourceVersion({
       observedAt: input.observedAt,
       contentHash: `sha256:${sha256(input.content)}`,

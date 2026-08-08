@@ -50,6 +50,7 @@ function sourceVersionFingerprint(upstream, contentHash) {
       updated_at: upstream.updated_at ?? null,
       etag: upstream.etag ?? null,
       commit_sha: upstream.commit_sha?.toLowerCase() ?? null,
+      path_hash: upstream.path_hash?.toLowerCase() ?? null,
       opaque_version: upstream.opaque_version ?? null,
       content_hash: contentHash
     })
@@ -117,7 +118,7 @@ export function buildLarkSourceManifest(input) {
     ...(input.updatedAt ? { updated_at: input.updatedAt } : {})
   };
   return {
-    schema_version: 2,
+    schema_version: 3,
     source_id: input.sourceId,
     connector: "lark",
     artifact_kind: "document",
@@ -129,6 +130,7 @@ export function buildLarkSourceManifest(input) {
     redaction_policy: "connector-specific",
     processing_profile: "lark-source-candidates-v1",
     redactions: {},
+    availability: "available",
     version: {
       observed_at: input.observedAt,
       upstream,

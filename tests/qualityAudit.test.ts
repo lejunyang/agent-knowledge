@@ -100,6 +100,7 @@ describe("auditKnowledgeQuality", () => {
 
     expect(report.summary.sourceDocuments).toBe(1);
     expect(report.summary.sourceCoverage).toBe(0);
+    expect(report.summary.sourceAvailabilityCoverage).toBe(1);
     expect(report.summary.vaultEvidenceCoverage).toBe(0);
     expect(report.summary.upstreamVersionCoverage).toBe(1);
     expect(report.summary.redactionPolicyCoverage).toBe(1);
@@ -160,6 +161,7 @@ describe("auditKnowledgeQuality", () => {
     });
 
     expect(report.summary.sourceCoverage).toBe(1);
+    expect(report.summary.sourceAvailabilityCoverage).toBe(1);
     expect(report.summary.vaultEvidenceCoverage).toBe(1);
     expect(report.summary.upstreamVersionCoverage).toBe(1);
     expect(report.summary.redactionPolicyCoverage).toBe(1);
@@ -167,5 +169,90 @@ describe("auditKnowledgeQuality", () => {
     expect(
       report.findings.filter((finding) => finding.severity === "error")
     ).toEqual([]);
+  });
+
+  it("invalidates claim anchors when the upstream source is marked missing", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-quality-missing-source-")
+    );
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    const manifest = await writeManifest(root, "refined", {
+      persistVault: true
+    });
+    const section = manifest.sections[0]!;
+    const manifestPath = path.join(
+      root,
+      "knowledge",
+      "source-manifests",
+      "src_lint_design.json"
+    );
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          ...manifest,
+          availability: "missing",
+          missing_since: "2026-08-10T00:00:00.000Z",
+          processing_status: "obsolete",
+          processing_reason: "connector_source_missing"
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+    const target = path.join(
+      root,
+      "knowledge",
+      "semantic",
+      "frontend-lint",
+      "2026-07-05-vue-sfc-eslint-fallback.md"
+    );
+    const original = await readFile(target, "utf8");
+    await writeFile(
+      target,
+      original
+        .replace(
+          "source:\n  - conversation:2026-07-05-agent-memory-design",
+          "source:\n  - source:src_lint_design"
+        )
+        .replace(
+          "claims: []",
+          `claims:
+  - id: claim_removed_source
+    statement: Vue SFC template needs ESLint fallback.
+    status: supported
+    confidence: 0.9
+    evidence:
+      - source_id: src_lint_design
+        section_id: ${section.section_id}
+        quote_hash: ${section.text_hash}`
+        ),
+      "utf8"
+    );
+
+    const report = await auditKnowledgeQuality(root, {
+      minimumKnowledgeBodyChars: 1,
+      maximumFrontmatterShare: 1,
+      maximumAliases: 8,
+      maximumScenarios: 6,
+      maximumTags: 8
+    });
+
+    expect(report.summary.claimEvidenceCoverage).toBe(0);
+    expect(report.summary.sourceCoverage).toBe(1);
+    expect(report.summary.sourceAvailabilityCoverage).toBe(0);
+    expect(report.summary.vaultEvidenceCoverage).toBe(1);
+    expect(
+      report.findings.some(
+        (finding) => finding.code === "source_missing_upstream"
+      )
+    ).toBe(true);
+    expect(
+      report.findings.some(
+        (finding) => finding.code === "unknown_evidence_anchor"
+      )
+    ).toBe(true);
   });
 });

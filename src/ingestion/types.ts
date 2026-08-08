@@ -6,13 +6,20 @@
  */
 import { z } from "zod";
 import { ProjectKeySchema } from "../core/knowledgeV2.js";
-import { SourceVersionProbeSchema } from "../storage/sourceManifest.js";
+import {
+  SourceVersionProbeSchema,
+  type SourceVersionProbe
+} from "../storage/sourceManifest.js";
 
 export const ConnectorIdSchema = z
   .string()
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 
 export const ConnectorProcessingProfileSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
+
+export const ConnectorInventoryIdentitySchema = z
   .string()
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 
@@ -67,6 +74,7 @@ export type NormalizedArtifact = {
 export type ConnectorCursor = {
   version: 1;
   connectorId: string;
+  inventoryIdentity?: string;
   updatedAt: string;
   sources: Record<
     string,
@@ -85,7 +93,10 @@ export type ConnectorCursor = {
 export interface KnowledgeConnector {
   readonly id: string;
   readonly processingProfile: string;
+  readonly inventoryMode?: "partial" | "complete";
   discover(cursor: ConnectorCursor | null): AsyncIterable<ConnectorSourceDescriptor>;
+  inventoryIdentity?(): Promise<string | null>;
+  inventoryVersion?(): Promise<SourceVersionProbe | null>;
   fetch(descriptor: ConnectorSourceDescriptor): Promise<Buffer>;
   normalize(
     descriptor: ConnectorSourceDescriptor,
@@ -108,7 +119,9 @@ export type IngestionJob = {
     | "new"
     | "unchanged"
     | "metadata_only"
-    | "content_changed";
+    | "content_changed"
+    | "removed"
+    | "restored";
   skipReason?: string;
   vaultObject?: string;
   sourceManifestPath?: string;

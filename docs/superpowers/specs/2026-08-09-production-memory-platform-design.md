@@ -541,6 +541,8 @@ Connector 本身保持只读，不直接写 checkpoint。统一 ingestion core �
 
 - `ingest files`：显式 base directory + glob，不跟随 symlink。
 - `ingest transcripts`：JSONL convenience adapter，强制 secret + PII 脱敏，manifest 不保存正文 preview。
+- `ingest git`：只读本地 committed blob；remote 作为 project key，commit SHA 记录仓库版本，
+  blob SHA 作为 path hash，完整运行执行删除/恢复对账。
 
 Source manifest 同时记录 upstream/content fingerprint 与 `processing_profile`。上游版本未变但
 normalize/脱敏规则升级时仍会重抓；正文未变则归类 metadata-only 并保留已有处理状态。
@@ -552,7 +554,7 @@ normalize/脱敏规则升级时仍会重抓；正文未变则归类 metadata-onl
 - Lark Wiki/Docx。
 - 本地 Markdown/PDF/Office。
 - URL/站点 crawler。
-- Git repository docs/ADR/issue/MR。
+- Git repository docs/ADR 已支持 committed blob；issue/MR 仍需 GitHub/Codebase API Connector。
 
 #### 会话与 Agent
 

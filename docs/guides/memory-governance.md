@@ -74,6 +74,7 @@ agent-knowledge knowledge audit --fail-on warning
 Source 层还报告四个正式使用覆盖率：
 
 - `sourceCoverage`：每个 source 是否已分类处理。
+- `sourceAvailabilityCoverage`：source 当前是否仍存在于上游完整 inventory。
 - `vaultEvidenceCoverage`：manifest 是否指向本机真实存在的加密 Vault object。
 - `upstreamVersionCoverage`：是否有 revision、ETag、commit SHA、更新时间或 opaque version 可做轻量更新探测。
 - `redactionPolicyCoverage`：是否记录了实际脱敏策略。
@@ -109,7 +110,7 @@ agent-knowledge capture-material \
 Source manifest 同时保存：
 
 - 稳定身份：`source_id`、connector、external key。
-- 上游版本：revision、ETag、commit SHA、更新时间或 opaque provider version。
+- 上游版本：revision、ETag、commit SHA、blob/path hash、更新时间或 opaque provider version。
 - 本地确认：content hash、version fingerprint、observed time。
 - 结构：section ID、heading path、section text hash。
 - 治理：artifact kind、project keys、content type/bytes、redaction policy/counts、processing profile。
@@ -138,10 +139,19 @@ agent-knowledge ingest transcripts \
   --connector-id support-sessions \
   --base-dir /secure/exports/support-sessions \
   --project-key github.com/example/support
+
+agent-knowledge ingest git \
+  --connector-id business-repository \
+  --repository /projects/business \
+  --pathspec README.md docs
 ```
 
 `transcripts` 强制遮蔽 secret 与 PII，manifest 不保存正文 preview；完整脱敏内容只进入 Vault。
 每次尝试有独立 job，失败不推进 checkpoint，同一 Connector 的并发运行由本地 lock 拒绝。
+
+Git Connector 用 blob SHA 判断单文档变化，用 commit SHA 记录仓库版本；无关代码 commit
+只形成 metadata-only，不重读正文。完整 inventory 发现 source 被删除后将其标记
+missing/obsolete，相关 supported claim 失去有效 anchor；同路径恢复后必须重新蒸馏/审阅。
 
 ## Hook、详细日志与 staging
 

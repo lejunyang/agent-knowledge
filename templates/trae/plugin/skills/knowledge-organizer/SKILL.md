@@ -61,7 +61,15 @@ agent-knowledge ingest transcripts \
   --connector-id agent-sessions \
   --base-dir /secure/exports/agent-sessions \
   --project-key github.com/example/business
+
+agent-knowledge ingest git \
+  --connector-id business-repository \
+  --repository /projects/business \
+  --pathspec README.md docs
 ```
+
+Git 摄入只读 committed blob，不包含 dirty/untracked 内容，也不自动 fetch/pull；完整运行会对账
+删除，恢复后的 source 回到 pending。
 
 旧流程中已存在的 source Markdown 才使用：
 

@@ -42,6 +42,20 @@ describe("source manifests", () => {
         ]
       })
     ).toThrow();
+    expect(() =>
+      SourceManifestSchema.parse({
+        ...buildSourceManifest({
+          sourceId: "src_previous_manifest",
+          connector: "file",
+          externalKey: "previous.md",
+          title: "Previous",
+          content: "previous",
+          observedAt
+        }),
+        schema_version: 2,
+        availability: undefined
+      })
+    ).toThrow();
   });
 
   it("creates stable heading-aware sections and records upstream versions", () => {
@@ -156,15 +170,39 @@ describe("source manifests", () => {
       title: "Repository",
       content: "README",
       observedAt,
-      upstreamVersion: { commit_sha: "ABCDEF1234567" }
+      upstreamVersion: {
+        commit_sha: "ABCDEF1234567",
+        path_hash: "1111111111111111111111111111111111111111"
+      }
     });
 
     expect(
       compareSourceVersionProbe(previous.version, {
         observed_at: "2026-08-10T00:00:00.000Z",
-        upstream: { commit_sha: "abcdef1234567" }
+        upstream: {
+          commit_sha: "abcdef1234567",
+          path_hash: "1111111111111111111111111111111111111111"
+        }
       })
     ).toBe("unchanged");
+    expect(
+      compareSourceVersionProbe(previous.version, {
+        observed_at: "2026-08-10T00:00:00.000Z",
+        upstream: {
+          commit_sha: "2222222222222222222222222222222222222222",
+          path_hash: "1111111111111111111111111111111111111111"
+        }
+      })
+    ).toBe("unchanged");
+    expect(
+      compareSourceVersionProbe(previous.version, {
+        observed_at: "2026-08-10T00:00:00.000Z",
+        upstream: {
+          commit_sha: "ABCDEF1234567",
+          path_hash: "3333333333333333333333333333333333333333"
+        }
+      })
+    ).toBe("changed");
     expect(
       compareSourceVersionProbe(previous.version, {
         observed_at: "2026-08-10T00:00:00.000Z",
@@ -206,5 +244,42 @@ describe("source manifests", () => {
     expect(classifySourceUpdate(previous, previous)).toBe("unchanged");
     expect(classifySourceUpdate(previous, metadataOnly)).toBe("metadata_only");
     expect(classifySourceUpdate(previous, changed)).toBe("content_changed");
+  });
+
+  it("classifies source removal and restoration explicitly", () => {
+    const available = buildSourceManifest({
+      sourceId: "src_restorable",
+      connector: "git",
+      externalKey: "github.com/example/repo:README.md",
+      title: "README.md",
+      content: "v1",
+      observedAt,
+      upstreamVersion: {
+        commit_sha: "1111111111111111111111111111111111111111",
+        path_hash: "2222222222222222222222222222222222222222"
+      }
+    });
+    const missing = SourceManifestSchema.parse({
+      ...available,
+      availability: "missing",
+      missing_since: "2026-08-10T00:00:00.000Z",
+      processing_status: "obsolete",
+      processing_reason: "connector_source_missing"
+    });
+    const restored = buildSourceManifest({
+      sourceId: "src_restorable",
+      connector: "git",
+      externalKey: "github.com/example/repo:README.md",
+      title: "README.md",
+      content: "v1",
+      observedAt: "2026-08-11T00:00:00.000Z",
+      upstreamVersion: {
+        commit_sha: "3333333333333333333333333333333333333333",
+        path_hash: "2222222222222222222222222222222222222222"
+      }
+    });
+
+    expect(classifySourceUpdate(available, missing)).toBe("removed");
+    expect(classifySourceUpdate(missing, restored)).toBe("restored");
   });
 });

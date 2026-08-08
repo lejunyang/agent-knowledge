@@ -164,7 +164,7 @@ tools: ""
 - 外部文档需要稳定映射时，可使用满足 `k_[a-zA-Z0-9_]+` 的显式 ID。
 - `synopsis` 只负责路由和首次上下文，通常 80 到 220 个中文字，不能代替正文。
 - `explanation` 必须说明背景、事实或步骤、适用条件、例外、失败策略和验证方式；不要用大量 alias/tag 补偿正文不足。
-- `layer: evidence` 只保存受治理的 source/episode 引用；完整原文由 Connector 先脱敏并写入 Evidence Vault，Git 只保留 source manifest/section/hash/Vault handle。不要把凭据、未脱敏全文或客服原文复制进 candidate Markdown。
+- `layer: evidence` 只保存受治理的 source/episode 引用；完整原文由 Connector 先脱敏并写入 Evidence Vault，Git 只保留 source manifest/section/hash/Vault handle。仓库文档使用 `ingest git` 读取 committed blob，不要把 dirty working tree、凭据、未脱敏全文或客服原文复制进 candidate Markdown。
 - V2 不读取或迁移旧 KnowledgeDocument；遇到旧知识时从原始 evidence 重新提炼。
 
 以下情况必须输出 `should_store: false`：

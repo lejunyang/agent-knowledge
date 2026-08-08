@@ -55,6 +55,12 @@ agent-knowledge ingest transcripts \
   --connector-id trae-sessions \
   --base-dir /secure/exports/trae-sessions \
   --project-key github.com/example/business
+
+agent-knowledge ingest git \
+  --root ~/agent-knowledge-data \
+  --connector-id business-repository \
+  --repository /projects/business \
+  --pathspec README.md docs
 ```
 
 当前 `files`/`transcripts` Connector 只读取显式 `base-dir` 下的 UTF-8 普通文件，不跟随
@@ -65,6 +71,10 @@ symbolic link。`transcripts` 默认 `**/*.jsonl` 并强制 `secrets-and-pii`；
 不是完整 DLP，也无法可靠判断姓名、地址、业务 UID 或自由文本中的所有个人信息。包含领域
 PII 的来源必须由专用 Connector 在 `normalize` 阶段额外清洗，并在
 `processingProfile` 中版本化该规则。Vault 加密不能替代来源授权与最小化采集。
+
+Git Connector 只读本地 object database 的 committed blob，不读取工作区草稿/untracked
+文件，也不会联网更新仓库。commit SHA 记录仓库时间点，blob SHA 写入 `path_hash` 并优先
+用于轻量比较：无关 commit 只更新 manifest metadata，不重新读取正文。
 
 推荐文件输入，避免完整内容进入 shell history：
 
@@ -88,7 +98,7 @@ agent-knowledge vault put \
 
 Connector 每次 source 尝试写入：
 
-- `knowledge/source-manifests/<source-id>.json`：严格 `schema_version: 2` 的 Git 可跟踪身份、版本、section hash、处理状态、
+- `knowledge/source-manifests/<source-id>.json`：严格 `schema_version: 3` 的 Git 可跟踪身份、版本、availability、section hash、处理状态、
   `redaction_policy`、`processing_profile`、脱敏计数和 `vault_object`。
 - `.memory/ingestion/jobs/<job-id>.json`：本次 completed/skipped/failed 审计；不保存正文。
 - `.memory/ingestion/checkpoints/<connector-hash>.json`：成功或跳过后的增量水位。
@@ -103,6 +113,10 @@ Connector 每次 source 尝试写入：
 
 失败 job 不推进 checkpoint，可安全重跑；metadata-only 更新保留已有 source 处理状态。
 锁归活进程所有时拒绝并发，进程崩溃留下的死 PID 锁由下一次运行恢复。
+
+完整 inventory 运行会把上次存在、本次缺失的 Git path 标记 missing/obsolete；原 Vault
+证据仍保留用于历史审计，但 missing source 不再支撑 active claim。恢复同路径时重新抓取，
+状态回到 pending。传 `--limit` 时不会做删除对账。
 
 ## 读取
 

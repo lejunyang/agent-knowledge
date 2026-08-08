@@ -148,10 +148,17 @@ agent-knowledge ingest transcripts \
   --connector-id agent-sessions \
   --base-dir /secure/exports/agent-sessions \
   --project-key github.com/example/business
+
+agent-knowledge ingest git \
+  --connector-id business-repository \
+  --repository /projects/business \
+  --pathspec README.md docs
 ```
 
 Connector 会移除 secret/PII、跟踪 upstream/content/processing profile，并让 transcript
-manifest 不保存正文 preview。旧流程中已有的受治理 `source` Markdown 才使用：
+manifest 不保存正文 preview。Git Connector 只读 committed blob，不读取 dirty/untracked
+内容，也不自动 fetch/pull；blob SHA 判断单文档更新，commit SHA 记录仓库版本。旧流程中
+已有的受治理 `source` Markdown 才使用：
 
 ```bash
 agent-knowledge capture-material \

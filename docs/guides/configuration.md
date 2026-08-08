@@ -103,6 +103,12 @@ agent-knowledge ingest transcripts \
   --connector-id agent-sessions \
   --base-dir /secure/exports/agent-sessions \
   --project-key github.com/example/business
+
+agent-knowledge ingest git \
+  --root ~/agent-knowledge-data \
+  --connector-id business-repository \
+  --repository /projects/business \
+  --pathspec README.md docs
 ```
 
 - `connector-id` 必须稳定且不含个人信息；更改它会创建新的 checkpoint/source identity。
@@ -111,6 +117,11 @@ agent-knowledge ingest transcripts \
 - `transcripts` 强制内置 `secrets-and-pii` 规则，不能通过配置降级；该规则不是完整 DLP，
   姓名、地址、业务 UID 等领域 PII 需要专用 Connector 继续清洗。
 - `--limit 0` 是有意的空运行；正数限制本次发现的 source 数。
+- `ingest git` 默认读取 `HEAD`，可用 `--ref <commit-or-ref>` 固定快照；它不执行 fetch/pull，
+  只读 committed blob。无 origin remote 时必须传 `--project-key local/...`。
+- Git Connector ID 绑定 project key、解析后的 symbolic ref/分支和排序后的 pathspec；范围变化时复用旧 ID
+  会明确失败，必须使用新 ID。
+- 完整 `ingest git` 运行会做 source 删除对账；传 `--limit` 的截断运行不会标记删除。
 - 当前命令是前台单次运行，不创建 cron、launchd 或 systemd；周期运行交给用户显式的进程管理器。
 
 ## 身份与治理

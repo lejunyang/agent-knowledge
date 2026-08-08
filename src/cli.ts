@@ -37,6 +37,7 @@ import {
   getKnowledgeGitStatus,
   getVaultStatus,
   FileSystemConnector,
+  GitRepositoryConnector,
   getRetrievalModelStatus,
   getObservationStatus,
   getSubagentLogStatus,
@@ -852,6 +853,88 @@ ingest
             },
             // transcript 默认含客户或用户原始输入，不允许降级为只遮蔽 secret。
             redactionPolicy: "secrets-and-pii",
+            ...(options.limit === undefined
+              ? {}
+              : { limit: parseIngestionLimit(options.limit) })
+          }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+ingest
+  .command("git")
+  .description(
+    t(
+      "从本地 Git object database 摄入已提交仓库文档",
+      "Ingest committed repository documents from the local Git object database"
+    )
+  )
+  .requiredOption("--connector-id <id>", t("稳定 Connector ID", "stable connector ID"))
+  .requiredOption("--repository <dir>", t("本地 Git 仓库目录", "local Git repository directory"))
+  .requiredOption(
+    "--pathspec <path...>",
+    t(
+      "一个或多个 Git pathspec，例如 README.md docs",
+      "one or more Git pathspecs, such as README.md docs"
+    )
+  )
+  .option("--ref <ref>", t("只读 Git ref/commit", "read-only Git ref or commit"), "HEAD")
+  .option(
+    "--project-key <key>",
+    t(
+      "无 origin remote 时必填的 local/... key",
+      "required local/... key when origin remote is absent"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option(
+    "--redaction <policy>",
+    t(
+      "secrets-only 或 secrets-and-pii",
+      "secrets-only or secrets-and-pii"
+    ),
+    "secrets-only"
+  )
+  .option("--limit <count>", t("本次最多处理 source 数", "maximum sources in this run"))
+  .action(async (options: {
+    connectorId: string;
+    repository: string;
+    pathspec: string[];
+    ref: string;
+    projectKey?: string;
+    root?: string;
+    redaction: string;
+    limit?: string;
+  }) => {
+    if (
+      options.redaction !== "secrets-only" &&
+      options.redaction !== "secrets-and-pii"
+    ) {
+      throw new Error(
+        t(
+          "ingest redaction 必须是 secrets-only 或 secrets-and-pii",
+          "ingest redaction must be secrets-only or secrets-and-pii"
+        )
+      );
+    }
+    const connector = new GitRepositoryConnector({
+      id: options.connectorId,
+      repositoryDir: options.repository,
+      ref: options.ref,
+      pathspecs: options.pathspec,
+      projectKey: options.projectKey
+    });
+    console.log(
+      JSON.stringify(
+        await runConnectorIngestion(
+          resolveCliRoot(options.root),
+          connector,
+          {
+            vault: { key: configuredVaultKey(), actor: "ingest-git" },
+            redactionPolicy: options.redaction,
             ...(options.limit === undefined
               ? {}
               : { limit: parseIngestionLimit(options.limit) })

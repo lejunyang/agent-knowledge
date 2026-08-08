@@ -25,6 +25,7 @@ export type KnowledgeQualityFindingCode =
   | "too_many_scenarios"
   | "too_many_tags"
   | "source_without_refined_knowledge"
+  | "source_missing_upstream"
   | "source_without_vault_object"
   | "missing_vault_object"
   | "source_without_upstream_version"
@@ -59,6 +60,7 @@ export type KnowledgeQualityReport = {
     knowledgeDocuments: number;
     synopsisDocuments: number;
     sourceCoverage: number;
+    sourceAvailabilityCoverage: number;
     vaultEvidenceCoverage: number;
     upstreamVersionCoverage: number;
     redactionPolicyCoverage: number;
@@ -162,7 +164,7 @@ function anchorResolves(
   input: { source_id: string; section_id: string; quote_hash: string }
 ): boolean {
   const manifest = manifestsById.get(input.source_id);
-  if (!manifest) {
+  if (!manifest || manifest.availability !== "available") {
     return false;
   }
   return manifest.sections.some(
@@ -316,10 +318,21 @@ export async function auditKnowledgeQuality(
   const classifiedSources = manifests.filter(
     (manifest) => manifest.processing_status !== "pending"
   ).length;
+  const availableSources = manifests.filter(
+    (manifest) => manifest.availability === "available"
+  ).length;
   let vaultBackedSources = 0;
   let versionedSources = 0;
   let redactionGovernedSources = 0;
   for (const manifest of manifests) {
+    if (manifest.availability === "missing") {
+      addFinding(findings, {
+        code: "source_missing_upstream",
+        severity: "warning",
+        sourceId: manifest.source_id,
+        message: `Source is missing upstream and cannot support active claims: ${manifest.title}.`
+      });
+    }
     if (manifest.processing_status === "pending") {
       addFinding(findings, {
         code: "source_without_refined_knowledge",
@@ -403,6 +416,8 @@ export async function auditKnowledgeQuality(
       ).length,
       sourceCoverage:
         manifests.length === 0 ? 1 : classifiedSources / manifests.length,
+      sourceAvailabilityCoverage:
+        manifests.length === 0 ? 1 : availableSources / manifests.length,
       vaultEvidenceCoverage:
         manifests.length === 0 ? 1 : vaultBackedSources / manifests.length,
       upstreamVersionCoverage:

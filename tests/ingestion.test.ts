@@ -412,6 +412,23 @@ describe("connector ingestion", () => {
       .rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("rejects complete inventory connectors without a stable inventory identity", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "ingestion-inventory-"));
+    tempDirs.push(root);
+    const connector = new MutableTextConnector() as MutableTextConnector & {
+      inventoryMode: "complete";
+    };
+    connector.inventoryMode = "complete";
+
+    await expect(
+      runConnectorIngestion(root, connector, {
+        vault: { key },
+        redactionPolicy: "secrets-only"
+      })
+    ).rejects.toThrow(/stable inventory identity/);
+    expect(connector.fetchCount).toBe(0);
+  });
+
   it("redacts transcript secrets and PII before writing Vault, manifest, or jobs", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "ingestion-transcript-"));
     const input = path.join(root, "transcripts");

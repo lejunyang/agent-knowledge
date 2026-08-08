@@ -89,6 +89,12 @@ agent-knowledge ingest transcripts \
   --connector-id trae-sessions \
   --base-dir /secure/exports/trae-sessions \
   --project-key github.com/example/business
+
+agent-knowledge ingest git \
+  --root ~/agent-knowledge-data \
+  --connector-id business-repository \
+  --repository /projects/business \
+  --pathspec README.md docs
 ```
 
 `ingest` 只输出 job、manifest 和 Vault handle，不输出正文。`files` 默认遮蔽内置规则可识别的
@@ -97,7 +103,13 @@ secret；`transcripts` 强制应用内置 secret + PII 规则，且 Git manifest
 和身份证号，不等同于完整 DLP；姓名、地址、业务 UID 等领域 PII 应由专用 Connector 在
 `normalize` 阶段继续清洗，未确认授权范围的材料不得摄入。
 当前文件 Connector 只接受显式目录内的 UTF-8 普通文件，不跟随 symlink；PDF/Office、飞书
-在线拉取和 GitHub API 使用后续专用 Connector，不能伪装成 UTF-8 文件处理。
+在线拉取和 GitHub issue/MR API 使用后续专用 Connector，不能伪装成 UTF-8 文件处理。
+`ingest git` 只读取本地 Git object database 中指定 ref（默认 `HEAD`）的 committed UTF-8
+blob，不读取 dirty/untracked 文件，也不自动 fetch/pull。它从 origin remote 得到可读
+project key，以 commit SHA 记录仓库版本、以 blob SHA (`path_hash`) 判断单个文档是否变化；
+无 origin 的仓库必须显式传 `--project-key local/...`。Connector ID 会绑定 project key、
+解析后的 symbolic ref/分支和 pathspec inventory；改变这些范围时必须使用新 Connector ID，避免旧 source
+被误判为删除。
 
 项目作用域使用规范化 Git remote，例如 `github.com/lejunyang/agent-knowledge`。普通 query 会自动发现当前仓库 remote；跨项目诊断使用：
 
@@ -227,7 +239,7 @@ agent-knowledge organize-inbox --approve <knowledge-id> --apply
 可更新来源必须同时记录稳定身份和版本指纹：
 
 - 飞书：document key + `revision_id` + `updated_at/obj_edit_time` + content hash。
-- Git/GitHub：规范 remote + commit SHA + relevant path/tree hash。
+- Git/GitHub：规范 remote + commit SHA + relevant blob/path hash。
 - HTTP/WebDAV：稳定 URL/object key + ETag/Last-Modified/version ID + content hash。
 - 上游不提供版本时：只能重新抓取后比较 content hash，不能把“没有版本信息”当作“没有更新”。
 
@@ -245,6 +257,11 @@ Connector 还会把 normalize/脱敏规则版本写入 `processing_profile`。�
 `refined/duplicate/obsolete/no_long_term_value/blocked` 状态。每次尝试独立写入
 `.memory/ingestion/jobs/`，failed 不推进 checkpoint；同一 Connector 并发运行由本地锁拒绝，
 进程崩溃留下的死 PID 锁可在下次运行时恢复。
+
+完整 inventory Connector（当前为 `ingest git`）在未传 `--limit` 的完整运行中还会对账删除：
+上次存在而本次 ref/pathspec 中缺失的 source 标记为 `availability: missing` 和 `obsolete`，
+其 claim anchor 立即失效；同路径恢复后归类 `restored` 并重新进入 pending。带 `--limit`
+的截断运行不会做删除对账，避免把未扫描部分误判为删除。
 
 ## 主动记忆何时发生
 

@@ -426,6 +426,106 @@ describe("CLI user configuration", () => {
     expect(second).toMatchObject({ completed: 0, skipped: 1 });
   });
 
+  it("ingests committed Git documents with remote, commit, and path hashes", async () => {
+    const temp = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-ingest-git-cli-")
+    );
+    tempDirs.push(temp);
+    const repository = path.join(temp, "repository");
+    const root = path.join(temp, "workspace");
+    const environment = {
+      AGENT_KNOWLEDGE_VAULT_KEY: Buffer.alloc(32, 18).toString("base64")
+    };
+    await mkdir(path.join(repository, "docs"), { recursive: true });
+    await execFileAsync("git", ["init", "--initial-branch=main"], {
+      cwd: repository
+    });
+    await execFileAsync("git", ["config", "user.email", "test@example.com"], {
+      cwd: repository
+    });
+    await execFileAsync("git", ["config", "user.name", "CLI Test"], {
+      cwd: repository
+    });
+    await execFileAsync(
+      "git",
+      ["remote", "add", "origin", "git@github.com:Example/Business.git"],
+      { cwd: repository }
+    );
+    await writeFile(
+      path.join(repository, "docs", "guide.md"),
+      "# Guide\n\nCommitted business workflow.\n",
+      "utf8"
+    );
+    await execFileAsync("git", ["add", "docs/guide.md"], { cwd: repository });
+    await execFileAsync("git", ["commit", "-m", "docs: add guide"], {
+      cwd: repository
+    });
+
+    const first = JSON.parse(
+      await runCli(
+        [
+          "ingest",
+          "git",
+          "--root",
+          root,
+          "--connector-id",
+          "business-repository",
+          "--repository",
+          repository,
+          "--pathspec",
+          "docs"
+        ],
+        environment
+      )
+    ) as {
+      completed: number;
+      jobs: Array<{ sourceManifestPath: string }>;
+    };
+    const manifest = JSON.parse(
+      await readFile(first.jobs[0]!.sourceManifestPath, "utf8")
+    ) as {
+      schema_version: number;
+      artifact_kind: string;
+      project_keys: string[];
+      version: {
+        upstream: { commit_sha?: string; path_hash?: string };
+      };
+    };
+
+    expect(first.completed).toBe(1);
+    expect(manifest).toMatchObject({
+      schema_version: 3,
+      artifact_kind: "repository",
+      project_keys: ["github.com/example/business"]
+    });
+    expect(manifest.version.upstream.commit_sha).toMatch(/^[a-f0-9]{40}$/);
+    expect(manifest.version.upstream.path_hash).toMatch(/^[a-f0-9]{40}$/);
+
+    const second = JSON.parse(
+      await runCli(
+        [
+          "ingest",
+          "git",
+          "--root",
+          root,
+          "--connector-id",
+          "business-repository",
+          "--repository",
+          repository,
+          "--pathspec",
+          "docs"
+        ],
+        environment
+      )
+    ) as {
+      completed: number;
+      skipped: number;
+      jobs: Array<{ classification: string }>;
+    };
+    expect(second).toMatchObject({ completed: 0, skipped: 1 });
+    expect(second.jobs[0]?.classification).toBe("unchanged");
+  });
+
   it("automatically scopes query to the current Git project unless project IDs are explicit", async () => {
     const temp = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-project-"));
     tempDirs.push(temp);

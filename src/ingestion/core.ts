@@ -17,6 +17,7 @@ import path from "node:path";
 import { resolveWorkspacePath } from "../core/paths.js";
 import {
   buildSourceManifest,
+  buildSourceVersion,
   classifySourceUpdate,
   compareSourceVersionProbe,
   SourceManifestSchema,
@@ -35,6 +36,7 @@ import {
 } from "./redaction.js";
 import {
   ConnectorIdSchema,
+  ConnectorInventoryIdentitySchema,
   ConnectorProcessingProfileSchema,
   ConnectorSourceDescriptorSchema,
   EvidenceRedactionPolicySchema,
@@ -232,6 +234,8 @@ export async function readConnectorCheckpoint(
   if (
     parsed.version !== 1 ||
     parsed.connectorId !== connectorId ||
+    (parsed.inventoryIdentity !== undefined &&
+      typeof parsed.inventoryIdentity !== "string") ||
     typeof parsed.updatedAt !== "string" ||
     !parsed.sources ||
     typeof parsed.sources !== "object" ||
@@ -318,19 +322,44 @@ async function runConnectorIngestionLocked(
   );
   const processingProfile = `${INGESTION_CORE_PROFILE}:${connectorProcessingProfile}:${EVIDENCE_REDACTION_PROFILE}:${options.redactionPolicy}`;
   const previousCursor = await readConnectorCheckpoint(rootDir, connector.id);
+  const rawInventoryIdentity =
+    await connector.inventoryIdentity?.() ?? undefined;
+  const inventoryIdentity =
+    rawInventoryIdentity === undefined
+      ? undefined
+      : ConnectorInventoryIdentitySchema.parse(rawInventoryIdentity);
+  if (connector.inventoryMode === "complete" && !inventoryIdentity) {
+    throw new Error(
+      `Complete inventory Connector requires a stable inventory identity: ${connector.id}`
+    );
+  }
+  if (
+    previousCursor &&
+    (previousCursor.inventoryIdentity ?? undefined) !== inventoryIdentity
+  ) {
+    throw new Error(
+      `Connector inventory identity changed; use a new connector ID: ${connector.id}`
+    );
+  }
   const cursor: ConnectorCursor =
     previousCursor ?? {
       version: 1,
       connectorId: connector.id,
+      ...(inventoryIdentity ? { inventoryIdentity } : {}),
       updatedAt: new Date(0).toISOString(),
       sources: {}
     };
   const jobs: IngestionJob[] = [];
+  const discoveredSourceIds = new Set<string>();
   let discovered = 0;
   const limit = Math.max(0, options.limit ?? Number.MAX_SAFE_INTEGER);
+  // 显式 limit 代表有界抽样，即使实际数量小于 limit 也不能证明 inventory 完整。
+  let inventoryTruncated = options.limit !== undefined;
+  const inventoryVersion = await connector.inventoryVersion?.() ?? null;
 
   for await (const discoveredDescriptor of connector.discover(previousCursor)) {
     if (discovered >= limit) {
+      inventoryTruncated = true;
       break;
     }
     discovered += 1;
@@ -342,6 +371,7 @@ async function runConnectorIngestionLocked(
         `Connector descriptor ID mismatch: ${descriptor.connectorId}`
       );
     }
+    discoveredSourceIds.add(descriptor.sourceId);
     if (
       (descriptor.artifactKind === "transcript" ||
         descriptor.artifactKind === "tool_trace") &&
@@ -371,12 +401,40 @@ async function runConnectorIngestionLocked(
     );
     if (
       previousManifest &&
+      previousManifest.availability === "available" &&
       previousManifest.processing_profile === processingProfile &&
       previousManifest.vault_object !== undefined &&
       existsSync(getVaultObjectPath(rootDir, previousManifest.vault_object)) &&
       compareSourceVersionProbe(previousManifest.version, descriptor.probe) ===
         "unchanged"
     ) {
+      const refreshedVersion = buildSourceVersion({
+        observedAt: descriptor.probe.observed_at,
+        upstream: descriptor.probe.upstream,
+        contentHash: previousManifest.version.content_hash
+      });
+      const refreshedManifest = SourceManifestSchema.parse({
+        ...previousManifest,
+        version: refreshedVersion
+      });
+      const manifestPath = getSourceManifestPath(
+        rootDir,
+        descriptor.sourceId
+      );
+      if (
+        refreshedVersion.fingerprint !==
+        previousManifest.version.fingerprint
+      ) {
+        await writeAtomic(
+          manifestPath,
+          `${JSON.stringify(refreshedManifest, null, 2)}\n`
+        );
+      }
+      const classification =
+        refreshedVersion.fingerprint ===
+        previousManifest.version.fingerprint
+          ? "unchanged"
+          : "metadata_only";
       const job: IngestionJob = {
         version: 1,
         id: jobId,
@@ -386,20 +444,17 @@ async function runConnectorIngestionLocked(
         status: "skipped",
         startedAt,
         finishedAt: (options.now?.() ?? new Date()).toISOString(),
-        classification: "unchanged",
+        classification,
         skipReason: "upstream_version_unchanged",
         vaultObject: previousManifest.vault_object,
-        sourceManifestPath: getSourceManifestPath(
-          rootDir,
-          descriptor.sourceId
-        )
+        sourceManifestPath: manifestPath
       };
       await writeJob(rootDir, job);
       await updateCheckpoint(rootDir, cursor, {
         sourceId: descriptor.sourceId,
-        versionFingerprint: previousManifest.version.fingerprint,
+        versionFingerprint: refreshedVersion.fingerprint,
         lastCheckedAt: job.finishedAt,
-        lastClassification: "unchanged"
+        lastClassification: classification
       });
       jobs.push(job);
       continue;
@@ -462,7 +517,9 @@ async function runConnectorIngestionLocked(
           ? "metadata_only"
           : contentClassification;
       const processingStatus =
-        classification !== "content_changed" && previousManifest
+        classification !== "content_changed" &&
+        classification !== "restored" &&
+        previousManifest
           ? previousManifest.processing_status
           : "pending";
       const finalizedManifest =
@@ -519,6 +576,76 @@ async function runConnectorIngestionLocked(
         error: redactIngestionError(error, options.redactionPolicy)
       };
       await writeJob(rootDir, job);
+      jobs.push(job);
+    }
+  }
+
+  if (connector.inventoryMode === "complete" && !inventoryTruncated) {
+    for (const previousSourceId of Object.keys(previousCursor?.sources ?? {})) {
+      if (discoveredSourceIds.has(previousSourceId)) {
+        continue;
+      }
+      const previousManifest = await readSourceManifest(
+        rootDir,
+        previousSourceId
+      );
+      if (
+        !previousManifest ||
+        previousManifest.connector !== connector.id ||
+        previousManifest.availability === "missing"
+      ) {
+        continue;
+      }
+      const startedAt = (options.now?.() ?? new Date()).toISOString();
+      const removedManifest = SourceManifestSchema.parse({
+        ...previousManifest,
+        availability: "missing",
+        missing_since: startedAt,
+        ...(inventoryVersion
+          ? {
+              version: buildSourceVersion({
+                observedAt: inventoryVersion.observed_at,
+                upstream: {
+                  ...previousManifest.version.upstream,
+                  ...inventoryVersion.upstream
+                },
+                contentHash: previousManifest.version.content_hash
+              })
+            }
+          : {}),
+        processing_status: "obsolete",
+        processing_reason: "connector_source_missing"
+      });
+      const manifestPath = getSourceManifestPath(rootDir, previousSourceId);
+      await writeAtomic(
+        manifestPath,
+        `${JSON.stringify(removedManifest, null, 2)}\n`
+      );
+      const finishedAt = (options.now?.() ?? new Date()).toISOString();
+      const job: IngestionJob = {
+        version: 1,
+        id: ingestionJobId(
+          connector.id,
+          previousSourceId,
+          removedManifest.version
+        ),
+        connectorId: connector.id,
+        sourceId: previousSourceId,
+        externalKey: previousManifest.external_key,
+        status: "completed",
+        startedAt,
+        finishedAt,
+        classification: "removed",
+        vaultObject: previousManifest.vault_object,
+        sourceManifestPath: manifestPath
+      };
+      await writeJob(rootDir, job);
+      await updateCheckpoint(rootDir, cursor, {
+        sourceId: previousSourceId,
+        versionFingerprint: removedManifest.version.fingerprint,
+        lastCheckedAt: finishedAt,
+        lastClassification: "removed"
+      });
       jobs.push(job);
     }
   }
