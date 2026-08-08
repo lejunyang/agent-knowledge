@@ -382,7 +382,7 @@ discover -> incremental read -> prepare jobs -> agent synthesis -> commit
 - 精炼知识正文质量合同。
 - source 覆盖审计。
 - 独立私有 Git 知识仓库。
-- 当前 656 份 source 的迁移和重蒸馏。
+- 以原始飞书导出或重新拉取结果为输入，从空库全量重建；不迁移当前 33 条精炼知识和旧 frontmatter。
 
 ### P1：建设持续输入与案例闭环
 

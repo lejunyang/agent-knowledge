@@ -85,7 +85,7 @@ Git 中只保存 Vault object 的不可逆 ID、内容 hash、脱敏摘要和精
 
 Hindsight、memU、Mem0、Graphiti 等输出必须经过 adapter 转成统一 proposal。
 
-在明确迁移前：
+无论选择哪个后端：
 
 - Git Markdown 是正式知识事实源。
 - Vault 是原始证据事实源。
@@ -323,7 +323,7 @@ connector sync
 
 ### 当前问题
 
-`project_222a913d21c0ba91` 适合机器唯一性和不暴露 remote，但不适合人工反向识别。
+`project_222a913d21c0ba91` 不适合作为知识库对外身份：人无法反向识别，且规范化 Git remote 本身已经能提供跨机器稳定、可读的项目作用域。
 
 Git remote 本身在多数场景确实可以作为自然唯一标识，但仍存在：
 
@@ -335,11 +335,10 @@ Git remote 本身在多数场景确实可以作为自然唯一标识，但仍存
 
 ### 新设计
 
-分离“规范身份”和“内部主键”：
+规范化 Git remote 直接作为项目主键：
 
 ```yaml
-id: project_222a913d21c0ba91
-key: github.com/lejunyang/agent-knowledge
+project_key: github.com/lejunyang/agent-knowledge
 display_name: agent-knowledge
 aliases:
   - lejunyang/agent-knowledge
@@ -355,12 +354,12 @@ status: active
 
 规则：
 
-- `key` 是人类可读规范 remote，不含协议、用户名凭据和 `.git`。
-- `id` 保留为不可变内部主键，避免 remote rename 导致 frontmatter 全量变化。
-- CLI、日志和 query 默认显示 `display_name (key)`，JSON 同时返回 `id`。
-- frontmatter 新写入 `project_keys`；兼容期同时保留 `project_ids`。
-- query 接受 `--project project-key-or-id`。
-- remote 变更通过 registry alias 维护，不重写全部历史知识。
+- `project_key` 是规范 remote，不含协议、SSH 用户、URL 凭据、`.git` 和末尾 `/`。
+- Markdown、CLI、日志和 query 都直接使用 `project_key`，不再暴露或要求 hash ID。
+- query 接受 `--project <project-key-or-alias>`。
+- remote rename、仓库迁移和 fork 通过 registry alias 维护；知识 frontmatter 可保留创建时的 key，并由 registry 解析到当前 canonical key。
+- 无 remote 的本地项目使用显式用户命名 key，例如 `local/lejunyang/private-prototype`；不得把绝对路径或路径 hash 当作默认可见身份。
+- 如 SQLite 需要短键，可以内部计算 hash，但它只是可重建索引字段，不属于 Markdown schema 或公共 API。
 
 ## 四、Metadata 评分模型
 
@@ -856,37 +855,25 @@ Shadow 评测记录：
 - deletion completeness。
 - operational burden。
 
-## 十二、迁移当前知识库
+## 十二、从原始材料全量重建
 
-### 当前 656 份 source
+现有知识库不做 V1 -> V2 迁移。当前 33 条精炼知识和旧 metadata 只用于证明问题、设计评测问题和人工抽样对照，不进入新知识事实源。
 
-1. 保留原始 XML 和当前 source Markdown，先生成 manifest/hash。
-2. 按 heading 和结构切 section，建立稳定 section ID。
-3. 聚类重复、版本和引用关系。
-4. 对每个主题生成 L0/L1 candidate。
-5. 每个 claim 必须指向 section。
-6. 将当前 33 条知识作为 legacy candidate，不直接丢弃。
-7. 对比 legacy 与新提炼：
-   - missing detail。
-   - unsupported claim。
-   - metadata inflation。
-   - conflicting version。
-8. 通过质量门禁后逐主题替换。
+重建流程：
 
-### 当前 project ID
+1. 创建空的独立 private Git 数据仓库和空 Vault。
+2. 优先重新拉取飞书文档；无法重新拉取时使用 `local_exports/lark-business/` 的原始 XML 和 manifest。
+3. 对原始材料重新执行脱敏、内容 hash、重复/版本聚类和 source manifest 构建。
+4. 按 heading、表格、FAQ、流程和代码块生成稳定 section。
+5. 从 section 重新生成 L0 synopsis、L1 knowledge 和 claim/evidence anchor。
+6. 每份 source 必须被分类为 refined、duplicate、obsolete、no_long_term_value 或 blocked，禁止无声遗漏。
+7. 当前 33 条旧知识只参与离线差异报告：
+   - 新知识是否补足旧知识缺失的解释。
+   - 旧知识是否包含新材料无法支持的结论。
+   - 新知识是否减少 metadata inflation。
+8. 旧知识库保持原样直到新库通过正式使用门禁；随后可直接归档或删除，不做逐文件转换。
 
-1. 保留 `project_222a913d21c0ba91` 为内部 ID。
-2. registry 增加 `github.com/lejunyang/agent-knowledge`。
-3. CLI 展示可读 key。
-4. 新知识同时写 key 和 ID，完成迁移后 frontmatter 可只保留 key。
-
-### 当前 tag/alias/scenario
-
-1. 先自动迁移为 `weight=0.5, source=legacy`。
-2. title/正文/真实 query 支持的提升。
-3. 高频低 IDF 通用项降权。
-4. 无使用、无证据、无特异性的进入 prune proposal。
-5. 不直接批量删除，避免召回回退。
+Project identity 同样从零使用 `github.com/lejunyang/agent-knowledge` 等规范 key，不保留 `project_222a913d21c0ba91` 作为新 schema 字段。
 
 ## 十三、正式使用门禁
 
