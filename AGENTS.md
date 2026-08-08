@@ -105,6 +105,7 @@ node dist/cli.js maintenance run --root tests/fixtures/basic-knowledge
 node dist/cli.js ingest files --root /tmp/agent-knowledge-data --connector-id smoke-docs --base-dir /tmp/source-docs --pattern '**/*.md'
 node dist/cli.js ingest transcripts --root /tmp/agent-knowledge-data --connector-id smoke-sessions --base-dir /tmp/session-jsonl
 node dist/cli.js ingest git --root /tmp/agent-knowledge-data --connector-id smoke-repo --repository /tmp/source-repo --pathspec README.md docs
+node dist/cli.js ingest lark-export --root /tmp/agent-knowledge-data --connector-id smoke-lark --export-dir /tmp/lark-export --project-key github.com/example/business
 node dist/cli.js source list --root /tmp/agent-knowledge-data --needs-review
 node dist/cli.js source show src_example --root /tmp/agent-knowledge-data
 node dist/cli.js integration install --product trae --scope project --target-dir /tmp/agent-knowledge-integration-smoke
@@ -202,7 +203,10 @@ src/cli.ts            命令行入口和各模块编排
 - Connector 是运行时不可信边界：descriptor 必须校验 source ID、connector ID、project key 和 probe；规范化 bytes 必须与用于 manifest 的 UTF-8 文本一致，不能让 Vault 内容和 hash/section 分叉。
 - 文件系统 Connector 只读取显式 baseDir 下 UTF-8 普通文件，不跟随 symlink；PDF/Office/二进制附件必须使用专用 Connector，不能静默 UTF-8 解码。
 - Git Connector 只读取本地 object database 中指定 ref 的 committed UTF-8 blob，不读取 dirty/untracked 文件、不 checkout、不自动 fetch/pull；origin remote 是默认 project key，无 remote 时必须显式 `local/...`。
+- Lark export Connector 只读取离线 `manifest.json + content.xml`，校验 content SHA-256，并强制 Lark 用户身份/临时句柄清洗与 `secrets-and-pii`；不得自动联网。partial export 可摄入成功文档，但必须持久化 incomplete/unresolved inventory 并禁用删除对账。
+- `build-lark-source-candidates.mjs` 的直接 CLI 和 npm script 已禁用；仅保留导出函数做历史审计合约测试。正式流程不得把完整 XML 转成 source Markdown。
 - Complete inventory Connector 必须提供稳定 inventory identity；Git identity 绑定 project key、解析后的 symbolic ref/分支和 pathspec。范围变化不得复用旧 Connector ID，否则必须在任何 removed 写入前失败。
+- Lark inventory identity 绑定 roots 与 project keys；移动同一离线快照不改变 identity，改变知识空间根或 project scope 必须使用新 Connector ID。`--limit` 运行不得做删除对账。
 - Vault 删除必须物理移除密文并写 tombstone，不能只删除 source manifest 或对象引用；默认不得静默复活同 ID 对象。
 - 每个可更新 source 必须记录稳定 `source_id/external_key` 和版本信息。优先保存上游 revision、ETag、commit SHA、更新时间或 provider version ID，并始终保存抓取后的 content hash；没有上游版本信号时只能回退到重新抓取后比较 content hash。
 - Source review 必须通过 `source show/export/mark`：export 只写 knowledge workspace 之外的显式 0600 文件，mark 必须携带 current fingerprint 和 review token；reason 进入 Git 前执行 secret/PII 检查。
@@ -215,6 +219,8 @@ src/cli.ts            命令行入口和各模块编排
 - 只有 `inventoryMode: complete` 且未被 `--limit` 截断的运行才能把缺失 source 标记 removed/missing；missing manifest 必须使 claim anchor 失效，恢复后回到 pending。
 - 质量审计必须分别报告 source 分类、上游 availability、Vault evidence、上游版本、脱敏策略和 claim anchor 覆盖率；missing source 保留历史分类与 Vault coverage，但 availability 为 0，且不能支撑 active claim。manifest 无 Vault handle 或指向丢失密文属于 error。
 - 质量审计还必须把 processed content hash 不匹配视为 stale warning，把 refined knowledge ID/anchor 无效视为 error。
+- Connector inventory health 必须持久化到 checkpoint；`source list` 和 quality audit 必须统计 complete/unresolved。零成功文档的失败 Connector 也不能从审计中消失。
+- 单 source fetch/normalize/Vault 失败必须写脱敏 checkpoint failure ledger；source list/audit 必须持续报告，成功重试或 complete inventory 确认 source 已移除后才清除。
 - `capture-material --replace-source` 只能刷新同 ID、active、documented 的 source 原始证据；不得覆盖 semantic/procedural/profile/episodic，精炼知识更新必须使用新知识和 `supersedes`。
 - Batch reranker 默认只在显式 `query --rerank` 或 reranked eval 中启用；Hook 热路径不得加载 cross-encoder。默认 pipeline 是融合 top 30 -> batch rerank -> threshold -> top 8。
 - Calibration 只能输出 dry-run 参数建议，不得自动改用户配置；目标函数必须优先惩罚 forbidden injection、abstention failure 和 not_useful feedback。

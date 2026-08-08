@@ -66,10 +66,18 @@ agent-knowledge ingest git \
   --connector-id business-repository \
   --repository /projects/business \
   --pathspec README.md docs
+
+agent-knowledge ingest lark-export \
+  --connector-id lark-business \
+  --export-dir /secure/exports/lark-business \
+  --project-key github.com/example/business
 ```
 
 Git 摄入只读 committed blob，不包含 dirty/untracked 内容，也不自动 fetch/pull；完整运行会对账
 删除，恢复后的 source 回到 pending。
+
+飞书知识库先完成离线递归导出，再用 `ingest lark-export`；不把完整 XML 写入 source Markdown。
+有 failures 时成功文档可先摄入，但必须报告 unresolved inventory，不能宣称完整覆盖。
 
 摄入完成后委派 `source-distiller`，由它执行 `source list/show/export/mark`；manifest 不含正文
 preview，不要只根据 heading/hash 生成结论，也不要在 active knowledge/claim anchor 尚未形成时标 refined。

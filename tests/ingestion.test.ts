@@ -268,7 +268,21 @@ describe("connector ingestion", () => {
     });
     expect(failed.jobs[0]?.error).toContain("[REDACTED_SECRET]");
     expect(failedJobText).not.toContain("retry-secret-value");
-    expect(await readConnectorCheckpoint(root, connector.id)).toBeNull();
+    expect(await readConnectorCheckpoint(root, connector.id)).toMatchObject({
+      connectorId: connector.id,
+      inventoryStatus: {
+        mode: "partial",
+        complete: true,
+        unresolved: 0
+      },
+      failures: {
+        src_mutable_document: {
+          sourceId: "src_mutable_document",
+          error: expect.stringContaining("[REDACTED_SECRET]")
+        }
+      },
+      sources: {}
+    });
     const failedJobId = failed.jobs[0]!.id;
 
     connector.failWith = null;
@@ -290,6 +304,9 @@ describe("connector ingestion", () => {
       )
     ).toMatchObject({ status: "failed" });
     expect(await readConnectorCheckpoint(root, connector.id)).not.toBeNull();
+    expect(
+      (await readConnectorCheckpoint(root, connector.id))?.failures
+    ).toEqual({});
   });
 
   it("reprocesses unchanged sources after pipeline upgrades and preserves refined status", async () => {

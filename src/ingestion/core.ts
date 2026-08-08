@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import {
   mkdir,
   readFile,
+  readdir,
   rename,
   rm,
   writeFile
@@ -37,6 +38,7 @@ import {
 import {
   ConnectorIdSchema,
   ConnectorInventoryIdentitySchema,
+  ConnectorInventoryStatusSchema,
   ConnectorProcessingProfileSchema,
   ConnectorSourceDescriptorSchema,
   EvidenceRedactionPolicySchema,
@@ -243,6 +245,54 @@ export async function withConnectorIngestionLock<T>(
 }
 
 /** 读取 connector checkpoint；缺失时返回 null。 */
+function parseConnectorCheckpoint(
+  value: unknown,
+  expectedConnectorId?: string
+): ConnectorCursor {
+  const parsed = value as ConnectorCursor;
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    parsed.version !== 1 ||
+    typeof parsed.connectorId !== "string" ||
+    (expectedConnectorId !== undefined &&
+      parsed.connectorId !== expectedConnectorId) ||
+    (parsed.inventoryIdentity !== undefined &&
+      typeof parsed.inventoryIdentity !== "string") ||
+    (parsed.inventoryStatus !== undefined &&
+      (typeof parsed.inventoryStatus !== "object" ||
+        (parsed.inventoryStatus.mode !== "partial" &&
+          parsed.inventoryStatus.mode !== "complete") ||
+        typeof parsed.inventoryStatus.complete !== "boolean" ||
+        !Number.isSafeInteger(parsed.inventoryStatus.unresolved) ||
+        parsed.inventoryStatus.unresolved < 0 ||
+        (parsed.inventoryStatus.reason !== undefined &&
+          typeof parsed.inventoryStatus.reason !== "string"))) ||
+    (parsed.failures !== undefined &&
+      (typeof parsed.failures !== "object" ||
+        Array.isArray(parsed.failures) ||
+        Object.values(parsed.failures).some(
+          (failure) =>
+            !failure ||
+            typeof failure !== "object" ||
+            typeof failure.sourceId !== "string" ||
+            typeof failure.externalKey !== "string" ||
+            typeof failure.lastFailedAt !== "string" ||
+            typeof failure.error !== "string"
+        ))) ||
+    typeof parsed.updatedAt !== "string" ||
+    !parsed.sources ||
+    typeof parsed.sources !== "object" ||
+    Array.isArray(parsed.sources)
+  ) {
+    throw new Error(
+      `Invalid connector checkpoint: ${expectedConnectorId ?? "unknown"}`
+    );
+  }
+  return parsed;
+}
+
+/** 读取 connector checkpoint；缺失时返回 null。 */
 export async function readConnectorCheckpoint(
   rootDir: string,
   connectorId: string
@@ -251,20 +301,41 @@ export async function readConnectorCheckpoint(
   if (!existsSync(target)) {
     return null;
   }
-  const parsed = JSON.parse(await readFile(target, "utf8")) as ConnectorCursor;
-  if (
-    parsed.version !== 1 ||
-    parsed.connectorId !== connectorId ||
-    (parsed.inventoryIdentity !== undefined &&
-      typeof parsed.inventoryIdentity !== "string") ||
-    typeof parsed.updatedAt !== "string" ||
-    !parsed.sources ||
-    typeof parsed.sources !== "object" ||
-    Array.isArray(parsed.sources)
-  ) {
-    throw new Error(`Invalid connector checkpoint: ${connectorId}`);
+  return parseConnectorCheckpoint(
+    JSON.parse(await readFile(target, "utf8")),
+    connectorId
+  );
+}
+
+/** 列出全部 Connector checkpoint，包含尚未成功摄入 source 的 inventory 健康状态。 */
+export async function listConnectorCheckpoints(
+  rootDir: string
+): Promise<ConnectorCursor[]> {
+  const directory = resolveWorkspacePath(
+    rootDir,
+    ".memory",
+    "ingestion",
+    "checkpoints"
+  );
+  if (!existsSync(directory)) {
+    return [];
   }
-  return parsed;
+  const checkpoints: ConnectorCursor[] = [];
+  for (const entry of (await readdir(directory, { withFileTypes: true })).sort(
+    (left, right) => left.name.localeCompare(right.name)
+  )) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) {
+      continue;
+    }
+    checkpoints.push(
+      parseConnectorCheckpoint(
+        JSON.parse(await readFile(path.join(directory, entry.name), "utf8"))
+      )
+    );
+  }
+  return checkpoints.sort((left, right) =>
+    left.connectorId.localeCompare(right.connectorId)
+  );
 }
 
 /** 读取已有 source manifest；缺失表示首次摄入。 */
@@ -341,6 +412,15 @@ async function runConnectorIngestionLocked(
   const connectorProcessingProfile = ConnectorProcessingProfileSchema.parse(
     connector.processingProfile
   );
+  if (
+    connector.requiredRedactionPolicy !== undefined &&
+    options.redactionPolicy !==
+      EvidenceRedactionPolicySchema.parse(connector.requiredRedactionPolicy)
+  ) {
+    throw new Error(
+      `Connector requires ${connector.requiredRedactionPolicy} redaction: ${connector.id}`
+    );
+  }
   const processingProfile = `${INGESTION_CORE_PROFILE}:${connectorProcessingProfile}:${EVIDENCE_REDACTION_PROFILE}:${options.redactionPolicy}`;
   const previousCursor = await readConnectorCheckpoint(rootDir, connector.id);
   const rawInventoryIdentity =
@@ -368,15 +448,49 @@ async function runConnectorIngestionLocked(
       connectorId: connector.id,
       ...(inventoryIdentity ? { inventoryIdentity } : {}),
       updatedAt: new Date(0).toISOString(),
-      sources: {}
+      sources: {},
+      failures: {}
     };
+  cursor.failures ??= {};
   const jobs: IngestionJob[] = [];
   const discoveredSourceIds = new Set<string>();
   let discovered = 0;
   const limit = Math.max(0, options.limit ?? Number.MAX_SAFE_INTEGER);
-  // 显式 limit 代表有界抽样，即使实际数量小于 limit 也不能证明 inventory 完整。
-  let inventoryTruncated = options.limit !== undefined;
+  const reportedInventoryRaw = await connector.inventoryStatus?.();
+  const reportedInventory = reportedInventoryRaw
+    ? ConnectorInventoryStatusSchema.parse({
+        ...reportedInventoryRaw,
+        ...(reportedInventoryRaw.reason
+          ? {
+              reason: redactEvidenceText(
+                reportedInventoryRaw.reason,
+                "secrets-and-pii"
+              ).text.slice(0, 1000)
+            }
+          : {})
+      })
+    : undefined;
+  const inventoryComplete =
+    reportedInventory?.complete ?? true;
+  // 显式 limit 或上游 unresolved 都代表有界快照，不能证明 inventory 完整。
+  let inventoryTruncated =
+    options.limit !== undefined || !inventoryComplete;
   const inventoryVersion = await connector.inventoryVersion?.() ?? null;
+  const effectiveInventoryStatus = {
+    mode: connector.inventoryMode ?? "partial",
+    complete: inventoryComplete,
+    unresolved: reportedInventory?.unresolved ?? 0,
+    ...(reportedInventory?.reason
+      ? { reason: reportedInventory.reason }
+      : {})
+  };
+  cursor.inventoryStatus = effectiveInventoryStatus;
+  // 即使 limit=0 或本轮没有 source，inventory 健康状态也必须持久化供后续审计。
+  await writeAtomic(
+    getConnectorCheckpointPath(rootDir, cursor.connectorId),
+    `${JSON.stringify(cursor, null, 2)}\n`,
+    0o600
+  );
 
   for await (const discoveredDescriptor of connector.discover(previousCursor)) {
     if (discovered >= limit) {
@@ -429,6 +543,7 @@ async function runConnectorIngestionLocked(
       compareSourceVersionProbe(previousManifest.version, descriptor.probe) ===
         "unchanged"
     ) {
+      delete cursor.failures[descriptor.sourceId];
       const refreshedVersion = buildSourceVersion({
         observedAt: descriptor.probe.observed_at,
         upstream: descriptor.probe.upstream,
@@ -596,6 +711,7 @@ async function runConnectorIngestionLocked(
         redactions: redacted.counts
       };
       await writeJob(rootDir, job);
+      delete cursor.failures[descriptor.sourceId];
       await updateCheckpoint(rootDir, cursor, {
         sourceId: descriptor.sourceId,
         versionFingerprint: reviewSafeManifest.version.fingerprint,
@@ -616,11 +732,30 @@ async function runConnectorIngestionLocked(
         error: redactIngestionError(error, options.redactionPolicy)
       };
       await writeJob(rootDir, job);
+      cursor.failures[descriptor.sourceId] = {
+        sourceId: descriptor.sourceId,
+        externalKey: persistedExternalKey,
+        lastFailedAt: job.finishedAt,
+        error: job.error ?? "unknown ingestion failure"
+      };
+      cursor.updatedAt = job.finishedAt;
+      await writeAtomic(
+        getConnectorCheckpointPath(rootDir, cursor.connectorId),
+        `${JSON.stringify(cursor, null, 2)}\n`,
+        0o600
+      );
       jobs.push(job);
     }
   }
 
   if (connector.inventoryMode === "complete" && !inventoryTruncated) {
+    let failuresChanged = false;
+    for (const failedSourceId of Object.keys(cursor.failures)) {
+      if (!discoveredSourceIds.has(failedSourceId)) {
+        delete cursor.failures[failedSourceId];
+        failuresChanged = true;
+      }
+    }
     for (const previousSourceId of Object.keys(previousCursor?.sources ?? {})) {
       if (discoveredSourceIds.has(previousSourceId)) {
         continue;
@@ -692,14 +827,32 @@ async function runConnectorIngestionLocked(
       });
       jobs.push(job);
     }
+    if (failuresChanged) {
+      await writeAtomic(
+        getConnectorCheckpointPath(rootDir, cursor.connectorId),
+        `${JSON.stringify(cursor, null, 2)}\n`,
+        0o600
+      );
+    }
   }
 
   return {
     connectorId: connector.id,
+    inventory: {
+      mode: connector.inventoryMode ?? "partial",
+      complete: inventoryComplete,
+      unresolved: effectiveInventoryStatus.unresolved,
+      reconciled:
+        connector.inventoryMode === "complete" && !inventoryTruncated,
+      ...(reportedInventory?.reason
+        ? { reason: reportedInventory.reason }
+        : {})
+    },
     discovered,
     completed: jobs.filter((job) => job.status === "completed").length,
     skipped: jobs.filter((job) => job.status === "skipped").length,
     failed: jobs.filter((job) => job.status === "failed").length,
+    unresolvedFailures: Object.keys(cursor.failures).length,
     jobs,
     checkpointPath: getConnectorCheckpointPath(rootDir, connector.id)
   };

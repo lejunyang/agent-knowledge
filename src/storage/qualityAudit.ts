@@ -17,6 +17,7 @@ import {
 } from "./sourceManifest.js";
 import type { KnowledgeDocument } from "../core/types.js";
 import { getVaultObjectPath } from "../vault/core.js";
+import { listConnectorCheckpoints } from "../ingestion/core.js";
 
 export type KnowledgeQualityFindingCode =
   | "knowledge_body_too_thin"
@@ -28,6 +29,8 @@ export type KnowledgeQualityFindingCode =
   | "source_review_stale"
   | "invalid_refined_knowledge"
   | "invalid_duplicate_source"
+  | "source_inventory_incomplete"
+  | "source_ingestion_failed"
   | "source_missing_upstream"
   | "source_without_vault_object"
   | "missing_vault_object"
@@ -64,6 +67,9 @@ export type KnowledgeQualityReport = {
     synopsisDocuments: number;
     sourceCoverage: number;
     sourceAvailabilityCoverage: number;
+    incompleteSourceConnectors: number;
+    unresolvedSourceInventory: number;
+    failedSourceIngestions: number;
     vaultEvidenceCoverage: number;
     upstreamVersionCoverage: number;
     redactionPolicyCoverage: number;
@@ -334,6 +340,34 @@ export async function auditKnowledgeQuality(
   let vaultBackedSources = 0;
   let versionedSources = 0;
   let redactionGovernedSources = 0;
+  let incompleteSourceConnectors = 0;
+  let unresolvedSourceInventory = 0;
+  let failedSourceIngestions = 0;
+  for (const checkpoint of await listConnectorCheckpoints(rootDir)) {
+    const inventory = checkpoint?.inventoryStatus;
+    if (
+      inventory &&
+      inventory.mode === "complete" &&
+      !inventory.complete
+    ) {
+      incompleteSourceConnectors += 1;
+      unresolvedSourceInventory += inventory.unresolved;
+      addFinding(findings, {
+        code: "source_inventory_incomplete",
+        severity: "warning",
+        message: `Source connector inventory is incomplete: ${checkpoint.connectorId}; unresolved=${inventory.unresolved}; reason=${inventory.reason ?? "unknown"}.`
+      });
+    }
+    for (const failure of Object.values(checkpoint.failures ?? {})) {
+      failedSourceIngestions += 1;
+      addFinding(findings, {
+        code: "source_ingestion_failed",
+        severity: "error",
+        sourceId: failure.sourceId,
+        message: `Source ingestion remains failed: connector=${checkpoint.connectorId}; externalKey=${failure.externalKey}; error=${failure.error}.`
+      });
+    }
+  }
   for (const manifest of manifests) {
     if (manifest.availability === "missing") {
       addFinding(findings, {
@@ -484,6 +518,9 @@ export async function auditKnowledgeQuality(
         manifests.length === 0 ? 1 : classifiedSources / manifests.length,
       sourceAvailabilityCoverage:
         manifests.length === 0 ? 1 : availableSources / manifests.length,
+      incompleteSourceConnectors,
+      unresolvedSourceInventory,
+      failedSourceIngestions,
       vaultEvidenceCoverage:
         manifests.length === 0 ? 1 : vaultBackedSources / manifests.length,
       upstreamVersionCoverage:

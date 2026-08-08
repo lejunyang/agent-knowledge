@@ -572,7 +572,10 @@ describe("CLI user configuration", () => {
         ["source", "list", "--root", root, "--needs-review"],
         environment
       )
-    ) as { total: number };
+    ) as {
+      total: number;
+      inventory: { incompleteConnectors: number; unresolved: number };
+    };
     const showStdout = await runCli(
       ["source", "show", sourceId, "--root", root],
       environment
@@ -644,6 +647,130 @@ describe("CLI user configuration", () => {
         environment
       )
     ).rejects.toThrow();
+  });
+
+  it("ingests a complete offline Lark export into the source review queue", async () => {
+    const temp = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-lark-export-cli-")
+    );
+    tempDirs.push(temp);
+    const root = path.join(temp, "workspace");
+    const exportDir = path.join(temp, "lark-export");
+    const documentDir = path.join(exportDir, "account-guide");
+    const content =
+      '<h1>账号体系</h1><p>商业化 UID 与抖音 UID 属于不同账号组。</p><p>password=private-password</p>';
+    const contentHash = await import("node:crypto").then(({ createHash }) =>
+      createHash("sha256").update(content).digest("hex")
+    );
+    const environment = {
+      AGENT_KNOWLEDGE_VAULT_KEY: Buffer.alloc(32, 24).toString("base64")
+    };
+    await mkdir(documentDir, { recursive: true });
+    await writeFile(path.join(documentDir, "content.xml"), content, "utf8");
+    await writeFile(
+      path.join(exportDir, "manifest.json"),
+      `${JSON.stringify(
+        {
+          version: 1,
+          generatedAt: "2026-08-09T00:00:00.000Z",
+          roots: ["wiki:root"],
+          documents: {
+            "wiki:account": {
+              key: "wiki:account",
+              title: "账号指南",
+              objType: "docx",
+              revisionId: 17,
+              upstreamUpdatedAt: "2026-08-08T12:00:00.000Z",
+              observedAt: "2026-08-09T00:00:00.000Z",
+              directory: "account-guide",
+              contentHash
+            }
+          },
+          resources: {},
+          failures: {},
+          complete: true,
+          pending: []
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const stdout = await runCli(
+      [
+        "ingest",
+        "lark-export",
+        "--root",
+        root,
+        "--connector-id",
+        "lark-business",
+        "--export-dir",
+        exportDir,
+        "--project-key",
+        "github.com/example/business"
+      ],
+      environment
+    );
+    const result = JSON.parse(stdout) as {
+      completed: number;
+      jobs: Array<{ sourceManifestPath: string }>;
+    };
+    const sourceManifest = JSON.parse(
+      await readFile(result.jobs[0]!.sourceManifestPath, "utf8")
+    ) as {
+      connector: string;
+      external_key: string;
+      project_keys: string[];
+      redaction_policy: string;
+      version: { upstream: { revision?: string; path_hash?: string } };
+    };
+    const queue = JSON.parse(
+      await runCli(
+        ["source", "list", "--root", root, "--needs-review"],
+        environment
+      )
+    ) as {
+      total: number;
+      inventory: {
+        incompleteConnectors: number;
+        unresolved: number;
+        failedSources: number;
+        connectors: Array<{
+          connectorId: string;
+          mode: string;
+          complete: boolean;
+          unresolved: number;
+          failedSources: number;
+        }>;
+      };
+    };
+
+    expect(result.completed).toBe(1);
+    expect(stdout).not.toContain("private-password");
+    expect(sourceManifest).toMatchObject({
+      connector: "lark-business",
+      external_key: "wiki:account",
+      project_keys: ["github.com/example/business"],
+      redaction_policy: "secrets-and-pii"
+    });
+    expect(sourceManifest.version.upstream.revision).toBe("17");
+    expect(sourceManifest.version.upstream.path_hash).toBe(contentHash);
+    expect(queue.total).toBe(1);
+    expect(queue.inventory).toEqual({
+      incompleteConnectors: 0,
+      unresolved: 0,
+      failedSources: 0,
+      connectors: [
+        {
+          connectorId: "lark-business",
+          mode: "complete",
+          complete: true,
+          unresolved: 0,
+          failedSources: 0
+        }
+      ]
+    });
   });
 
   it("automatically scopes query to the current Git project unless project IDs are explicit", async () => {

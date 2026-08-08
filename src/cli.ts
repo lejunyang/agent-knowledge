@@ -38,6 +38,7 @@ import {
   getVaultStatus,
   FileSystemConnector,
   GitRepositoryConnector,
+  LarkExportConnector,
   getRetrievalModelStatus,
   getObservationStatus,
   getSubagentLogStatus,
@@ -939,6 +940,62 @@ ingest
           {
             vault: { key: configuredVaultKey(), actor: "ingest-git" },
             redactionPolicy: options.redaction,
+            ...(options.limit === undefined
+              ? {}
+              : { limit: parseIngestionLimit(options.limit) })
+          }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+ingest
+  .command("lark-export")
+  .description(
+    t(
+      "从离线飞书递归导出摄入 versioned evidence",
+      "Ingest versioned evidence from an offline Lark export"
+    )
+  )
+  .requiredOption("--connector-id <id>", t("稳定 Connector ID", "stable connector ID"))
+  .requiredOption(
+    "--export-dir <dir>",
+    t("包含 manifest.json 和 content.xml 的导出目录", "export directory containing manifest.json and content.xml")
+  )
+  .option(
+    "--project-key <key>",
+    t("绑定规范 project key，可重复", "canonical project key; repeatable"),
+    collectProjectKey,
+    []
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--limit <count>", t("本次最多处理 source 数；带 limit 时不做删除对账", "maximum sources; disables removal reconciliation when set"))
+  .action(async (options: {
+    connectorId: string;
+    exportDir: string;
+    projectKey: string[];
+    root?: string;
+    limit?: string;
+  }) => {
+    const connector = new LarkExportConnector({
+      id: options.connectorId,
+      exportDir: options.exportDir,
+      projectKeys: options.projectKey
+    });
+    console.log(
+      JSON.stringify(
+        await runConnectorIngestion(
+          resolveCliRoot(options.root),
+          connector,
+          {
+            vault: {
+              key: configuredVaultKey(),
+              actor: "ingest-lark-export"
+            },
+            // 飞书导出可能包含用户身份和客服材料，不允许降级为只遮蔽 secret。
+            redactionPolicy: "secrets-and-pii",
             ...(options.limit === undefined
               ? {}
               : { limit: parseIngestionLimit(options.limit) })

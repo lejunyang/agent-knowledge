@@ -95,6 +95,12 @@ agent-knowledge ingest git \
   --connector-id business-repository \
   --repository /projects/business \
   --pathspec README.md docs
+
+agent-knowledge ingest lark-export \
+  --root ~/agent-knowledge-data \
+  --connector-id lark-business \
+  --export-dir /secure/exports/lark-business \
+  --project-key github.com/example/business
 ```
 
 `ingest` 只输出 job、manifest 和 Vault handle，不输出正文。`files` 默认遮蔽内置规则可识别的
@@ -110,6 +116,17 @@ project key，以 commit SHA 记录仓库版本、以 blob SHA (`path_hash`) 判
 无 origin 的仓库必须显式传 `--project-key local/...`。Connector ID 会绑定 project key、
 解析后的 symbolic ref/分支和 pathspec inventory；改变这些范围时必须使用新 Connector ID，避免旧 source
 被误判为删除。
+
+`ingest lark-export` 只读取 `fetch-lark-corpus.mjs` 生成的离线 `manifest.json + content.xml`，
+不调用网络。它校验每份 content hash，并强制 secret+PII 与飞书用户身份/临时资源句柄治理。
+有 pending/failures 时仍摄入成功文档，但 `inventory.complete=false`、持久化 unresolved warning，
+且绝不做删除对账；清零后才恢复 complete inventory。
+Connector ID 绑定 roots 与 project keys；移动同一快照目录不改变 identity，切换知识空间范围
+或 project scope 时必须使用新 ID。
+
+单个文档若 content hash、UTF-8、脱敏或 Vault 写入失败，会进入 checkpoint `failures` ledger；
+`source list.inventory.failedSources` 和 quality audit 持续报错，成功重试后自动清除。不能只看
+本次命令 `failed=0` 就判断历史失败已解决。
 
 项目作用域使用规范化 Git remote，例如 `github.com/lejunyang/agent-knowledge`。普通 query 会自动发现当前仓库 remote；跨项目诊断使用：
 
@@ -261,9 +278,24 @@ current claim anchor 指向 source 当前 section/hash 后，才可 `source mark
 ```bash
 node scripts/fetch-lark-corpus.mjs \
   --root-url <wiki-or-doc-url> \
-  --output local_exports/lark \
+  --output /secure/exports/lark-business \
   --refresh-existing
+
+agent-knowledge ingest lark-export \
+  --connector-id lark-business \
+  --export-dir /secure/exports/lark-business \
+  --project-key github.com/example/business
+
+agent-knowledge source list --needs-review
 ```
+
+正式流程不再使用 `build-lark-source-candidates.mjs` 把完整 XML 写成 source Markdown；该脚本只保留
+旧审计/合约测试兼容。完整正文进入 Vault，manifest v5 不含正文 preview，再由
+`source-distiller` 提炼候选。
+
+当前仓库保存的历史 `local_exports/lark-business` 快照实测有 656 份成功文档与 2242 个
+unresolved failure。可以先用 `--limit` 或完整命令摄入成功文档，但 quality audit 会持续告警，
+且不能把该快照当作 100% source coverage；应继续 `--retry-failures --refresh-existing`。
 
 Connector 还会把 normalize/脱敏规则版本写入 `processing_profile`。即使上游 revision 没变，
 处理规则升级也会强制重抓；正文 hash 未变时仍归类为 `metadata_only`，并保留已有
@@ -410,6 +442,10 @@ agent-knowledge source list --needs-review
 agent-knowledge source show <source-id>
 agent-knowledge source export <source-id> --fingerprint <sha256> --output /secure/tmp/evidence
 agent-knowledge source mark <source-id> --fingerprint <sha256> --review-token <token> --status refined --knowledge-id <active-id>
+
+# 飞书批量导出与摄入
+node scripts/fetch-lark-corpus.mjs --root-url <wiki-url> --output /secure/exports/lark --refresh-existing
+agent-knowledge ingest lark-export --connector-id lark-business --export-dir /secure/exports/lark --project-key github.com/example/business
 
 # 加密完整 evidence
 agent-knowledge vault status

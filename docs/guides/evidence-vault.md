@@ -61,6 +61,12 @@ agent-knowledge ingest git \
   --connector-id business-repository \
   --repository /projects/business \
   --pathspec README.md docs
+
+agent-knowledge ingest lark-export \
+  --root ~/agent-knowledge-data \
+  --connector-id lark-business \
+  --export-dir /secure/exports/lark-business \
+  --project-key github.com/example/business
 ```
 
 当前 `files`/`transcripts` Connector 只读取显式 `base-dir` 下的 UTF-8 普通文件，不跟随
@@ -75,6 +81,11 @@ PII 的来源必须由专用 Connector 在 `normalize` 阶段额外清洗，并�
 Git Connector 只读本地 object database 的 committed blob，不读取工作区草稿/untracked
 文件，也不会联网更新仓库。commit SHA 记录仓库时间点，blob SHA 写入 `path_hash` 并优先
 用于轻量比较：无关 commit 只更新 manifest metadata，不重新读取正文。
+
+Lark export Connector 只读离线递归导出的 `manifest.json + content.xml`。每份 XML 必须命中
+导出时记录的 SHA-256；临时资源句柄和 user cite 会先清洗，之后再执行统一
+`secrets-and-pii`，不允许降级。若 manifest 有 pending/failures，成功文档仍可进入 Vault，
+但 checkpoint inventory 标记 incomplete/unresolved，删除对账关闭。
 
 推荐文件输入，避免完整内容进入 shell history：
 

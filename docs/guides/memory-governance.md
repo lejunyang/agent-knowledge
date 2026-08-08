@@ -188,6 +188,11 @@ agent-knowledge ingest git \
   --connector-id business-repository \
   --repository /projects/business \
   --pathspec README.md docs
+
+agent-knowledge ingest lark-export \
+  --connector-id lark-business \
+  --export-dir /secure/exports/lark-business \
+  --project-key github.com/example/business
 ```
 
 `transcripts` 强制遮蔽 secret 与 PII；所有 manifest 都不保存正文 preview，完整脱敏内容只进入 Vault。
@@ -196,6 +201,33 @@ agent-knowledge ingest git \
 Git Connector 用 blob SHA 判断单文档变化，用 commit SHA 记录仓库版本；无关代码 commit
 只形成 metadata-only，不重读正文。完整 inventory 发现 source 被删除后将其标记
 missing/obsolete，相关 supported claim 失去有效 anchor；同路径恢复后必须重新蒸馏/审阅。
+
+飞书正式批量流程：
+
+```bash
+node scripts/fetch-lark-corpus.mjs \
+  --root-url <wiki-or-doc-url> \
+  --output /secure/exports/lark-business \
+  --refresh-existing
+
+agent-knowledge ingest lark-export \
+  --connector-id lark-business \
+  --export-dir /secure/exports/lark-business \
+  --project-key github.com/example/business
+
+agent-knowledge source list --needs-review
+```
+
+content hash 不一致的文档会失败且不推进 source watermark。导出未 complete 或仍有 failures
+时允许成功文档先进入队列，但 inventory warning 持久化、删除对账关闭；这不等于完整覆盖。
+旧 `build-lark-source-candidates.mjs` 不属于正式 pipeline。
+
+`source list` 顶层 `inventory` 和 `knowledge audit` 的
+`incompleteSourceConnectors/unresolvedSourceInventory` 用于追踪这类缺口。只有 unresolved 清零，
+才能宣称 source inventory 完整。
+
+单文档 content hash、解码、脱敏或 Vault 失败会写入 checkpoint failure ledger，并通过
+`source list.inventory.failedSources` / `failedSourceIngestions` error 持续暴露；成功重试会清除。
 
 ## Hook、详细日志与 staging
 

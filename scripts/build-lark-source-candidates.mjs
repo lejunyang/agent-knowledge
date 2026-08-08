@@ -393,11 +393,15 @@ export async function buildLarkSourceCandidates(options) {
 
 /** 打印脚本用法。 */
 function printHelp() {
-  console.log(`Usage:
-  node scripts/build-lark-source-candidates.mjs \
-    --input local_exports/lark-business/manifest.json \
-    [--output local_exports/organizer/lark-source-batches] \
-    [--batch-size 20] [--project-key github.com/owner/repo]`);
+  console.log(`Deprecated audit helper.
+
+Production flow:
+  agent-knowledge ingest lark-export \
+    --connector-id <stable-id> \
+    --export-dir <lark-export-dir> \
+    --project-key <canonical-project-key>
+
+This module's exported functions remain available only for compatibility tests.`);
 }
 
 if (path.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
@@ -405,8 +409,8 @@ if (path.resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
   if (options.help) {
     printHelp();
   } else {
-    console.log(
-      JSON.stringify(await buildLarkSourceCandidates(options), null, 2)
+    throw new Error(
+      "build-lark-source-candidates is disabled; use agent-knowledge ingest lark-export so complete evidence stays in Vault"
     );
   }
 }

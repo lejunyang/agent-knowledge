@@ -153,12 +153,21 @@ agent-knowledge ingest git \
   --connector-id business-repository \
   --repository /projects/business \
   --pathspec README.md docs
+
+agent-knowledge ingest lark-export \
+  --connector-id lark-business \
+  --export-dir /secure/exports/lark-business \
+  --project-key github.com/example/business
 ```
 
 Connector 会移除 secret/PII、跟踪 upstream/content/processing profile，并让所有 source
 manifest 只保存 heading/hash/range、不保存正文 preview。Git Connector 只读 committed blob，不读取 dirty/untracked
 内容，也不自动 fetch/pull；blob SHA 判断单文档更新，commit SHA 记录仓库版本。旧流程中
 已有的受治理 `source` Markdown 才使用：
+
+Lark export Connector 只读离线递归导出，校验 content hash 并强制 PII 治理；partial export
+可先摄入成功文档，但 unresolved inventory 会持续告警且关闭删除对账。正式流程不把完整
+飞书 XML 写入 Markdown。
 
 ```bash
 agent-knowledge capture-material \

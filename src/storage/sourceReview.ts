@@ -18,7 +18,10 @@ import fg from "fast-glob";
 import { z } from "zod";
 import { resolveWorkspacePath } from "../core/paths.js";
 import { redactEvidenceText } from "../ingestion/redaction.js";
-import { withConnectorIngestionLock } from "../ingestion/core.js";
+import {
+  listConnectorCheckpoints,
+  withConnectorIngestionLock
+} from "../ingestion/core.js";
 import { parseKnowledgeMarkdown } from "./markdown.js";
 import {
   SourceManifestSchema,
@@ -65,6 +68,19 @@ export type SourceListResult = {
   total: number;
   byStatus: Record<string, number>;
   byReviewState: Record<string, number>;
+  inventory: {
+    incompleteConnectors: number;
+    unresolved: number;
+    failedSources: number;
+    connectors: Array<{
+      connectorId: string;
+      mode: "partial" | "complete";
+      complete: boolean;
+      unresolved: number;
+      failedSources: number;
+      reason?: string;
+    }>;
+  };
   items: SourceListItem[];
 };
 
@@ -236,7 +252,8 @@ export async function listSources(
     ? new Set(options.statuses.map((status) => SourceProcessingStatusSchema.parse(status)))
     : null;
   const projects = new Set(options.projectKeys ?? []);
-  const items = (await loadSourceManifests(rootDir))
+  const manifests = await loadSourceManifests(rootDir);
+  const items = manifests
     .map(sourceListItem)
     .filter((item) => !statuses || statuses.has(item.processingStatus))
     .filter(
@@ -269,7 +286,50 @@ export async function listSources(
     byReviewState[item.reviewState] =
       (byReviewState[item.reviewState] ?? 0) + 1;
   }
-  return { total: items.length, byStatus, byReviewState, items };
+  const connectors = [
+    ...new Set(manifests.map((manifest) => manifest.connector))
+  ];
+  const checkpoints = await listConnectorCheckpoints(rootDir);
+  for (const checkpoint of checkpoints) {
+    connectors.push(checkpoint.connectorId);
+  }
+  const inventory: SourceListResult["inventory"]["connectors"] = [];
+  for (const connectorId of [...new Set(connectors)].sort()) {
+    const checkpoint =
+      checkpoints.find((item) => item.connectorId === connectorId) ?? null;
+    const status = checkpoint?.inventoryStatus;
+    if (!status) {
+      continue;
+    }
+    inventory.push({
+      connectorId,
+      complete: status.complete,
+      unresolved: status.unresolved,
+      failedSources: Object.keys(checkpoint?.failures ?? {}).length,
+      mode: status.mode,
+      ...(status.reason ? { reason: status.reason } : {})
+    });
+  }
+  return {
+    total: items.length,
+    byStatus,
+    byReviewState,
+    inventory: {
+      incompleteConnectors: inventory.filter(
+        (item) => item.mode === "complete" && !item.complete
+      ).length,
+      unresolved: inventory.reduce(
+        (sum, item) => sum + item.unresolved,
+        0
+      ),
+      failedSources: inventory.reduce(
+        (sum, item) => sum + item.failedSources,
+        0
+      ),
+      connectors: inventory
+    },
+    items
+  };
 }
 
 /** 显示单个 source metadata、section heading/hash/range 和 export handle，不解密 Vault。 */

@@ -36,6 +36,22 @@ export const EvidenceRedactionPolicySchema = z.enum([
   "secrets-and-pii"
 ]);
 
+export const ConnectorInventoryStatusSchema = z
+  .object({
+    complete: z.boolean(),
+    unresolved: z.number().int().nonnegative(),
+    reason: z.string().min(1).max(1000).optional()
+  })
+  .superRefine((status, context) => {
+    if (status.complete && status.unresolved !== 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["unresolved"],
+        message: "complete inventory cannot have unresolved items"
+      });
+    }
+  });
+
 export type ArtifactKind = z.output<typeof ArtifactKindSchema>;
 export type EvidenceRedactionPolicy = z.output<
   typeof EvidenceRedactionPolicySchema
@@ -75,6 +91,21 @@ export type ConnectorCursor = {
   version: 1;
   connectorId: string;
   inventoryIdentity?: string;
+  inventoryStatus?: {
+    mode: "partial" | "complete";
+    complete: boolean;
+    unresolved: number;
+    reason?: string;
+  };
+  failures?: Record<
+    string,
+    {
+      sourceId: string;
+      externalKey: string;
+      lastFailedAt: string;
+      error: string;
+    }
+  >;
   updatedAt: string;
   sources: Record<
     string,
@@ -87,6 +118,10 @@ export type ConnectorCursor = {
   >;
 };
 
+export type ConnectorInventoryStatus = z.output<
+  typeof ConnectorInventoryStatusSchema
+>;
+
 /**
  * Connector 实现必须保持只读；checkpoint 由 ingestion core 在完整 job 成功后原子推进。
  */
@@ -94,9 +129,11 @@ export interface KnowledgeConnector {
   readonly id: string;
   readonly processingProfile: string;
   readonly inventoryMode?: "partial" | "complete";
+  readonly requiredRedactionPolicy?: EvidenceRedactionPolicy;
   discover(cursor: ConnectorCursor | null): AsyncIterable<ConnectorSourceDescriptor>;
   inventoryIdentity?(): Promise<string | null>;
   inventoryVersion?(): Promise<SourceVersionProbe | null>;
+  inventoryStatus?(): Promise<ConnectorInventoryStatus>;
   fetch(descriptor: ConnectorSourceDescriptor): Promise<Buffer>;
   normalize(
     descriptor: ConnectorSourceDescriptor,
@@ -131,10 +168,18 @@ export type IngestionJob = {
 
 export type IngestionRunResult = {
   connectorId: string;
+  inventory: {
+    mode: "partial" | "complete";
+    complete: boolean;
+    unresolved: number;
+    reconciled: boolean;
+    reason?: string;
+  };
   discovered: number;
   completed: number;
   skipped: number;
   failed: number;
+  unresolvedFailures: number;
   jobs: IngestionJob[];
   checkpointPath: string;
 };

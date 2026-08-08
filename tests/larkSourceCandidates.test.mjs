@@ -8,9 +8,13 @@ import {
   sanitizeLarkSourceXml
 } from "../scripts/build-lark-source-candidates.mjs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { buildSourceManifest } from "../src/storage/sourceManifest.ts";
+
+const execFileAsync = promisify(execFile);
 
 test("removes temporary Lark resource handles while preserving readable evidence", () => {
   const input = `<p id="block1">正文</p>
@@ -185,4 +189,19 @@ test("writes versioned source manifests and project keys for Lark batches", asyn
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("disables the legacy direct CLI that wrote complete Lark XML into Markdown candidates", async () => {
+  await assert.rejects(
+    execFileAsync(
+      "node",
+      [
+        path.resolve("scripts/build-lark-source-candidates.mjs"),
+        "--input",
+        "/tmp/legacy-lark-manifest.json"
+      ],
+      { cwd: process.cwd() }
+    ),
+    /use agent-knowledge ingest lark-export/
+  );
 });

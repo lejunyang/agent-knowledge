@@ -170,10 +170,19 @@ agent-knowledge ingest git \
   --connector-id business-repository \
   --repository /projects/business \
   --pathspec README.md docs
+
+agent-knowledge ingest lark-export \
+  --connector-id lark-business \
+  --export-dir /secure/exports/lark-business \
+  --project-key github.com/example/business
 ```
 
 `ingest git` 只读取 committed blob，不读取 dirty/untracked 草稿，也不自动 fetch/pull。完整运行
 会标记已删除 source；同路径恢复后回到 pending，需重新提炼和审阅。
+
+飞书在线知识库先使用 `fetch-lark-corpus.mjs --refresh-existing` 尽量完成离线导出，再
+`ingest lark-export`；不要用旧 source candidate 脚本把完整 XML 写进 Markdown。若 export
+仍有 failures，成功文档可先摄入，但必须汇报 source list 的 unresolved inventory，不能宣称完成。
 
 摄入后使用：
 
