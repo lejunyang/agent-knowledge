@@ -59,6 +59,7 @@ export * from "./ingestion/redaction.js";
 export * from "./ingestion/filesystem.js";
 export * from "./ingestion/gitRepository.js";
 export * from "./ingestion/larkExport.js";
+export * from "./ingestion/registry.js";
 export * from "./ingestion/core.js";
 export * from "./graph/types.js";
 export * from "./graph/build.js";
