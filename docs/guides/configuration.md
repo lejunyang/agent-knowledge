@@ -86,9 +86,12 @@ agent-knowledge workspace git-status --root ~/agent-knowledge-data
 
 ## Connector 与 Vault
 
-Connector 当前没有持久化配置层；来源目录、glob、Connector ID、project key 和单次 limit 都是
-`ingest` 命令显式参数，避免安装或配置时静默创建后台 crawler。Vault 密钥仍通过
-`vault.keyEnv` 指向的环境变量注入：
+Connector 没有用户/项目 JSON 配置层；来源目录、glob、Connector ID、project key 和单次
+limit 仍由 `ingest` 命令显式提供，避免安装或配置时静默创建后台 crawler。每次成功开始
+摄入前，会把严格校验后的非凭据 scope 自动登记到
+`<workspace>/.memory/ingestion/connectors/`，供 `source check` 恢复相同本地 adapter。
+登记是 0600 本机状态，不进入 Git/WebDAV/S3，不保存 Vault key、token 或正文。Vault 密钥仍
+通过 `vault.keyEnv` 指向的环境变量注入：
 
 ```bash
 agent-knowledge ingest files \
@@ -109,6 +112,9 @@ agent-knowledge ingest git \
   --connector-id business-repository \
   --repository /projects/business \
   --pathspec README.md docs
+
+agent-knowledge source check \
+  --root ~/agent-knowledge-data
 ```
 
 - `connector-id` 必须稳定且不含个人信息；更改它会创建新的 checkpoint/source identity。
@@ -121,8 +127,15 @@ agent-knowledge ingest git \
   只读 committed blob。无 origin remote 时必须传 `--project-key local/...`。
 - Git Connector ID 绑定 project key、解析后的 symbolic ref/分支和排序后的 pathspec；范围变化时复用旧 ID
   会明确失败，必须使用新 ID。
+- files/transcripts Connector ID 绑定 base directory、glob、artifact kind、project keys 和
+  content type；后续命令漏掉原 project key 也会被视为 scope 降级并失败。
+- Lark Connector ID 绑定 export roots 与 project keys；移动同一 scope 的离线快照目录允许更新
+  本地登记，切换知识空间范围必须使用新 ID。
 - 完整 `ingest git` 运行会做 source 删除对账；传 `--limit` 的截断运行不会标记删除。
-- 当前命令是前台单次运行，不创建 cron、launchd 或 systemd；周期运行交给用户显式的进程管理器。
+- `source check` 不读取正文、不需要 Vault key，也不修改 Vault/manifest/checkpoint。Git 只检查
+  登记的本地 ref，飞书只检查离线 export；远端更新必须先由用户或受控自动化显式 fetch/刷新。
+- `--fail-on-updates` 在确定更新、待抓取确认或检查错误时以状态码 2 退出，适合外部 scheduler。
+- 当前命令都是前台单次运行，不创建 cron、launchd 或 systemd；周期运行交给用户显式的进程管理器。
 
 ## 身份与治理
 

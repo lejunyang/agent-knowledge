@@ -101,6 +101,9 @@ agent-knowledge ingest lark-export \
   --connector-id lark-business \
   --export-dir /secure/exports/lark-business \
   --project-key github.com/example/business
+
+# 只检查已登记的本地/离线版本信号，不读取正文、不需要 Vault key
+agent-knowledge source check --root ~/agent-knowledge-data
 ```
 
 `ingest` 只输出 job、manifest 和 Vault handle，不输出正文。`files` 默认遮蔽内置规则可识别的
@@ -127,6 +130,17 @@ Connector ID 绑定 roots 与 project keys；移动同一快照目录不改变 i
 单个文档若 content hash、UTF-8、脱敏或 Vault 写入失败，会进入 checkpoint `failures` ledger；
 `source list.inventory.failedSources` 和 quality audit 持续报错，成功重试后自动清除。不能只看
 本次命令 `failed=0` 就判断历史失败已解决。
+
+执行任一 `ingest` 时会在抓取前把 Connector 的非凭据 scope 登记到
+`.memory/ingestion/connectors/`，供后续 `source check` 恢复相同 adapter。登记文件为本机
+0600 状态，不进入 Git/WebDAV/S3；不保存 Vault key、token 或正文。同一 Connector ID
+再次执行时必须保持 project key、glob/pathspec、artifact kind 和 inventory identity，
+防止作用域降级或把另一个来源误判为删除。
+
+`source check` 只执行 discover/probe，报告写入 `.memory/ingestion/update-checks/`，不调用
+fetch/normalize，也不修改 Vault、manifest、checkpoint 或审阅 receipt。它明确声明
+`networkAccess: none`：Git 只检查登记的本地 ref，飞书只检查登记的离线 export。要判断线上
+变化，先显式更新本地 ref 或刷新飞书 export，再运行检查；不会静默 fetch/pull/爬取。
 
 项目作用域使用规范化 Git remote，例如 `github.com/lejunyang/agent-knowledge`。普通 query 会自动发现当前仓库 remote；跨项目诊断使用：
 
@@ -198,6 +212,7 @@ case 或完整 initiative 后，再由 maintenance/writer 提炼 Diagnostic Path
 推荐的每周维护：
 
 ```bash
+agent-knowledge source check
 agent-knowledge source list --needs-review
 agent-knowledge maintenance run
 agent-knowledge maintenance list --status pending
@@ -205,7 +220,8 @@ agent-knowledge list
 agent-knowledge organize-inbox
 ```
 
-已经 ingest 的文档不会自动变成长期知识。使用 `source-distiller` Skill 逐条执行
+已经 ingest 的文档不会自动变成长期知识。使用 `source-distiller` Skill 先执行
+`source check -> 必要时重新 ingest`，再逐条执行
 `source show -> source export -> write-candidate/capture-material --target inbox -> source mark`；
 完整 evidence 只写受控 0600 临时文件。`source mark` 必须携带 show 返回的 fingerprint，
 版本变化时在任何写入前失败。
@@ -296,6 +312,10 @@ current claim anchor 指向 source 当前 section/hash 后，才可 `source mark
 更新检查先比较 revision/ETag/commit SHA 等轻量信号；信号未变可跳过正文下载。抓取后若只有上游 revision 或更新时间变化但 content hash 不变，记为 metadata-only，不触发重蒸馏；只有 content hash 变化才重新切 section、失效相关 claim 并生成更新 proposal。飞书递归脚本可显式执行：
 
 ```bash
+# 当前离线快照检查；不会联网
+agent-knowledge source check --connector-id lark-business
+
+# 需要判断在线飞书文档时，先显式刷新离线快照
 node scripts/fetch-lark-corpus.mjs \
   --root-url <wiki-or-doc-url> \
   --output /secure/exports/lark-business \
@@ -306,8 +326,19 @@ agent-knowledge ingest lark-export \
   --export-dir /secure/exports/lark-business \
   --project-key github.com/example/business
 
+agent-knowledge source check --connector-id lark-business
 agent-knowledge source list --needs-review
 ```
+
+Git/GitHub 同理：`source check` 只观察登记的本地 ref。需要远端新鲜度时先显式
+`git fetch origin`，并让 Connector 使用希望检查的本地或 remote-tracking ref；工具本身不会
+联网。`source check` 状态中：
+
+- `metadata_only/content_changed/new/removed/restored` 是当前 probe 可确定的变化。
+- `update_unknown` 表示 revision/ETag/mtime 已变化，但必须重新 ingest 比较脱敏 content hash。
+- `processing_profile_changed/evidence_missing` 表示处理规则或本地证据需要重新摄入。
+- 摄入会更新 Connector 登记，使旧检查报告变为 stale；再次 `source check` 才恢复 current，
+  避免已处理更新继续误报。
 
 正式流程不再使用 `build-lark-source-candidates.mjs` 把完整 XML 写成 source Markdown；该脚本只保留
 旧审计/合约测试兼容。完整正文进入 Vault，manifest v5 不含正文 preview，再由
@@ -461,6 +492,8 @@ agent-knowledge knowledge show <knowledge-id> --layer knowledge
 agent-knowledge knowledge evidence <claim-id>
 
 # Source 审阅与蒸馏
+agent-knowledge source check
+agent-knowledge source check --connector-id <connector-id> --fail-on-updates
 agent-knowledge source list --needs-review
 agent-knowledge source show <source-id>
 agent-knowledge source export <source-id> --fingerprint <sha256> --output /secure/tmp/evidence
@@ -530,6 +563,8 @@ knowledge/                         Markdown 事实源
 .memory/observations/             自动抽取的 maintenance observation
 .memory/proposals/                待人工审阅的维护提案
 .memory/graph.json                可重建知识关系图
+.memory/ingestion/connectors/     本机 0600 Connector 登记；不含凭据
+.memory/ingestion/update-checks/  本机 0600 probe-only 更新报告
 .memory/events/                   Event append lock；不是事实源
 .vault/objects/                   完整 source/event payload 密文
 events/support/*.jsonl            客服 case 脱敏 hash-chain 时间线

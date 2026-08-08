@@ -21,6 +21,10 @@ import {
 } from "../src/storage/sourceManifest.js";
 import { putVaultObject } from "../src/vault/core.js";
 import { captureMaterial } from "./helpers/candidate.js";
+import { FileSystemConnector } from "../src/ingestion/filesystem.js";
+import { runConnectorIngestion } from "../src/ingestion/core.js";
+import { registerConnector } from "../src/ingestion/registry.js";
+import { checkConnectorSourceUpdates } from "../src/ingestion/sourceUpdates.js";
 
 const tempDirs: string[] = [];
 const key = Buffer.alloc(32, 21);
@@ -100,6 +104,89 @@ describe("source review workflow", () => {
     expect(shown.exportAvailable).toBe(true);
     expect(serialized).not.toContain("FULL_EVIDENCE_PRIVATE_TAIL");
     expect(serialized).not.toContain("ciphertext");
+  });
+
+  it("summarizes registered connector update health without treating stale reports as current", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "source-review-update-health-")
+    );
+    tempDirs.push(root);
+    const sourceDir = path.join(root, "upstream");
+    const sourceFile = path.join(sourceDir, "guide.md");
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(sourceFile, "# Guide\n\nVersion one.\n", "utf8");
+    const registrationInput = {
+      kind: "files" as const,
+      connectorId: "review-business-docs",
+      redactionPolicy: "secrets-only" as const,
+      options: {
+        baseDir: sourceDir,
+        patterns: ["**/*.md"],
+        artifactKind: "document" as const,
+        projectKeys: ["github.com/example/business"]
+      }
+    };
+    const connector = new FileSystemConnector({
+      id: registrationInput.connectorId,
+      baseDir: sourceDir,
+      patterns: registrationInput.options.patterns,
+      artifactKind: "document",
+      projectKeys: registrationInput.options.projectKeys
+    });
+    const registration = (
+      await registerConnector(root, registrationInput)
+    ).record;
+    await runConnectorIngestion(root, connector, {
+      vault: { key },
+      redactionPolicy: "secrets-only"
+    });
+
+    const unchecked = await listSources(root);
+    expect(unchecked.updateHealth).toMatchObject({
+      registeredConnectors: 1,
+      uncheckedConnectors: 1,
+      staleChecks: 0,
+      updatesAvailable: 0,
+      verificationRequired: 0
+    });
+
+    await checkConnectorSourceUpdates(root, connector, registration);
+    const current = await listSources(root);
+    expect(current.updateHealth).toMatchObject({
+      registeredConnectors: 1,
+      uncheckedConnectors: 0,
+      staleChecks: 0,
+      updatesAvailable: 0,
+      verificationRequired: 0
+    });
+
+    await writeFile(
+      sourceFile,
+      "# Guide\n\nVersion two with a changed workflow.\n",
+      "utf8"
+    );
+    await checkConnectorSourceUpdates(root, connector, registration);
+    const changed = await listSources(root);
+    expect(changed.updateHealth).toMatchObject({
+      uncheckedConnectors: 0,
+      updatesAvailable: 0,
+      verificationRequired: 1
+    });
+    expect(changed.updateHealth.connectors[0]).toMatchObject({
+      connectorId: registration.connectorId,
+      state: "current",
+      verificationRequired: 1
+    });
+
+    await registerConnector(root, registrationInput);
+    const stale = await listSources(root);
+    expect(stale.updateHealth).toMatchObject({
+      uncheckedConnectors: 1,
+      staleChecks: 1,
+      updatesAvailable: 0,
+      verificationRequired: 0
+    });
+    expect(stale.updateHealth.connectors[0]?.state).toBe("stale");
   });
 
   it("exports decrypted evidence only to an explicit restricted file", async () => {

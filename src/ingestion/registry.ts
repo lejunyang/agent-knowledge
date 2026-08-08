@@ -115,6 +115,9 @@ const RegistrationCommonSchema = z.object({
   version: z.literal(1),
   registeredAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+  generation: z
+    .string()
+    .regex(/^registration_sha256_[a-f0-9]{64}$/),
   inventoryIdentity: ConnectorInventoryIdentitySchema.optional(),
   scopeFingerprint: z
     .string()
@@ -364,6 +367,10 @@ export async function registerConnector(
     version: 1,
     registeredAt: existing?.registeredAt ?? now,
     updatedAt: now,
+    // 每次登记都轮换 generation；不能只靠毫秒时间判断旧 update report 是否失效。
+    generation: `registration_sha256_${createHash("sha256")
+      .update(randomUUID())
+      .digest("hex")}`,
     ...(inventoryIdentity ? { inventoryIdentity } : {}),
     scopeFingerprint: fingerprint
   });

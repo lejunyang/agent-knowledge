@@ -22,6 +22,10 @@ import {
   listConnectorCheckpoints,
   withConnectorIngestionLock
 } from "../ingestion/core.js";
+import {
+  getSourceUpdateHealth,
+  type SourceUpdateHealth
+} from "../ingestion/sourceUpdates.js";
 import { parseKnowledgeMarkdown } from "./markdown.js";
 import {
   SourceManifestSchema,
@@ -68,6 +72,7 @@ export type SourceListResult = {
   total: number;
   byStatus: Record<string, number>;
   byReviewState: Record<string, number>;
+  updateHealth: SourceUpdateHealth;
   inventory: {
     incompleteConnectors: number;
     unresolved: number;
@@ -290,6 +295,7 @@ export async function listSources(
     ...new Set(manifests.map((manifest) => manifest.connector))
   ];
   const checkpoints = await listConnectorCheckpoints(rootDir);
+  const updateHealth = await getSourceUpdateHealth(rootDir);
   for (const checkpoint of checkpoints) {
     connectors.push(checkpoint.connectorId);
   }
@@ -314,6 +320,7 @@ export async function listSources(
     total: items.length,
     byStatus,
     byReviewState,
+    updateHealth,
     inventory: {
       incompleteConnectors: inventory.filter(
         (item) => item.mode === "complete" && !item.complete

@@ -18,9 +18,10 @@
 - `.vault/objects` 保存 AES-256-GCM 客户端加密的完整 evidence；`.vault/tombstones` 和 `.vault/access-log` 保存删除与访问审计。Vault 不进入 Git、Markdown 同步或普通 query。
 - `events/support/*.jsonl` 与 `events/projects/*.jsonl` 是 Git 可跟踪的脱敏 append-only hash-chain 时间线；完整 event payload 只在 Vault，Event 不是 active business fact。
 - `.memory/events/locks` 是事件 append 互斥状态，不是事实源。
-- `.memory/ingestion/jobs` 保存每次 Connector 尝试的有界审计，`.memory/ingestion/checkpoints` 保存增量水位，`.memory/ingestion/locks` 防止同一 Connector 并发覆盖 checkpoint；三者都不是事实源。
+- `.memory/ingestion/connectors` 保存 0600 本机 Connector 登记，`.memory/ingestion/update-checks` 保存 0600 probe-only 最近报告；二者不进 Git/同步且不是事实源。`.memory/ingestion/jobs` 保存每次 Connector 尝试的有界审计，`.memory/ingestion/checkpoints` 保存增量水位，`.memory/ingestion/locks` 防止同一 Connector 并发覆盖 checkpoint；三者也不是事实源。
 - `knowledge/source-manifests/*.json` 是严格 `schema_version: 5` 的 Git 可跟踪 evidence 导航，保存稳定 source 身份、上游/本地版本、availability、section heading/hash/range、review receipt、脱敏与处理 profile、project keys 和 Vault handle，不保存正文 preview 或完整原文；旧 manifest 不迁移，应从原始 evidence 重建。
 - `agent-knowledge ingest files|transcripts` 通过统一 Connector core 执行 probe、抓取、规范化、脱敏、Vault、manifest、job 和 checkpoint；failed 不推进 checkpoint。
+- `agent-knowledge source check` 从本机登记恢复 Connector，只执行本地/离线 inventory/discover/probe，不抓正文、不需要 Vault key、不写 manifest/Vault/checkpoint。
 - `agent-knowledge query` 输出主 agent 可注入的 Context Packet 2.0，默认只含 synopsis 与 evidence handles；`--debug` 附带 scorer/reranker 和分项分数。
 - `agent-knowledge knowledge audit` 检查正文密度、metadata 膨胀、source 处理状态、claim evidence 和 project registry；`knowledge show/evidence` 执行安全过滤后显式展开。
 - `agent-knowledge embed-index` 使用本地 provider 生成 embedding 缓存；`agent-knowledge suggest-aliases` 只输出 dry-run JSON 建议。
@@ -108,6 +109,7 @@ node dist/cli.js ingest files --root /tmp/agent-knowledge-data --connector-id sm
 node dist/cli.js ingest transcripts --root /tmp/agent-knowledge-data --connector-id smoke-sessions --base-dir /tmp/session-jsonl
 node dist/cli.js ingest git --root /tmp/agent-knowledge-data --connector-id smoke-repo --repository /tmp/source-repo --pathspec README.md docs
 node dist/cli.js ingest lark-export --root /tmp/agent-knowledge-data --connector-id smoke-lark --export-dir /tmp/lark-export --project-key github.com/example/business
+node dist/cli.js source check --root /tmp/agent-knowledge-data
 node dist/cli.js source list --root /tmp/agent-knowledge-data --needs-review
 node dist/cli.js source show src_example --root /tmp/agent-knowledge-data
 node dist/cli.js event status --root /tmp/agent-knowledge-data
@@ -160,7 +162,7 @@ src/sync/             Markdown 三方同步及 WebDAV/S3 backend
 src/hooks/            Hook runtime context、静默相关性门控、脱敏 staging 和详细 Subagent 日志
 src/vault/            完整 evidence 的客户端加密、读取、删除与访问审计
 src/events/           客服 case 与需求 initiative 的 hash-chain timeline 和 Vault payload
-src/ingestion/        Connector 契约、本地文件/transcript adapter、脱敏、job/checkpoint/lock 编排
+src/ingestion/        Connector 契约、本地文件/transcript adapter、登记、probe-only 更新检查、脱敏、job/checkpoint/lock 编排
 src/i18n/             中文默认、英文可选的 CLI/Hook 文案
 src/index.ts          公共 TypeScript API re-export
 src/cli.ts            命令行入口和各模块编排
@@ -216,17 +218,21 @@ src/cli.ts            命令行入口和各模块编排
 - `build-lark-source-candidates.mjs` 的直接 CLI 和 npm script 已禁用；仅保留导出函数做历史审计合约测试。正式流程不得把完整 XML 转成 source Markdown。
 - Complete inventory Connector 必须提供稳定 inventory identity；Git identity 绑定 project key、解析后的 symbolic ref/分支和 pathspec。范围变化不得复用旧 Connector ID，否则必须在任何 removed 写入前失败。
 - Lark inventory identity 绑定 roots 与 project keys；移动同一离线快照不改变 identity，改变知识空间根或 project scope 必须使用新 Connector ID。`--limit` 运行不得做删除对账。
+- 每次 CLI ingestion 必须在抓取前写/更新严格 Connector 登记；files/transcripts 登记 scope 绑定 base directory、glob、artifact kind、project keys 和 content type，漏传原 project key 也属于危险 scope 降级并失败。Git/Lark 本地路径只有 inventory identity 不变时可更新。
+- Connector 登记只能保存内置 adapter 的非凭据参数，文件权限 0600；禁止保存 Vault key、token、cookie 或正文，也禁止进入 Git/WebDAV/S3。
 - Vault 删除必须物理移除密文并写 tombstone，不能只删除 source manifest 或对象引用；默认不得静默复活同 ID 对象。
 - 每个可更新 source 必须记录稳定 `source_id/external_key` 和版本信息。优先保存上游 revision、ETag、commit SHA、更新时间或 provider version ID，并始终保存抓取后的 content hash；没有上游版本信号时只能回退到重新抓取后比较 content hash。
 - Source review 必须通过 `source show/export/mark`：export 只写 knowledge workspace 之外的显式 0600 文件，mark 必须携带 current fingerprint 和 review token；reason 进入 Git 前执行 secret/PII 检查。
 - Source export/mark 必须与 ingestion 复用同一 Connector lock，避免 fingerprint 校验后被并发摄入覆盖；仅靠先读后写不够。
 - `refined` receipt 必须记录 active knowledge IDs，且每个 ID 至少有一个 supported claim anchor 命中当前 source section/hash。不能仅因候选已写 inbox 就标 refined。
 - metadata-only 更新保留 review receipt；content changed/restored 清空 receipt 并回 pending；removed/missing 先回 pending，人工分析历史 Vault evidence 后再标 obsolete/blocked。
-- Connector 更新检查应先做轻量 probe：共同版本信号未变且 processing profile 未变时跳过正文下载；信号变化、不可比较或 normalize/脱敏 profile 升级时抓取全文。上游 metadata 或处理 profile 变化但 content hash 不变不得触发重蒸馏并应保留 source 已分类状态；content hash 变化才重新切 section、失效受影响 claim 并生成更新 proposal。
+- `source check` 必须是 probe-only：只调用 inventory/discover/probe，禁止调用 fetch/normalize、写 Vault/manifest/checkpoint 或要求 Vault key。检查显式 `networkAccess: none`；Git 只看登记的本地 ref，飞书只看 offline export，远端刷新必须由用户或受控自动化显式执行。
+- 更新报告必须绑定当前 Connector registration snapshot。重新登记/摄入后旧报告为 stale，不能继续贡献 `sourceUpdatesAvailable/sourceUpdatesUnknown`。报告只保存在 0600 `.memory`，不得同步。
+- Connector 更新检查应先做轻量 probe：共同版本信号未变且 processing profile 未变时为 unchanged；`path_hash` 变化可标 content_changed，只有 revision/ETag/mtime 等变化但无内容 identity 时必须标 update_unknown，不能虚构确定性。显式 ingestion 抓取后，上游 metadata 或处理 profile 变化但 content hash 不变不得触发重蒸馏并应保留 source 已分类状态；content hash 变化才重新切 section、失效受影响 claim 并生成更新 proposal。
 - 同一 workspace/Connector 禁止并发摄入；lock 归活进程时失败，死 PID 锁可恢复。每次尝试使用独立 job ID，failed 不推进 checkpoint，不能覆盖上次失败或成功的审计记录。
 - Git source 使用 blob SHA `path_hash` 优先判断单文档更新，commit SHA 记录仓库版本；无关 commit 只允许 metadata-only，不应重读正文。
 - 只有 `inventoryMode: complete` 且未被 `--limit` 截断的运行才能把缺失 source 标记 removed/missing；missing manifest 必须使 claim anchor 失效，恢复后回到 pending。
-- 质量审计必须分别报告 source 分类、上游 availability、Vault evidence、上游版本、脱敏策略和 claim anchor 覆盖率；missing source 保留历史分类与 Vault coverage，但 availability 为 0，且不能支撑 active claim。manifest 无 Vault handle 或指向丢失密文属于 error。
+- 质量审计必须分别报告 source 分类、上游 availability、Vault evidence、上游版本、脱敏策略、Connector 检查 freshness、确定/unknown 更新和 claim anchor 覆盖率；missing source 保留历史分类与 Vault coverage，但 availability 为 0，且不能支撑 active claim。manifest 无 Vault handle 或指向丢失密文属于 error。
 - 质量审计还必须把 processed content hash 不匹配视为 stale warning，把 refined knowledge ID/anchor 无效视为 error。
 - Connector inventory health 必须持久化到 checkpoint；`source list` 和 quality audit 必须统计 complete/unresolved。零成功文档的失败 Connector 也不能从审计中消失。
 - 单 source fetch/normalize/Vault 失败必须写脱敏 checkpoint failure ledger；source list/audit 必须持续报告，成功重试或 complete inventory 确认 source 已移除后才清除。

@@ -18,6 +18,7 @@ import {
 import type { KnowledgeDocument } from "../core/types.js";
 import { getVaultObjectPath } from "../vault/core.js";
 import { listConnectorCheckpoints } from "../ingestion/core.js";
+import { getSourceUpdateHealth } from "../ingestion/sourceUpdates.js";
 import { getEventLedgerStatus } from "../events/ledger.js";
 
 export type KnowledgeQualityFindingCode =
@@ -32,6 +33,10 @@ export type KnowledgeQualityFindingCode =
   | "invalid_duplicate_source"
   | "source_inventory_incomplete"
   | "source_ingestion_failed"
+  | "source_connector_unchecked"
+  | "source_update_check_stale"
+  | "source_update_available"
+  | "source_update_verification_required"
   | "event_payload_missing"
   | "event_timeline_invalid"
   | "source_missing_upstream"
@@ -73,6 +78,11 @@ export type KnowledgeQualityReport = {
     incompleteSourceConnectors: number;
     unresolvedSourceInventory: number;
     failedSourceIngestions: number;
+    registeredSourceConnectors: number;
+    uncheckedSourceConnectors: number;
+    staleSourceUpdateChecks: number;
+    sourceUpdatesAvailable: number;
+    sourceUpdatesUnknown: number;
     eventStreams: number;
     lifecycleEvents: number;
     missingEventPayloads: number;
@@ -372,6 +382,39 @@ export async function auditKnowledgeQuality(
   let incompleteSourceConnectors = 0;
   let unresolvedSourceInventory = 0;
   let failedSourceIngestions = 0;
+  const sourceUpdateHealth = await getSourceUpdateHealth(rootDir);
+  for (const connector of sourceUpdateHealth.connectors) {
+    if (connector.state === "unchecked") {
+      addFinding(findings, {
+        code: "source_connector_unchecked",
+        severity: "warning",
+        message: `Registered source connector has no update check report: ${connector.connectorId}.`
+      });
+    } else if (connector.state === "stale") {
+      addFinding(findings, {
+        code: "source_update_check_stale",
+        severity: "warning",
+        message: `Source update check predates the current connector registration or ingestion: ${connector.connectorId}.`
+      });
+    }
+    if (connector.state !== "current") {
+      continue;
+    }
+    if (connector.updatesAvailable > 0) {
+      addFinding(findings, {
+        code: "source_update_available",
+        severity: "warning",
+        message: `Source connector has ${connector.updatesAvailable} deterministic update(s): ${connector.connectorId}.`
+      });
+    }
+    if (connector.verificationRequired > 0) {
+      addFinding(findings, {
+        code: "source_update_verification_required",
+        severity: "warning",
+        message: `Source connector has ${connector.verificationRequired} version change(s) that require ingestion to verify content: ${connector.connectorId}.`
+      });
+    }
+  }
   for (const checkpoint of await listConnectorCheckpoints(rootDir)) {
     const inventory = checkpoint?.inventoryStatus;
     if (
@@ -550,6 +593,13 @@ export async function auditKnowledgeQuality(
       incompleteSourceConnectors,
       unresolvedSourceInventory,
       failedSourceIngestions,
+      registeredSourceConnectors:
+        sourceUpdateHealth.registeredConnectors,
+      uncheckedSourceConnectors:
+        sourceUpdateHealth.uncheckedConnectors,
+      staleSourceUpdateChecks: sourceUpdateHealth.staleChecks,
+      sourceUpdatesAvailable: sourceUpdateHealth.updatesAvailable,
+      sourceUpdatesUnknown: sourceUpdateHealth.verificationRequired,
       eventStreams,
       lifecycleEvents,
       missingEventPayloads,

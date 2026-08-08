@@ -2,7 +2,7 @@
 
 同步只处理正式 KnowledgeDocument Markdown，不上传 `_inbox`、`_archive`、`_inbox-skills`、
 `knowledge/source-manifests/*.json`、索引、embedding、ingestion job/checkpoint/lock、日志、
-staging、`events/*.jsonl`、Vault 或凭据。
+Connector 登记、source update report、staging、`events/*.jsonl`、Vault 或凭据。
 
 当前实现会同步权限策略允许的 `kind: source` Markdown，包括其中已有的完整脱敏正文。WebDAV/S3 对象没有客户端加密，因此该功能是知识 Markdown 镜像，不是完整会话、附件和工具轨迹使用的 Evidence Vault。
 
@@ -10,6 +10,12 @@ staging、`events/*.jsonl`、Vault 或凭据。
 位于独立 private Git 数据仓库，由用户自己的 Git remote/backup 策略同步。WebDAV/S3 不会
 上传 manifest 或 Vault，不能承担证据备份。正式投入使用前应单独演练 private Git 与加密
 Vault 的 backup/restore。
+
+`.memory/ingestion/connectors` 保存本机绝对 source 路径和非凭据 scope，
+`.memory/ingestion/update-checks` 保存最近一次本地/离线 probe 报告；两者都不得进入 Git、
+WebDAV/S3 或跨设备覆盖。多设备各自登记本地路径并运行 `source check`。可审计的 source 当前
+版本和历史变更由 `knowledge/source-manifests/*.json` 及 private Git history 承担；完整 evidence
+由 Vault backup/restore 承担。
 
 客服/需求 timeline 位于独立 private Git 数据仓库的 `events/`，由 Git remote/backup 管理；
 WebDAV/S3 不上传 event timeline 或 event payload。多设备并发 timeline 修改必须走 Git 冲突审阅，

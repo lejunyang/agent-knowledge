@@ -119,6 +119,12 @@ describe("managed integrations", () => {
       "source list --needs-review"
     );
     await expect(readFile(distillerTarget, "utf8")).resolves.toContain(
+      "source check"
+    );
+    await expect(readFile(distillerTarget, "utf8")).resolves.toContain(
+      "offline export"
+    );
+    await expect(readFile(distillerTarget, "utf8")).resolves.toContain(
       "expectedFingerprint"
     );
     await expect(readFile(lifecycleTarget, "utf8")).resolves.toContain(

@@ -8,7 +8,9 @@ description: "审阅 Agent Knowledge 的 versioned source manifest 和 Evidence 
 本 Skill 处理已经通过 Connector 摄入的 source，不负责爬取或绕过 Vault：
 
 ```text
-source list/show
+source check（仅本地/离线 probe）
+  -> 有变化时显式刷新 snapshot 并重新 ingest
+  -> source list/show
   -> source export 到受控临时文件
   -> 语义拆分与领域确认
   -> write-candidate / capture-material --target inbox
@@ -25,7 +27,42 @@ source list/show
 - Source 材料来自 customer/自动会话时，候选必须保留 `automated_session` 与准确 actor，永远先进入 inbox。
 - 不自动执行 `organize-inbox --approve`，不自动把候选晋升 active。
 
-## 1. 查看队列
+## 1. 检查来源版本
+
+先检查已登记 Connector：
+
+```bash
+agent-knowledge source check
+```
+
+或只检查当前来源：
+
+```bash
+agent-knowledge source check --connector-id "$CONNECTOR_ID"
+```
+
+`source check` 不需要 Vault key，不读取正文，也不写 Vault、manifest 或 checkpoint。状态解释：
+
+- `unchanged`：当前本地/离线 probe 与 manifest 一致。
+- `metadata_only`：正文身份未变，但 commit/revision/time 等 metadata 变化；重新 ingest 更新版本即可。
+- `content_changed`：blob/path hash 已确认内容身份变化；重新 ingest 后再蒸馏。
+- `update_unknown`：revision/ETag/mtime 变化，但必须重新 ingest 比较脱敏 content hash 才能确认。
+- `processing_profile_changed` / `evidence_missing`：必须重新 ingest 修复处理结果或 Vault evidence。
+- `new` / `removed` / `restored`：完整 inventory 的增删恢复，需要重新 ingest 和审阅。
+
+检查严格是 `networkAccess: none`：
+
+- Git 只检查登记的本地 ref。要判断 GitHub/GitLab 远端，先由用户或受控自动化显式
+  `git fetch`，再检查/摄入目标 remote-tracking ref；不要让 Skill 静默 fetch/pull。
+- 飞书只检查登记的 offline export。先显式运行 `fetch-lark-corpus.mjs --refresh-existing`
+  更新导出，再执行 `source check`；旧 export 不能代表在线文档最新版本。
+
+报告有更新或 `verificationRequired > 0` 时，用原 Connector scope 重新执行对应
+`ingest files|transcripts|git|lark-export`。不得漏掉原 `project-key`、pathspec、glob 或
+redaction policy；登记表会拒绝同 ID 的 scope 降级/漂移。摄入后再次 `source check`，
+确认报告回到 current/unchanged。
+
+## 2. 查看队列
 
 默认只看需要审阅的 source：
 
@@ -61,7 +98,10 @@ agent-knowledge source show "$SOURCE_ID"
 `reviewState=missing` 表示上游已删除，但历史 Vault evidence 仍可用 fingerprint 显式 export；
 检查相关 active claim 是否需要更新或废弃，再 mark obsolete 或 blocked。
 
-## 2. 导出当前 evidence
+`source list.updateHealth` 会显示登记数、未检查或 stale 的 Connector、确定更新数和待抓取
+确认数。摄入会使旧检查报告 stale，这是为了防止已经处理的更新继续误报；重新检查即可。
+
+## 3. 导出当前 evidence
 
 使用 owner 控制的临时目录，避免系统共享目录：
 
@@ -74,7 +114,7 @@ agent-knowledge source export "$SOURCE_ID" \
 
 命令不会向 stdout 输出正文，只返回输出路径、字节数和 content type。默认拒绝覆盖。
 
-## 3. 拆分和确认
+## 4. 拆分和确认
 
 按 source 的 heading/FAQ/流程/规则/案例拆分，不要“一篇文档一条短总结”。
 
@@ -107,7 +147,7 @@ range/hash 无法可靠对应，标记 blocked 并报告需要改进 sectionizer
 - PII/DLP 清洗不完整。
 - 无法判断 source 应 refined、duplicate、obsolete 还是 no_long_term_value。
 
-## 4. 写候选
+## 5. 写候选
 
 默认写 `_inbox`：
 
@@ -136,7 +176,7 @@ Documented owner source 的候选至少包含：
 
 完成候选审阅前，不要 mark refined。
 
-## 5. 标记 source 结果
+## 6. 标记 source 结果
 
 只有候选对应知识已经成为 **active knowledge**，且其中至少一个 claim anchor 指向当前 source
 section/hash，才能标记 refined：
@@ -183,7 +223,7 @@ receipt 变化后必须重新 show。标记后若 source content hash 改变，
 `reviewState` 会变 stale/pending，需要重新审阅；metadata-only 更新保留 current receipt。
 duplicate target 必须是 available 的规范 source，不能再指向另一个 duplicate。
 
-## 6. 收尾
+## 7. 收尾
 
 删除导出的临时 evidence 文件，并汇报：
 
@@ -196,6 +236,7 @@ duplicate target 必须是 available 的规范 source，不能再指向另一个
 最终检查：
 
 ```bash
+agent-knowledge source check
 agent-knowledge source list --needs-review
 agent-knowledge knowledge audit --fail-on warning
 ```

@@ -65,6 +65,7 @@ agent-knowledge write-candidate --input candidate.json
 周期维护前建议先运行确定性质量审计：
 
 ```bash
+agent-knowledge source check
 agent-knowledge knowledge audit
 agent-knowledge knowledge audit --fail-on warning
 ```
@@ -78,6 +79,9 @@ Source 层还报告五个正式使用覆盖率：
 - `vaultEvidenceCoverage`：manifest 是否指向本机真实存在的加密 Vault object。
 - `upstreamVersionCoverage`：是否有 revision、ETag、commit SHA、更新时间或 opaque version 可做轻量更新探测。
 - `redactionPolicyCoverage`：是否记录了实际脱敏策略。
+- `registeredSourceConnectors`：已经由 ingest 自动登记、可重复检查的本地 Connector 数。
+- `uncheckedSourceConnectors/staleSourceUpdateChecks`：尚未检查，或摄入/重新登记后旧报告已失效的 Connector 数。
+- `sourceUpdatesAvailable/sourceUpdatesUnknown`：当前报告中的确定更新，以及必须重新抓取后才能确认的版本变化。
 
 缺失或丢失 Vault object 是 error；缺少上游版本信号或脱敏策略记录是 warning。缺少上游版本
 不阻止摄入，但后续每次检查都必须抓取全文比较 content hash。
@@ -87,9 +91,14 @@ Source 层还报告五个正式使用覆盖率：
 Connector 只负责把证据安全摄入，不会自动把文档结论写成 active knowledge。查看审阅队列：
 
 ```bash
+agent-knowledge source check
 agent-knowledge source list --needs-review
 agent-knowledge source show "$SOURCE_ID"
 ```
+
+`source list.updateHealth` 汇总登记、检查 freshness、确定更新和待抓取确认。只有绑定当前登记
+快照的报告才算 current；摄入后旧报告自动 stale，且不再贡献 update 数，防止已处理的变化
+继续误报。
 
 `show` 返回 current fingerprint、review token、section heading/ID/hash/range、project scope 和
 export 状态，不解密完整正文。需要语义蒸馏时使用 `source-distiller` Skill，把完整 evidence
@@ -162,13 +171,18 @@ Source manifest 同时保存：
 
 更新流程：
 
-1. Connector 先读取廉价 upstream probe。
-2. 与上次共同版本信号相同且 processing profile 未变：标记 unchanged，跳过完整正文下载。
-3. 信号变化或双方没有可比较字段：重新抓取并脱敏。
-4. content hash 相同：标记 metadata-only，只更新版本记录。
-5. content hash 变化：重新生成 section；引用已变化 section 的 claim 进入待验证状态，再生成知识更新 proposal。
+1. `ingest` 自动保存 0600 本地 Connector 登记；scope 变化或 project key 降级必须使用新 ID。
+2. `source check` 只读取廉价 upstream probe，不读取正文或写 Vault/manifest。
+3. 与上次共同版本信号相同且 processing profile 未变：标记 unchanged。
+4. `path_hash` 变化可标 content_changed；revision/ETag/mtime 变化但无内容 identity 时标
+   update_unknown，不能直接断言正文已变化。
+5. 显式重新 ingest、脱敏并比较 content hash；相同则 metadata-only，不同才重新生成 section。
+6. 引用已变化 section 的 claim 进入待验证状态，再生成知识更新 proposal。
 
-飞书使用 revision/更新时间，Git/GitHub 使用 commit SHA；没有上游版本信息时必须重新抓取比较 content hash，不能静默假设未变化。normalize 或脱敏规则升级会改变 processing profile，即使上游版本没变也必须重抓；若正文 hash 未变，保留已有 source 分类状态。
+检查不联网。飞书使用 offline export 中的 revision/更新时间；要判断线上版本先显式刷新 export。
+Git/GitHub 使用本地 ref 的 blob/commit SHA；要判断远端先显式 fetch。没有上游版本信息时必须
+重新抓取比较 content hash，不能静默假设未变化。normalize 或脱敏规则升级会改变
+processing profile，即使上游版本没变也必须重抓；若正文 hash 未变，保留已有 source 分类状态。
 
 本地文件与完整 transcript 可先使用：
 
@@ -215,6 +229,7 @@ agent-knowledge ingest lark-export \
   --export-dir /secure/exports/lark-business \
   --project-key github.com/example/business
 
+agent-knowledge source check --connector-id lark-business
 agent-knowledge source list --needs-review
 ```
 
@@ -225,6 +240,10 @@ content hash 不一致的文档会失败且不推进 source watermark。导出�
 `source list` 顶层 `inventory` 和 `knowledge audit` 的
 `incompleteSourceConnectors/unresolvedSourceInventory` 用于追踪这类缺口。只有 unresolved 清零，
 才能宣称 source inventory 完整。
+
+`source list.updateHealth` 与 audit 的 update 指标来自 `.memory/ingestion/update-checks`，不进入
+Git/WebDAV/S3。当前 manifest 版本与 private Git 历史才是可审计版本轨迹；update report 只是
+本机当前快照检查结果。
 
 单文档 content hash、解码、脱敏或 Vault 失败会写入 checkpoint failure ledger，并通过
 `source list.inventory.failedSources` / `failedSourceIngestions` error 持续暴露；成功重试会清除。

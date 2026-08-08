@@ -499,6 +499,21 @@ sections:
 - content hash 变化才重新切 section、失效受影响 claim。
 - 没有共同上游信号时必须抓取后比较 hash，不能判定 unchanged。
 
+当前已交付本地 Connector registry 与 probe-only 更新检查：
+
+- 每次 `ingest files|transcripts|git|lark-export` 自动写 0600
+  `.memory/ingestion/connectors/<hash>.json`，只保存非凭据 scope。
+- `source check` 从登记恢复本地 adapter，只执行 inventory/discover/probe，不调用
+  fetch/normalize，不写 Vault、manifest、checkpoint 或 review receipt。
+- 报告写入 0600 `.memory/ingestion/update-checks/<hash>.json`，并绑定当前 registration
+  snapshot；重新摄入后旧报告自动 stale，不再贡献更新告警。
+- `path_hash` 变化可确定为 content_changed；revision/ETag/mtime 变化但没有内容 identity 时
+  标记 update_unknown，必须重新 ingest 比较脱敏 content hash。
+- 检查显式声明 `networkAccess: none`。Git 只观察本地 ref，飞书只观察 offline export；
+  远端新鲜度由用户或受控自动化先显式 fetch/刷新 snapshot。
+- 当前 source 版本在 manifest，历史版本由 private Git history 保存；registry/update report
+  是本机运行状态，不进入 Git/WebDAV/S3。
+
 ### Knowledge Claim
 
 一条 knowledge 可以包含多个 claim：

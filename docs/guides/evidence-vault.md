@@ -111,6 +111,10 @@ Connector 每次 source 尝试写入：
 
 - `knowledge/source-manifests/<source-id>.json`：严格 `schema_version: 5` 的 Git 可跟踪身份、版本、availability、section heading/hash/range、处理状态、
   review receipt、`redaction_policy`、`processing_profile`、脱敏计数和 `vault_object`。
+- `.memory/ingestion/connectors/<connector-hash>.json`：0600 本机 Connector 登记，保存可重跑的
+  非凭据 scope；不进入 Git/WebDAV/S3。
+- `.memory/ingestion/update-checks/<connector-hash>.json`：0600 最近一次 probe-only 检查报告；
+  不保存正文，也不是版本事实源。
 - `.memory/ingestion/jobs/<job-id>.json`：本次 completed/skipped/failed 审计；不保存正文。
 - `.memory/ingestion/checkpoints/<connector-hash>.json`：成功或跳过后的增量水位。
 - `.memory/ingestion/locks/<connector-hash>.lock`：同 Connector 互斥运行状态。
@@ -118,6 +122,30 @@ Connector 每次 source 尝试写入：
 轻量 probe 优先比较 revision、commit SHA、ETag、opaque version 或更新时间。共同信号相同且
 `processing_profile` 未变时跳过正文；无共同信号时必须重新抓取并比较 content hash。
 处理规则版本变化会强制重抓，避免旧脱敏结果永久被当作“未更新”。
+
+每次 `ingest` 会自动登记相同 Connector scope。之后可在不提供 Vault key 的情况下运行：
+
+```bash
+agent-knowledge source check
+agent-knowledge source check --connector-id business-repository
+agent-knowledge source check --fail-on-updates
+```
+
+检查只调用 inventory/discover/probe，绝不调用 `fetch/normalize`，也不更新 manifest、Vault、
+checkpoint 或 review receipt。报告明确 `networkAccess: none`：
+
+- Git 只观察登记的本地 ref；先显式 `git fetch` 才能看到远端更新。
+- 飞书只观察登记的 offline export；先显式刷新 export 才能看到在线文档更新。
+- 本地文件只观察 filesystem mtime/size probe；变化标为 `update_unknown`，重新 ingest 后以
+  脱敏 content hash 确认。
+
+`path_hash` 变化可标 `content_changed`；只有 revision/ETag/mtime 等信号变化时标
+`update_unknown`，不能在未抓取正文前宣称内容已改变。`metadata_only` 表示内容身份稳定但
+commit/revision/time 有变化。摄入会刷新登记快照，使旧 update report 变 stale；重新检查后
+才算 current，避免已经处理的变化继续告警。
+
+当前版本保存在 source manifest，历史版本由 private Git 的 manifest 变更记录追踪。`.memory`
+登记和更新报告只负责本机执行状态，不替代 Git 历史，也不应复制到共享远端。
 
 旧 source manifest 不做字段补齐或原地迁移；与旧 KnowledgeDocument 一样，从原始 evidence
 重新摄入生成 v5 manifest，避免缺少 Vault、availability、receipt 或 processing profile 的记录被误认为完整。v5 不保存任何 section 正文 preview。

@@ -182,14 +182,17 @@ agent-knowledge capture-material \
 
 安装 skills 组件后，`source-distiller` 负责 versioned source -> candidate knowledge：
 
-1. `source list --needs-review` / `source show` 获取当前 fingerprint、review token 和 section anchors。
-2. `source export --fingerprint ... --output ...` 在 knowledge workspace 外写受控 0600 临时 evidence。
-3. 拆分成有背景、条件、例外、失败策略和 current claim anchor 的 candidate，默认写 inbox。
-4. active knowledge 形成后，使用同 fingerprint/review token `source mark --status refined --knowledge-id ...`。
-5. duplicate/obsolete/no_long_term_value/blocked 显式写不含敏感原值的 reason。
+1. `source check` 用已登记的本地/离线 probe 检查更新；不读正文、不需要 Vault key、不联网。
+2. 必要时显式 fetch Git ref 或刷新 Lark offline export，再按原 scope 重新 ingest。
+3. `source list --needs-review` / `source show` 获取当前 fingerprint、review token 和 section anchors。
+4. `source export --fingerprint ... --output ...` 在 knowledge workspace 外写受控 0600 临时 evidence。
+5. 拆分成有背景、条件、例外、失败策略和 current claim anchor 的 candidate，默认写 inbox。
+6. active knowledge 形成后，使用同 fingerprint/review token `source mark --status refined --knowledge-id ...`。
+7. duplicate/obsolete/no_long_term_value/blocked 显式写不含敏感原值的 reason。
 
 Source 更新时旧 fingerprint 会拒绝 mark；content change/restored 回 pending，metadata-only
-保留 current receipt。Skill 不自动批准 inbox。
+保留 current receipt。摄入后旧 update report 会 stale，需再次 `source check`；Skill 不自动批准
+inbox，也不静默 fetch/pull 或爬取在线飞书。
 
 ## lifecycle-recorder
 

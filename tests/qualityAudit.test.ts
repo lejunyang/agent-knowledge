@@ -10,6 +10,18 @@ import {
   getEventTimelinePath
 } from "../src/events/ledger.js";
 import { getVaultObjectPath } from "../src/vault/core.js";
+import {
+  FileSystemConnector
+} from "../src/ingestion/filesystem.js";
+import {
+  runConnectorIngestion
+} from "../src/ingestion/core.js";
+import {
+  registerConnector
+} from "../src/ingestion/registry.js";
+import {
+  checkConnectorSourceUpdates
+} from "../src/ingestion/sourceUpdates.js";
 
 const tempDirs: string[] = [];
 const vaultKey = Buffer.alloc(32, 13);
@@ -358,5 +370,123 @@ describe("auditKnowledgeQuality", () => {
         (finding) => finding.code === "event_timeline_invalid"
       )
     ).toBe(true);
+  });
+
+  it("reports unchecked current and stale source update health without retaining stale alerts", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-quality-updates-")
+    );
+    tempDirs.push(root);
+    const sourceDir = path.join(root, "upstream");
+    const sourceFile = path.join(sourceDir, "guide.md");
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(sourceFile, "# Guide\n\nVersion one.\n", "utf8");
+    const registrationInput = {
+      kind: "files" as const,
+      connectorId: "quality-business-docs",
+      redactionPolicy: "secrets-only" as const,
+      options: {
+        baseDir: sourceDir,
+        patterns: ["**/*.md"],
+        artifactKind: "document" as const,
+        projectKeys: ["github.com/example/business"]
+      }
+    };
+    const connector = new FileSystemConnector({
+      id: registrationInput.connectorId,
+      baseDir: sourceDir,
+      patterns: registrationInput.options.patterns,
+      artifactKind: "document",
+      projectKeys: registrationInput.options.projectKeys
+    });
+    const registration = (
+      await registerConnector(root, registrationInput)
+    ).record;
+    await runConnectorIngestion(root, connector, {
+      vault: { key: vaultKey },
+      redactionPolicy: "secrets-only"
+    });
+
+    const unchecked = await auditKnowledgeQuality(root);
+
+    expect(unchecked.summary).toMatchObject({
+      registeredSourceConnectors: 1,
+      uncheckedSourceConnectors: 1,
+      staleSourceUpdateChecks: 0,
+      sourceUpdatesAvailable: 0,
+      sourceUpdatesUnknown: 0
+    });
+    expect(
+      unchecked.findings.some(
+        (finding) => finding.code === "source_connector_unchecked"
+      )
+    ).toBe(true);
+
+    await checkConnectorSourceUpdates(root, connector, registration);
+    const current = await auditKnowledgeQuality(root);
+
+    expect(current.summary).toMatchObject({
+      registeredSourceConnectors: 1,
+      uncheckedSourceConnectors: 0,
+      staleSourceUpdateChecks: 0,
+      sourceUpdatesAvailable: 0,
+      sourceUpdatesUnknown: 0
+    });
+
+    await writeFile(
+      sourceFile,
+      "# Guide\n\nVersion two with changed behavior.\n",
+      "utf8"
+    );
+    await checkConnectorSourceUpdates(root, connector, registration);
+    const changed = await auditKnowledgeQuality(root);
+
+    expect(changed.summary).toMatchObject({
+      uncheckedSourceConnectors: 0,
+      sourceUpdatesAvailable: 0,
+      sourceUpdatesUnknown: 1
+    });
+    expect(
+      changed.findings.some(
+        (finding) =>
+          finding.code === "source_update_verification_required"
+      )
+    ).toBe(true);
+
+    await registerConnector(root, registrationInput);
+    await runConnectorIngestion(
+      root,
+      new FileSystemConnector({
+        id: registrationInput.connectorId,
+        baseDir: sourceDir,
+        patterns: registrationInput.options.patterns,
+        artifactKind: "document",
+        projectKeys: registrationInput.options.projectKeys
+      }),
+      {
+        vault: { key: vaultKey },
+        redactionPolicy: "secrets-only"
+      }
+    );
+    const stale = await auditKnowledgeQuality(root);
+
+    expect(stale.summary).toMatchObject({
+      registeredSourceConnectors: 1,
+      uncheckedSourceConnectors: 1,
+      staleSourceUpdateChecks: 1,
+      sourceUpdatesAvailable: 0,
+      sourceUpdatesUnknown: 0
+    });
+    expect(
+      stale.findings.some(
+        (finding) => finding.code === "source_update_check_stale"
+      )
+    ).toBe(true);
+    expect(
+      stale.findings.some(
+        (finding) =>
+          finding.code === "source_update_verification_required"
+      )
+    ).toBe(false);
   });
 });

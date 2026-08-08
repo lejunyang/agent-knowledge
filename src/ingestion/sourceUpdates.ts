@@ -39,6 +39,7 @@ import {
 } from "./types.js";
 import {
   ConnectorRegistrationSchema,
+  listConnectorRegistrations,
   type ConnectorRegistration
 } from "./registry.js";
 
@@ -122,6 +123,13 @@ export const SourceUpdateReportSchema = z
       "lark-export"
     ]),
     checkedAt: z.string().datetime(),
+    registrationUpdatedAt: z.string().datetime(),
+    registrationGeneration: z
+      .string()
+      .regex(/^registration_sha256_[a-f0-9]{64}$/),
+    scopeFingerprint: z
+      .string()
+      .regex(/^scope_sha256_[a-f0-9]{64}$/),
     networkAccess: z.literal("none"),
     freshnessBoundary: z.enum([
       "local-filesystem",
@@ -135,6 +143,25 @@ export const SourceUpdateReportSchema = z
   .strict();
 
 export type SourceUpdateReport = z.output<typeof SourceUpdateReportSchema>;
+
+export type ConnectorSourceUpdateHealth = {
+  connectorId: string;
+  connectorKind: ConnectorRegistration["kind"];
+  state: "unchecked" | "current" | "stale";
+  registrationUpdatedAt: string;
+  checkedAt?: string;
+  updatesAvailable: number;
+  verificationRequired: number;
+};
+
+export type SourceUpdateHealth = {
+  registeredConnectors: number;
+  uncheckedConnectors: number;
+  staleChecks: number;
+  updatesAvailable: number;
+  verificationRequired: number;
+  connectors: ConnectorSourceUpdateHealth[];
+};
 
 const VERSION_FIELDS = [
   "path_hash",
@@ -211,6 +238,61 @@ export async function readSourceUpdateReport(
     throw new Error(`Source update report connector mismatch: ${connectorId}`);
   }
   return report;
+}
+
+/**
+ * 汇总已登记 Connector 的最近更新检查健康度。
+ *
+ * 报告必须绑定当前 registration snapshot 才算 current；重新登记通常发生在每次 ingestion
+ * 之前，因此摄入后旧报告自动变 stale。stale/unchecked 报告不再贡献更新数量，避免已经摄入
+ * 的变化继续在 `source list` 和 quality audit 中误报。
+ */
+export async function getSourceUpdateHealth(
+  rootDir: string
+): Promise<SourceUpdateHealth> {
+  const registrations = await listConnectorRegistrations(rootDir);
+  const connectors: ConnectorSourceUpdateHealth[] = [];
+  for (const registration of registrations) {
+    const report = await readSourceUpdateReport(
+      rootDir,
+      registration.connectorId
+    );
+    const current =
+      report !== null &&
+      report.registrationGeneration === registration.generation &&
+      report.scopeFingerprint === registration.scopeFingerprint;
+    const state: ConnectorSourceUpdateHealth["state"] =
+      report === null ? "unchecked" : current ? "current" : "stale";
+    connectors.push({
+      connectorId: registration.connectorId,
+      connectorKind: registration.kind,
+      state,
+      registrationUpdatedAt: registration.updatedAt,
+      ...(report ? { checkedAt: report.checkedAt } : {}),
+      updatesAvailable: current ? report.summary.updatesAvailable : 0,
+      verificationRequired: current
+        ? report.summary.verificationRequired
+        : 0
+    });
+  }
+  return {
+    registeredConnectors: connectors.length,
+    uncheckedConnectors: connectors.filter(
+      (connector) => connector.state !== "current"
+    ).length,
+    staleChecks: connectors.filter(
+      (connector) => connector.state === "stale"
+    ).length,
+    updatesAvailable: connectors.reduce(
+      (sum, connector) => sum + connector.updatesAvailable,
+      0
+    ),
+    verificationRequired: connectors.reduce(
+      (sum, connector) => sum + connector.verificationRequired,
+      0
+    ),
+    connectors
+  };
 }
 
 /** 加载当前 Connector 的严格 v5 manifest；旧 schema 必须重建，不能参与更新判断。 */
@@ -600,6 +682,9 @@ export async function checkConnectorSourceUpdates(
       connectorId: connector.id,
       connectorKind: registration.kind,
       checkedAt: (options.now?.() ?? new Date()).toISOString(),
+      registrationUpdatedAt: registration.updatedAt,
+      registrationGeneration: registration.generation,
+      scopeFingerprint: registration.scopeFingerprint,
       networkAccess: "none",
       freshnessBoundary: freshnessBoundary(registration),
       inventory: {
