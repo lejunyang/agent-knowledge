@@ -5,6 +5,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { auditKnowledgeQuality } from "../src/storage/qualityAudit.js";
 import { buildSourceManifest } from "../src/storage/sourceManifest.js";
 import { putVaultObject } from "../src/vault/core.js";
+import {
+  appendLifecycleEvent,
+  getEventTimelinePath
+} from "../src/events/ledger.js";
+import { getVaultObjectPath } from "../src/vault/core.js";
 
 const tempDirs: string[] = [];
 const vaultKey = Buffer.alloc(32, 13);
@@ -301,5 +306,57 @@ describe("auditKnowledgeQuality", () => {
     expect(report.summary.sourceCoverage).toBe(0);
     expect(codes).toContain("source_review_stale");
     expect(codes).toContain("invalid_duplicate_source");
+  });
+
+  it("reports missing event payloads and invalid timeline chains", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-quality-events-")
+    );
+    tempDirs.push(root);
+    const event = await appendLifecycleEvent(
+      root,
+      {
+        streamType: "support",
+        streamId: "case_audit",
+        stage: "intake",
+        eventType: "customer_question",
+        summary: "客户反馈登录失败。",
+        payloadText: "complete payload",
+        payloadContentType: "text/plain",
+        projectKeys: ["github.com/example/support"],
+        actorType: "customer",
+        captureMode: "automated_session",
+        idempotencyKey: "audit"
+      },
+      { key: vaultKey }
+    );
+    await rm(getVaultObjectPath(root, event.payloadObject!));
+
+    const missing = await auditKnowledgeQuality(root);
+
+    expect(missing.summary).toMatchObject({
+      eventStreams: 1,
+      lifecycleEvents: 1,
+      missingEventPayloads: 1
+    });
+    expect(
+      missing.findings.some(
+        (finding) => finding.code === "event_payload_missing"
+      )
+    ).toBe(true);
+
+    const timelinePath = getEventTimelinePath(root, "support", "case_audit");
+    const record = JSON.parse(
+      (await readFile(timelinePath, "utf8")).trim()
+    ) as Record<string, unknown>;
+    record.summary = "tampered";
+    await writeFile(timelinePath, `${JSON.stringify(record)}\n`, "utf8");
+    const tampered = await auditKnowledgeQuality(root);
+
+    expect(
+      tampered.findings.some(
+        (finding) => finding.code === "event_timeline_invalid"
+      )
+    ).toBe(true);
   });
 });

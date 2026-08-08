@@ -53,6 +53,7 @@ export * from "./hooks/staging.js";
 export * from "./hooks/relevance.js";
 export * from "./hooks/subagentLogs.js";
 export * from "./vault/core.js";
+export * from "./events/ledger.js";
 export * from "./ingestion/types.js";
 export * from "./ingestion/redaction.js";
 export * from "./ingestion/filesystem.js";

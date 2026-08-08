@@ -16,6 +16,8 @@
 - `.memory/observations/*.jsonl` 和 `.memory/proposals/*.json` 是自动维护的中间审阅产物，不是事实源。
 - `.memory/graph.json` 是从 Markdown/proposal 重建的知识关系图索引，不是事实源。
 - `.vault/objects` 保存 AES-256-GCM 客户端加密的完整 evidence；`.vault/tombstones` 和 `.vault/access-log` 保存删除与访问审计。Vault 不进入 Git、Markdown 同步或普通 query。
+- `events/support/*.jsonl` 与 `events/projects/*.jsonl` 是 Git 可跟踪的脱敏 append-only hash-chain 时间线；完整 event payload 只在 Vault，Event 不是 active business fact。
+- `.memory/events/locks` 是事件 append 互斥状态，不是事实源。
 - `.memory/ingestion/jobs` 保存每次 Connector 尝试的有界审计，`.memory/ingestion/checkpoints` 保存增量水位，`.memory/ingestion/locks` 防止同一 Connector 并发覆盖 checkpoint；三者都不是事实源。
 - `knowledge/source-manifests/*.json` 是严格 `schema_version: 5` 的 Git 可跟踪 evidence 导航，保存稳定 source 身份、上游/本地版本、availability、section heading/hash/range、review receipt、脱敏与处理 profile、project keys 和 Vault handle，不保存正文 preview 或完整原文；旧 manifest 不迁移，应从原始 evidence 重建。
 - `agent-knowledge ingest files|transcripts` 通过统一 Connector core 执行 probe、抓取、规范化、脱敏、Vault、manifest、job 和 checkpoint；failed 不推进 checkpoint。
@@ -108,6 +110,8 @@ node dist/cli.js ingest git --root /tmp/agent-knowledge-data --connector-id smok
 node dist/cli.js ingest lark-export --root /tmp/agent-knowledge-data --connector-id smoke-lark --export-dir /tmp/lark-export --project-key github.com/example/business
 node dist/cli.js source list --root /tmp/agent-knowledge-data --needs-review
 node dist/cli.js source show src_example --root /tmp/agent-knowledge-data
+node dist/cli.js event status --root /tmp/agent-knowledge-data
+node dist/cli.js event list --root /tmp/agent-knowledge-data --stream-type support
 node dist/cli.js integration install --product trae --scope project --target-dir /tmp/agent-knowledge-integration-smoke
 node dist/cli.js integration doctor --product trae --scope project --target-dir /tmp/agent-knowledge-integration-smoke
 node dist/cli.js project detect
@@ -155,6 +159,7 @@ src/integration/      产品安装、模板兼容入口和 Git project registry
 src/sync/             Markdown 三方同步及 WebDAV/S3 backend
 src/hooks/            Hook runtime context、静默相关性门控、脱敏 staging 和详细 Subagent 日志
 src/vault/            完整 evidence 的客户端加密、读取、删除与访问审计
+src/events/           客服 case 与需求 initiative 的 hash-chain timeline 和 Vault payload
 src/ingestion/        Connector 契约、本地文件/transcript adapter、脱敏、job/checkpoint/lock 编排
 src/i18n/             中文默认、英文可选的 CLI/Hook 文案
 src/index.ts          公共 TypeScript API re-export
@@ -199,6 +204,10 @@ src/cli.ts            命令行入口和各模块编排
 - 图谱 HTML 默认只展示精炼 active 知识；结构邻居、source memory/source evidence 只能通过点击展开、证据或全图模式按需显示，不能恢复为全量节点首次布局。
 - source 原始证据导入前必须移除临时下载 URL，并遮蔽测试账号、验证码、密码、token、用户标识和个人信息；禁止把内部测试账号表原样写入长期知识。
 - 完整会话、工具轨迹和附件只能进入授权范围内的加密 Vault；凭据原值仍禁止保存。Vault key 必须从环境/KMS/密码管理器注入，CLI 不得把解密正文输出到 stdout。
+- Lifecycle event payload 只能从文件输入，summary/payload 都执行 secret/PII 治理；Git timeline 可保留脱敏语义摘要，但不得保存完整 conversation/tool payload。
+- Event stream ID 必须稳定且不含 PII/路径；客服和需求 stage 分别使用固定枚举。append 必须有 hash chain、并发锁与可选 idempotency key。
+- Event payload export 必须写 workspace 外 0600 文件；retention 删除后 `missingPayloads` 必须可见，timeline 仍不应被删除或伪装完整。
+- 客户/automated event 不是业务事实；只能经过独立 case、documented/owner/verified evidence 和 proposal/inbox 审阅后进入 active knowledge。
 - 所有 source manifest 都不得保存 section 正文 preview，只保留 heading/hash/range、脱敏计数和 Vault handle；`ingest transcripts` 还必须强制内置 `secrets-and-pii`。内置确定性 detector 不是完整 DLP，姓名、地址、业务 UID 等领域 PII 必须由专用 Connector 在 normalize 阶段继续清洗并版本化 processing profile。
 - Connector 是运行时不可信边界：descriptor 必须校验 source ID、connector ID、project key 和 probe；规范化 bytes 必须与用于 manifest 的 UTF-8 文本一致，不能让 Vault 内容和 hash/section 分叉。
 - 文件系统 Connector 只读取显式 baseDir 下 UTF-8 普通文件，不跟随 symlink；PDF/Office/二进制附件必须使用专用 Connector，不能静默 UTF-8 解码。
@@ -348,7 +357,7 @@ agent-knowledge write-candidate \
 如果使用 graph 浏览或 graph retrieval，也重新运行 `agent-knowledge graph build`。
 
 使用 `agent-knowledge integration install --product trae|trae-cn|claude-code --scope user|project` 安装产品接入。安装器不使用 symlink；hooks 结构化 merge 且只管理 `agent-knowledge hook` handler，agents/skills/plugin bundle 由本地 manifest 记录所有权。
-`knowledge-organizer`、`source-distiller` 和 `memory-maintainer` Skills 位于项目 `.trae/skills/`，这是本仓库自身的开发/测试资源，不代表已安装到用户产品目录。它们分别整理直接材料/inbox、蒸馏 versioned source、维护会话 observation/proposal。
+`knowledge-organizer`、`source-distiller`、`lifecycle-recorder` 和 `memory-maintainer` Skills 位于项目 `.trae/skills/`，这是本仓库自身的开发/测试资源，不代表已安装到用户产品目录。它们分别整理直接材料/inbox、蒸馏 versioned source、记录客服/需求事件、维护 observation/proposal。
 
 Hook 主动记忆边界：
 

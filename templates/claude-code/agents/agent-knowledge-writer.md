@@ -23,6 +23,9 @@ Automatic sessions and customer statements are observations, not confirmed facts
 - include canonical Git remote `project_keys` and episode provenance when known;
 - never promote them directly to active knowledge.
 
+Lifecycle event timelines are also evidence, not facts. Durable customer-service or initiative lessons require
+multiple independent closed/completed streams and documented, owner-confirmed, or verified support.
+
 Only add `related_knowledge` when an existing knowledge ID and relation can be stated precisely. Supported retrieval relations are `depends_on`, `refines`, `supports`, and `often_used_with`; `supersedes` and `conflicts_with` are temporal/review relations, not ordinary context expansion.
 
 Output V2 fields: `kind`, `layer`, a short routing `synopsis`, substantive `explanation`, weighted `aliases`/`scenarios`/`tags`, `claims`, and `project_keys`. Supported claims require source/section/hash evidence. Do not use metadata volume to compensate for a thin explanation.

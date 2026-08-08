@@ -18,6 +18,7 @@ import {
 import type { KnowledgeDocument } from "../core/types.js";
 import { getVaultObjectPath } from "../vault/core.js";
 import { listConnectorCheckpoints } from "../ingestion/core.js";
+import { getEventLedgerStatus } from "../events/ledger.js";
 
 export type KnowledgeQualityFindingCode =
   | "knowledge_body_too_thin"
@@ -31,6 +32,8 @@ export type KnowledgeQualityFindingCode =
   | "invalid_duplicate_source"
   | "source_inventory_incomplete"
   | "source_ingestion_failed"
+  | "event_payload_missing"
+  | "event_timeline_invalid"
   | "source_missing_upstream"
   | "source_without_vault_object"
   | "missing_vault_object"
@@ -70,6 +73,9 @@ export type KnowledgeQualityReport = {
     incompleteSourceConnectors: number;
     unresolvedSourceInventory: number;
     failedSourceIngestions: number;
+    eventStreams: number;
+    lifecycleEvents: number;
+    missingEventPayloads: number;
     vaultEvidenceCoverage: number;
     upstreamVersionCoverage: number;
     redactionPolicyCoverage: number;
@@ -223,6 +229,29 @@ export async function auditKnowledgeQuality(
   const frontmatterShares: number[] = [];
   let supportedClaims = 0;
   let groundedClaims = 0;
+  let eventStreams = 0;
+  let lifecycleEvents = 0;
+  let missingEventPayloads = 0;
+
+  try {
+    const eventStatus = await getEventLedgerStatus(rootDir);
+    eventStreams = eventStatus.streams;
+    lifecycleEvents = eventStatus.events;
+    missingEventPayloads = eventStatus.missingPayloads;
+    if (missingEventPayloads > 0) {
+      addFinding(findings, {
+        code: "event_payload_missing",
+        severity: "warning",
+        message: `Lifecycle events reference ${missingEventPayloads} Vault payload(s) removed or missing by retention.`
+      });
+    }
+  } catch (error) {
+    addFinding(findings, {
+      code: "event_timeline_invalid",
+      severity: "error",
+      message: `Lifecycle event integrity check failed: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
 
   for (const { document, rawLength } of activeKnowledge) {
     const frontmatter = document.frontmatter;
@@ -521,6 +550,9 @@ export async function auditKnowledgeQuality(
       incompleteSourceConnectors,
       unresolvedSourceInventory,
       failedSourceIngestions,
+      eventStreams,
+      lifecycleEvents,
+      missingEventPayloads,
       vaultEvidenceCoverage:
         manifests.length === 0 ? 1 : vaultBackedSources / manifests.length,
       upstreamVersionCoverage:

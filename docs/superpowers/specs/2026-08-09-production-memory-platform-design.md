@@ -210,6 +210,15 @@ Evidence 默认不进入普通 query。只有以下情况展开：
 
 Event 是 append-only 流，可在 Vault 保存完整 payload，在 Git 保存脱敏 timeline。
 
+当前已交付 native event ledger：
+
+- `event append/list/timeline/show/export/status`。
+- support 与 initiative 独立 stage schema。
+- Git timeline 使用 sequence + previous hash + record hash 防篡改。
+- payload 文件经 secret/PII 治理后写 Vault；timeline 仅保存脱敏摘要和 handle。
+- idempotency key 支持安全重试，stream lock 串行化并发 append。
+- Vault retention 删除后 timeline 保留，并通过 `missingPayloads` 暴露证据缺口。
+
 ### L4：Consolidated Memory
 
 用途：

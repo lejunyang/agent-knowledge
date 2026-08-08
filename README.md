@@ -175,6 +175,26 @@ agent-knowledge index
 6. 主 Agent 实际使用或拒绝某条知识时记录 `feedback`，为阈值校准和 Skill 沉淀提供证据。
 7. 每周或知识积累较多时运行一次 maintenance 和 inbox 审阅。
 
+客服 case 和需求 initiative 不应直接总结成知识，先由 `lifecycle-recorder` 写 append-only 事件：
+
+```bash
+agent-knowledge event append \
+  --stream-type support \
+  --stream-id case_account_ticket_12345 \
+  --stage intake \
+  --event-type customer_question \
+  --summary "客户反馈登录失败，身份和环境待确认" \
+  --payload /secure/tmp/message.json \
+  --content-type application/json \
+  --project-key github.com/example/support \
+  --actor-type customer \
+  --capture-mode automated_session \
+  --idempotency-key message_98765
+```
+
+完整 payload 经 secret/PII 治理后进入 Vault；Git 只保存脱敏摘要和 hash chain。跨多个独立
+case 或完整 initiative 后，再由 maintenance/writer 提炼 Diagnostic Path、FAQ、Playbook 和 SOP。
+
 推荐的每周维护：
 
 ```bash
@@ -338,6 +358,9 @@ obsolete/blocked。`source list --needs-review` 会列出 pending、stale 和尚
 
 - 不保存完整客户隐私、凭据或未授权 transcript。
 - 客户陈述只是 observation，不能成为 `user_confirmed`。
+- 每个 ticket/session 使用稳定 `case_...` stream ID，分别记录 intake/query/hypothesis/
+  root_cause/action/verification/closure，不要只保存最终回复。
+- 完整聊天和工具响应通过 `event append --payload <file>` 进入 Vault，不进入 staging 或同步。
 - 同一客户或同一 session 重复多次不算独立佐证。
 - 按租户或业务边界使用独立 root/project key；不要让一个客户的候选进入另一个客户的检索范围。
 - `maintenance watch` 只负责生成提案；不要自动执行 `maintenance accept` 或 `organize-inbox --approve`。
@@ -443,6 +466,14 @@ agent-knowledge source show <source-id>
 agent-knowledge source export <source-id> --fingerprint <sha256> --output /secure/tmp/evidence
 agent-knowledge source mark <source-id> --fingerprint <sha256> --review-token <token> --status refined --knowledge-id <active-id>
 
+# 客服与需求生命周期事件
+agent-knowledge event append --stream-type support --stream-id <case-id> --stage intake --event-type customer_question --summary "..." --payload /secure/tmp/payload.json --content-type application/json
+agent-knowledge event list --stream-type support --status closed
+agent-knowledge event timeline initiative <initiative-id>
+agent-knowledge event show <event-id>
+agent-knowledge event export <event-id> --output /secure/tmp/event-payload
+agent-knowledge event status
+
 # 飞书批量导出与摄入
 node scripts/fetch-lark-corpus.mjs --root-url <wiki-url> --output /secure/exports/lark --refresh-existing
 agent-knowledge ingest lark-export --connector-id lark-business --export-dir /secure/exports/lark --project-key github.com/example/business
@@ -499,6 +530,10 @@ knowledge/                         Markdown 事实源
 .memory/observations/             自动抽取的 maintenance observation
 .memory/proposals/                待人工审阅的维护提案
 .memory/graph.json                可重建知识关系图
+.memory/events/                   Event append lock；不是事实源
+.vault/objects/                   完整 source/event payload 密文
+events/support/*.jsonl            客服 case 脱敏 hash-chain 时间线
+events/projects/*.jsonl           需求 initiative 脱敏 hash-chain 时间线
 ```
 
 命令行显式参数优先于项目 local，项目 local 优先于项目共享，项目共享优先于用户配置，用户配置优先于兼容环境变量。完整规则见[配置指南](docs/guides/configuration.md)。

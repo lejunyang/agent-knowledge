@@ -773,6 +773,131 @@ describe("CLI user configuration", () => {
     });
   });
 
+  it("records support and initiative event timelines with encrypted payloads", async () => {
+    const temp = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-event-cli-")
+    );
+    tempDirs.push(temp);
+    const root = path.join(temp, "workspace");
+    const payload = path.join(temp, "support-payload.json");
+    const output = path.join(temp, "exports", "support-payload.json");
+    const privateEmail = "owner@example.com";
+    const privatePhone = "13800138000";
+    const environment = {
+      AGENT_KNOWLEDGE_VAULT_KEY: Buffer.alloc(32, 26).toString("base64")
+    };
+    await writeFile(
+      payload,
+      JSON.stringify({
+        question: "登录失败",
+        email: privateEmail,
+        phone: privatePhone
+      }),
+      "utf8"
+    );
+
+    const appendStdout = await runCli(
+      [
+        "event",
+        "append",
+        "--root",
+        root,
+        "--stream-type",
+        "support",
+        "--stream-id",
+        "case_login_001",
+        "--stage",
+        "intake",
+        "--event-type",
+        "customer_question",
+        "--summary",
+        `客户 ${privateEmail} 反馈手机号 ${privatePhone} 登录失败`,
+        "--payload",
+        payload,
+        "--content-type",
+        "application/json",
+        "--project-key",
+        "github.com/example/support",
+        "--actor-type",
+        "customer",
+        "--capture-mode",
+        "automated_session",
+        "--idempotency-key",
+        "message-001"
+      ],
+      environment
+    );
+    const appended = JSON.parse(appendStdout) as { eventId: string };
+    const timelineStdout = await runCli(
+      [
+        "event",
+        "timeline",
+        "support",
+        "case_login_001",
+        "--root",
+        root
+      ],
+      environment
+    );
+    const timeline = JSON.parse(timelineStdout) as {
+      status: string;
+      integrity: { valid: boolean };
+      events: Array<{ summary: string }>;
+    };
+    const exportStdout = await runCli(
+      [
+        "event",
+        "export",
+        appended.eventId,
+        "--root",
+        root,
+        "--output",
+        output
+      ],
+      environment
+    );
+    const status = JSON.parse(
+      await runCli(["event", "status", "--root", root], environment)
+    ) as { streams: number; events: number };
+    const listed = JSON.parse(
+      await runCli(
+        [
+          "event",
+          "list",
+          "--root",
+          root,
+          "--stream-type",
+          "support",
+          "--project-key",
+          "github.com/example/support"
+        ],
+        environment
+      )
+    ) as { total: number };
+
+    expect(appendStdout).not.toContain(privateEmail);
+    expect(appendStdout).not.toContain(privatePhone);
+    expect(timelineStdout).not.toContain(privateEmail);
+    expect(timelineStdout).not.toContain(privatePhone);
+    expect(exportStdout).not.toContain("登录失败");
+    expect(await readFile(output, "utf8")).toContain("[REDACTED_EMAIL]");
+    expect(await readFile(output, "utf8")).toContain("[REDACTED_PHONE]");
+    expect(timeline).toMatchObject({
+      status: "active",
+      integrity: { valid: true }
+    });
+    expect(timeline.events[0]?.summary).toContain("[REDACTED_EMAIL]");
+    expect(status).toEqual({
+      streams: 1,
+      events: 1,
+      payloadBackedEvents: 1,
+      missingPayloads: 0,
+      byStreamType: { support: 1, initiative: 0 },
+      byStatus: { active: 1 }
+    });
+    expect(listed.total).toBe(1);
+  });
+
   it("automatically scopes query to the current Git project unless project IDs are explicit", async () => {
     const temp = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-project-"));
     tempDirs.push(temp);

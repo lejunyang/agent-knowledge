@@ -18,6 +18,7 @@ import { Command } from "commander";
 import {
   MemoryQueryRequestSchema,
   acceptMaintenanceProposal,
+  appendLifecycleEvent,
   applyMaintenanceCleanup,
   appendJsonlLog,
   appendSubagentEvent,
@@ -48,7 +49,10 @@ import {
   loadEvalCorpus,
   materializeEvalCorpus,
   generateMaintenanceProposals,
+  getEventLedgerStatus,
+  getEventTimeline,
   initKnowledgeWorkspace,
+  listEventStreams,
   listKnowledge,
   listSources,
   logMemoryFeedback,
@@ -73,8 +77,10 @@ import {
   rejectMaintenanceProposal,
   readMaintenanceObservations,
   showMaintenanceProposal,
+  showLifecycleEvent,
   showSource,
   exportKnowledgeGraph,
+  exportEventPayload,
   expandEvidence,
   expandKnowledge,
   S3HttpObjectClient,
@@ -1704,6 +1710,195 @@ source
           duplicateOf: options.duplicateOf,
           knowledgeIds: options.knowledgeId
         }),
+        null,
+        2
+      )
+    );
+  });
+
+const event = program
+  .command("event")
+  .description(
+    t(
+      "记录和查询客服 case / 需求 initiative 的 append-only 时间线",
+      "Record and query append-only support case and initiative timelines"
+    )
+  );
+
+event
+  .command("append")
+  .description(
+    t(
+      "追加脱敏 timeline metadata，并把完整 payload 加密写入 Vault",
+      "Append redacted timeline metadata and encrypt the complete payload in Vault"
+    )
+  )
+  .requiredOption("--stream-type <type>", t("support 或 initiative", "support or initiative"))
+  .requiredOption("--stream-id <id>", t("稳定 case/initiative ID", "stable case or initiative ID"))
+  .requiredOption("--stage <stage>", t("当前生命周期阶段", "lifecycle stage"))
+  .requiredOption("--event-type <type>", t("稳定事件类型", "stable event type"))
+  .requiredOption("--summary <text>", t("可审阅摘要；敏感原值会被遮蔽", "reviewable summary; sensitive raw values are redacted"))
+  .option("--payload <file>", t("完整 payload 本地文件；不从 CLI 文本读取", "local complete payload file; not read from CLI text"))
+  .option("--content-type <type>", t("payload MIME 类型", "payload MIME type"))
+  .option("--project-key <key...>", t("规范 project key，可多个", "canonical project keys"))
+  .option("--actor-type <type>", t("owner、teammate、customer 或 agent", "owner, teammate, customer, or agent"), "agent")
+  .option("--capture-mode <mode>", t("direct_material、verified_task、automated_session 或 explicit_remember", "direct_material, verified_task, automated_session, or explicit_remember"), "automated_session")
+  .option("--parent-event-id <id>", t("同 stream 中的父事件 ID", "parent event ID in the same stream"))
+  .option("--idempotency-key <key>", t("上游稳定事件 key，用于安全重试", "stable upstream event key for safe retries"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: {
+    streamType: string;
+    streamId: string;
+    stage: string;
+    eventType: string;
+    summary: string;
+    payload?: string;
+    contentType?: string;
+    projectKey?: string[];
+    actorType: string;
+    captureMode: string;
+    parentEventId?: string;
+    idempotencyKey?: string;
+    root?: string;
+  }) => {
+    if (Boolean(options.payload) !== Boolean(options.contentType)) {
+      throw new Error(
+        t(
+          "--payload 与 --content-type 必须同时提供",
+          "--payload and --content-type must be provided together"
+        )
+      );
+    }
+    const payloadText = options.payload
+      ? await readFile(path.resolve(options.payload), "utf8")
+      : undefined;
+    console.log(
+      JSON.stringify(
+        await appendLifecycleEvent(
+          resolveCliRoot(options.root),
+          {
+            streamType: options.streamType as "support" | "initiative",
+            streamId: options.streamId,
+            stage: options.stage as never,
+            eventType: options.eventType,
+            summary: options.summary,
+            payloadText,
+            payloadContentType: options.contentType,
+            projectKeys: options.projectKey ?? [],
+            actorType: options.actorType as never,
+            captureMode: options.captureMode as never,
+            parentEventId: options.parentEventId,
+            idempotencyKey: options.idempotencyKey
+          },
+          { key: configuredVaultKey(), actor: "event-append" }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+event
+  .command("list")
+  .description(t("列出客服 case / initiative stream 摘要", "List support case and initiative stream summaries"))
+  .option("--stream-type <type>", t("support 或 initiative", "support or initiative"))
+  .option("--status <status>", t("active、closed、completed 或 cancelled", "active, closed, completed, or cancelled"))
+  .option("--project-key <key...>", t("按规范 project key 过滤", "filter by canonical project keys"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: {
+    streamType?: string;
+    status?: string;
+    projectKey?: string[];
+    root?: string;
+  }) => {
+    console.log(
+      JSON.stringify(
+        await listEventStreams(resolveCliRoot(options.root), {
+          streamType: options.streamType,
+          status: options.status,
+          projectKeys: options.projectKey
+        }),
+        null,
+        2
+      )
+    );
+  });
+
+event
+  .command("timeline")
+  .description(t("读取并验证单个 case/initiative hash chain", "Read and verify one case or initiative hash chain"))
+  .argument("<stream-type>", t("support 或 initiative", "support or initiative"))
+  .argument("<stream-id>", t("Case/initiative ID", "case or initiative ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (
+    streamType: string,
+    streamId: string,
+    options: { root?: string }
+  ) => {
+    console.log(
+      JSON.stringify(
+        await getEventTimeline(
+          resolveCliRoot(options.root),
+          streamType,
+          streamId
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+event
+  .command("show")
+  .description(t("显示事件 metadata 和 payload handle，不读取完整 payload", "Show event metadata and payload handle without reading the complete payload"))
+  .argument("<event-id>", t("Event ID", "Event ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (eventId: string, options: { root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await showLifecycleEvent(resolveCliRoot(options.root), eventId),
+        null,
+        2
+      )
+    );
+  });
+
+event
+  .command("export")
+  .description(t("解密事件完整 payload 到 workspace 外 0600 文件", "Decrypt the complete event payload to a 0600 file outside the workspace"))
+  .argument("<event-id>", t("Event ID", "Event ID"))
+  .requiredOption("--output <file>", t("解密输出文件", "decrypted output file"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--overwrite", t("允许覆盖已有文件", "allow overwriting an existing file"), false)
+  .action(async (
+    eventId: string,
+    options: { output: string; root?: string; overwrite: boolean }
+  ) => {
+    console.log(
+      JSON.stringify(
+        await exportEventPayload(
+          resolveCliRoot(options.root),
+          {
+            eventId,
+            outputPath: options.output,
+            overwrite: options.overwrite
+          },
+          { key: configuredVaultKey(), actor: "event-export" }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+event
+  .command("status")
+  .description(t("汇总事件流、事件数和状态，不输出内容", "Summarize streams, events, and statuses without content"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await getEventLedgerStatus(resolveCliRoot(options.root)),
         null,
         2
       )

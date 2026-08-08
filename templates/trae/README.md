@@ -191,6 +191,17 @@ agent-knowledge capture-material \
 Source 更新时旧 fingerprint 会拒绝 mark；content change/restored 回 pending，metadata-only
 保留 current receipt。Skill 不自动批准 inbox。
 
+## lifecycle-recorder
+
+`lifecycle-recorder` 记录客服 case 和需求 initiative：完整 conversation/tool/report payload
+经治理后进入 Vault，Git 只保存脱敏摘要与 hash chain。
+
+- support 阶段覆盖 intake 到 closure/recurrence。
+- initiative 阶段覆盖 discovery/review/design/development/testing/release/operations/incident/retrospective。
+- `event append --payload <file>` 避免 payload 进入 shell history。
+- `event timeline` 校验完整链，`event export` 只写 workspace 外 0600 文件。
+- 客户事件只作为 evidence，不自动变 active knowledge；跨多个独立 stream 后再提炼流程。
+
 Writer 应主动处理显式记忆、已验证可复用结果和 `AGENTS.md` 未覆盖的稳定项目/业务约束；不应记录一次性命令、普通源码结构或未验证推断。
 
 `knowledge/_inbox-skills` 中的 `SKILL.md` 使用 Skill frontmatter，不是 KnowledgeDocument；不会进入 index、embedding、catalog、graph 或同步。

@@ -229,6 +229,57 @@ content hash 不一致的文档会失败且不推进 source watermark。导出�
 单文档 content hash、解码、脱敏或 Vault 失败会写入 checkpoint failure ledger，并通过
 `source list.inventory.failedSources` / `failedSourceIngestions` error 持续暴露；成功重试会清除。
 
+## 客服 Case 与需求 Initiative 事件
+
+Event 记录“发生了什么”，不是长期事实。完整 payload 在 secret/PII 治理后进入 Vault；Git
+只保存脱敏摘要、scope、stage、parent、previous hash 和 record hash：
+
+```bash
+agent-knowledge event append \
+  --stream-type support \
+  --stream-id case_account_ticket_12345 \
+  --stage query \
+  --event-type account_lookup \
+  --summary "查询账号组和授权关系" \
+  --payload /secure/tmp/query-result.json \
+  --content-type application/json \
+  --project-key github.com/example/support \
+  --actor-type agent \
+  --capture-mode automated_session \
+  --idempotency-key tool_call_001
+```
+
+客服阶段：
+
+```text
+intake/triage/query/hypothesis/root_cause/action/verification/escalation/closure/recurrence
+```
+
+需求阶段：
+
+```text
+discovery/review/design/development/testing/release/operations/incident/retrospective/cancelled
+```
+
+查看与审计：
+
+```bash
+agent-knowledge event list --stream-type support --status closed
+agent-knowledge event timeline support <case-id>
+agent-knowledge event show <event-id>
+agent-knowledge event export <event-id> --output /secure/tmp/payload
+agent-knowledge event status
+```
+
+- `--payload` 只接受文件，避免完整对话/工具结果进入 shell history。
+- `--idempotency-key` 使用上游 message/ticket/build/release ID；相同输入幂等，不同输入冲突。
+- 同一 stream append 使用本机锁，timeline 读取校验 sequence/parent/hash chain。
+- export 只能写 workspace 外 0600 文件。
+- `missingPayloads > 0` 表示 retention 已物理删除 Vault payload，timeline 仍保留但证据不可展开。
+- 客户/automated event 只能支持 observation/proposal；多次同 session 不算独立事实。
+- 至少跨多个独立 closed case 或完整 completed initiative，才提炼 Diagnostic Path、FAQ、
+  Project Playbook 或 SOP。
+
 ## Hook、详细日志与 staging
 
 TRAE/Claude Hook 的职责分开：

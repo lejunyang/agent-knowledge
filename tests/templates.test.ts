@@ -79,6 +79,12 @@ describe("managed integrations", () => {
       "source-distiller",
       "SKILL.md"
     );
+    const lifecycleTarget = path.join(
+      targetDir,
+      "skills",
+      "lifecycle-recorder",
+      "SKILL.md"
+    );
 
     expect((await lstat(readerTarget)).isFile()).toBe(true);
     expect((await lstat(writerTarget)).isFile()).toBe(true);
@@ -114,6 +120,12 @@ describe("managed integrations", () => {
     );
     await expect(readFile(distillerTarget, "utf8")).resolves.toContain(
       "expectedFingerprint"
+    );
+    await expect(readFile(lifecycleTarget, "utf8")).resolves.toContain(
+      "event append"
+    );
+    await expect(readFile(lifecycleTarget, "utf8")).resolves.toContain(
+      "root_cause"
     );
     const organizer = await readFile(
       path.join(skillTarget, "SKILL.md"),

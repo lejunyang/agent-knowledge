@@ -58,3 +58,7 @@ agent-knowledge maintenance cleanup --apply
 质量审计只读 V2 Markdown、source manifest 和 project registry；它会检查 source receipt 是否
 匹配当前 content hash、refined knowledge/anchor 是否仍有效。它可以阻止不完整知识进入下一步，
 但不能自行 export evidence、mark source、修复或激活知识；source 队列交给 `source-distiller`。
+
+客服/initiative event 仍是 evidence，不直接进入 active。跨多个独立 closed/completed stream 后，
+再提炼 Diagnostic Path、FAQ、Project Playbook 或 SOP；payload 只能通过 `event export` 写到
+workspace 外受控文件。
