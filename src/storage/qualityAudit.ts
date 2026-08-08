@@ -1,0 +1,351 @@
+/**
+ * 质量审计模块对 V2 Markdown、source manifest 和 project registry 做确定性检查。
+ *
+ * 它只读事实源和可重建 registry，不调用 LLM、不修改知识。审计结果用于 CI、人工 review
+ * 和正式使用门禁，不能被当作新的知识事实。
+ */
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import fg from "fast-glob";
+import { parseKnowledgeMarkdown } from "./markdown.js";
+import { discoverKnowledgeFiles } from "./workspace.js";
+import { resolveWorkspacePath } from "../core/paths.js";
+import {
+  SourceManifestSchema,
+  type SourceManifest
+} from "./sourceManifest.js";
+import type { KnowledgeDocument } from "../core/types.js";
+
+export type KnowledgeQualityFindingCode =
+  | "knowledge_body_too_thin"
+  | "metadata_frontmatter_dominates"
+  | "too_many_aliases"
+  | "too_many_scenarios"
+  | "too_many_tags"
+  | "source_without_refined_knowledge"
+  | "missing_source_manifest"
+  | "unknown_evidence_anchor"
+  | "unknown_project_key";
+
+export type KnowledgeQualityFinding = {
+  code: KnowledgeQualityFindingCode;
+  severity: "error" | "warning" | "info";
+  documentId?: string;
+  filePath?: string;
+  sourceId?: string;
+  message: string;
+};
+
+export type KnowledgeQualityPolicy = {
+  minimumKnowledgeBodyChars: number;
+  maximumFrontmatterShare: number;
+  maximumAliases: number;
+  maximumScenarios: number;
+  maximumTags: number;
+};
+
+export type KnowledgeQualityReport = {
+  generatedAt: string;
+  policy: KnowledgeQualityPolicy;
+  summary: {
+    sourceDocuments: number;
+    classifiedSources: number;
+    knowledgeDocuments: number;
+    synopsisDocuments: number;
+    sourceCoverage: number;
+    claimEvidenceCoverage: number;
+    medianKnowledgeBodyChars: number;
+    medianFrontmatterShare: number;
+  };
+  findings: KnowledgeQualityFinding[];
+};
+
+export const DEFAULT_QUALITY_POLICY: KnowledgeQualityPolicy = {
+  minimumKnowledgeBodyChars: 600,
+  maximumFrontmatterShare: 0.65,
+  maximumAliases: 8,
+  maximumScenarios: 6,
+  maximumTags: 8
+};
+
+type LoadedKnowledge = {
+  document: KnowledgeDocument;
+  rawLength: number;
+};
+
+/** 计算中位数；空数组返回 0，避免空库审计出现 NaN。 */
+function median(values: number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle] ?? 0
+    : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
+}
+
+/** 读取正式 V2 Markdown，同时保留 raw length 供 frontmatter 占比审计。 */
+async function loadKnowledge(rootDir: string): Promise<LoadedKnowledge[]> {
+  const loaded: LoadedKnowledge[] = [];
+  for (const filePath of await discoverKnowledgeFiles(rootDir)) {
+    const raw = await readFile(resolveWorkspacePath(rootDir, filePath), "utf8");
+    loaded.push({
+      document: parseKnowledgeMarkdown(filePath, raw),
+      rawLength: raw.length
+    });
+  }
+  return loaded;
+}
+
+/** 读取 Git 可跟踪 source manifest；非法 JSON/schema 必须让审计失败而不是静默跳过。 */
+async function loadSourceManifests(rootDir: string): Promise<SourceManifest[]> {
+  const paths = await fg("knowledge/source-manifests/**/*.json", {
+    cwd: rootDir,
+    absolute: false,
+    onlyFiles: true
+  });
+  const manifests: SourceManifest[] = [];
+  for (const filePath of paths.sort()) {
+    manifests.push(
+      SourceManifestSchema.parse(
+        JSON.parse(await readFile(resolveWorkspacePath(rootDir, filePath), "utf8"))
+      )
+    );
+  }
+  return manifests;
+}
+
+/** 从可重建 project registry 收集 canonical key 和 alias。 */
+async function loadKnownProjectKeys(rootDir: string): Promise<Set<string>> {
+  const paths = await fg(".memory/projects/*.json", {
+    cwd: rootDir,
+    absolute: false,
+    onlyFiles: true
+  });
+  const keys = new Set<string>();
+  for (const filePath of paths.sort()) {
+    const parsed = JSON.parse(
+      await readFile(resolveWorkspacePath(rootDir, filePath), "utf8")
+    ) as { key?: unknown; aliases?: unknown };
+    if (typeof parsed.key === "string") {
+      keys.add(parsed.key);
+    }
+    if (Array.isArray(parsed.aliases)) {
+      for (const alias of parsed.aliases) {
+        if (typeof alias === "string") {
+          keys.add(alias);
+        }
+      }
+    }
+  }
+  return keys;
+}
+
+/** 从 source 引用字符串提取规范 source ID；其他 provenance 字符串忽略。 */
+function sourceIdFromReference(reference: string): string | null {
+  return reference.startsWith("source:") ? reference.slice("source:".length) : null;
+}
+
+/** 检查一个 evidence anchor 是否命中当前 manifest 的真实 section。 */
+function anchorResolves(
+  manifestsById: Map<string, SourceManifest>,
+  input: { source_id: string; section_id: string; quote_hash: string }
+): boolean {
+  const manifest = manifestsById.get(input.source_id);
+  if (!manifest) {
+    return false;
+  }
+  return manifest.sections.some(
+    (section) =>
+      section.section_id === input.section_id &&
+      section.text_hash === input.quote_hash
+  );
+}
+
+/** 追加 finding，并保持调用点信息完整，最终统一稳定排序。 */
+function addFinding(
+  findings: KnowledgeQualityFinding[],
+  finding: KnowledgeQualityFinding
+): void {
+  findings.push(finding);
+}
+
+/**
+ * 审计整个 V2 workspace。
+ *
+ * source coverage 把 refined/duplicate/obsolete/no_long_term_value/blocked 都视为已分类；
+ * pending 表示尚未处理。claim evidence coverage 要求每个 supported claim 的全部 anchor
+ * 都能解析到 source manifest 中相同 section/hash，不能只检查数组非空。
+ */
+export async function auditKnowledgeQuality(
+  rootDir: string,
+  policy: KnowledgeQualityPolicy = DEFAULT_QUALITY_POLICY
+): Promise<KnowledgeQualityReport> {
+  const loaded = await loadKnowledge(rootDir);
+  const manifests = await loadSourceManifests(rootDir);
+  const manifestsById = new Map(
+    manifests.map((manifest) => [manifest.source_id, manifest])
+  );
+  const knownProjectKeys = await loadKnownProjectKeys(rootDir);
+  const findings: KnowledgeQualityFinding[] = [];
+  const activeKnowledge = loaded.filter(
+    ({ document }) =>
+      document.frontmatter.status === "active" &&
+      document.frontmatter.layer === "knowledge"
+  );
+  const bodyLengths: number[] = [];
+  const frontmatterShares: number[] = [];
+  let supportedClaims = 0;
+  let groundedClaims = 0;
+
+  for (const { document, rawLength } of activeKnowledge) {
+    const frontmatter = document.frontmatter;
+    const bodyLength = document.body.trim().length;
+    const frontmatterShare =
+      rawLength === 0 ? 0 : Math.max(0, (rawLength - document.body.length) / rawLength);
+    bodyLengths.push(bodyLength);
+    frontmatterShares.push(frontmatterShare);
+
+    if (
+      frontmatter.kind !== "profile" &&
+      bodyLength < policy.minimumKnowledgeBodyChars
+    ) {
+      addFinding(findings, {
+        code: "knowledge_body_too_thin",
+        severity: "warning",
+        documentId: frontmatter.id,
+        filePath: document.filePath,
+        message: `Knowledge body has ${bodyLength} characters; expected at least ${policy.minimumKnowledgeBodyChars}.`
+      });
+    }
+    if (frontmatterShare > policy.maximumFrontmatterShare) {
+      addFinding(findings, {
+        code: "metadata_frontmatter_dominates",
+        severity: "warning",
+        documentId: frontmatter.id,
+        filePath: document.filePath,
+        message: `Frontmatter share ${frontmatterShare.toFixed(3)} exceeds ${policy.maximumFrontmatterShare}.`
+      });
+    }
+    if (frontmatter.aliases.length > policy.maximumAliases) {
+      addFinding(findings, {
+        code: "too_many_aliases",
+        severity: "warning",
+        documentId: frontmatter.id,
+        filePath: document.filePath,
+        message: `Knowledge has ${frontmatter.aliases.length} aliases; expected at most ${policy.maximumAliases}.`
+      });
+    }
+    if (frontmatter.scenarios.length > policy.maximumScenarios) {
+      addFinding(findings, {
+        code: "too_many_scenarios",
+        severity: "warning",
+        documentId: frontmatter.id,
+        filePath: document.filePath,
+        message: `Knowledge has ${frontmatter.scenarios.length} scenarios; expected at most ${policy.maximumScenarios}.`
+      });
+    }
+    if (frontmatter.tags.length > policy.maximumTags) {
+      addFinding(findings, {
+        code: "too_many_tags",
+        severity: "warning",
+        documentId: frontmatter.id,
+        filePath: document.filePath,
+        message: `Knowledge has ${frontmatter.tags.length} tags; expected at most ${policy.maximumTags}.`
+      });
+    }
+
+    for (const projectKey of frontmatter.project_keys) {
+      if (!knownProjectKeys.has(projectKey)) {
+        addFinding(findings, {
+          code: "unknown_project_key",
+          severity: "warning",
+          documentId: frontmatter.id,
+          filePath: document.filePath,
+          message: `Project key is not present in the local registry: ${projectKey}.`
+        });
+      }
+    }
+
+    for (const reference of frontmatter.source) {
+      const sourceId = sourceIdFromReference(reference);
+      if (sourceId && !manifestsById.has(sourceId)) {
+        addFinding(findings, {
+          code: "missing_source_manifest",
+          severity: "error",
+          documentId: frontmatter.id,
+          filePath: document.filePath,
+          sourceId,
+          message: `Knowledge references a missing source manifest: ${sourceId}.`
+        });
+      }
+    }
+
+    for (const claim of frontmatter.claims) {
+      if (claim.status !== "supported") {
+        continue;
+      }
+      supportedClaims += 1;
+      const grounded = claim.evidence.every((anchor) =>
+        anchorResolves(manifestsById, anchor)
+      );
+      if (grounded) {
+        groundedClaims += 1;
+      } else {
+        addFinding(findings, {
+          code: "unknown_evidence_anchor",
+          severity: "error",
+          documentId: frontmatter.id,
+          filePath: document.filePath,
+          message: `Supported claim does not resolve to current source section/hash: ${claim.id}.`
+        });
+      }
+    }
+  }
+
+  const classifiedSources = manifests.filter(
+    (manifest) => manifest.processing_status !== "pending"
+  ).length;
+  for (const manifest of manifests) {
+    if (manifest.processing_status === "pending") {
+      addFinding(findings, {
+        code: "source_without_refined_knowledge",
+        severity: "warning",
+        sourceId: manifest.source_id,
+        message: `Source has not been classified or refined: ${manifest.title}.`
+      });
+    }
+  }
+
+  findings.sort(
+    (left, right) =>
+      left.severity.localeCompare(right.severity) ||
+      left.code.localeCompare(right.code) ||
+      (left.filePath ?? left.sourceId ?? "").localeCompare(
+        right.filePath ?? right.sourceId ?? ""
+      )
+  );
+
+  return {
+    generatedAt: new Date().toISOString(),
+    policy,
+    summary: {
+      sourceDocuments: manifests.length,
+      classifiedSources,
+      knowledgeDocuments: activeKnowledge.length,
+      synopsisDocuments: loaded.filter(
+        ({ document }) =>
+          document.frontmatter.status === "active" &&
+          document.frontmatter.layer === "synopsis"
+      ).length,
+      sourceCoverage:
+        manifests.length === 0 ? 1 : classifiedSources / manifests.length,
+      claimEvidenceCoverage:
+        supportedClaims === 0 ? 1 : groundedClaims / supportedClaims,
+      medianKnowledgeBodyChars: median(bodyLengths),
+      medianFrontmatterShare: median(frontmatterShares)
+    },
+    findings
+  };
+}

@@ -8,7 +8,7 @@ description: 审阅 Agent Knowledge 的 Subagent 日志、observation、检索�
 Hook/Subagent 证据只是信号，不是事实源：
 
 - `.memory/subagents` 保存本地原始 SubagentStart/Stop payload，供所有者调试。
-- `.memory/staging` 只保存 hash、长度、事件类型、project ID 和结果。
+- `.memory/staging` 只保存 hash、长度、事件类型、project key 和结果。
 - `.memory/observations`、`.memory/proposals`、`.memory/feedback/ledger.json` 是审阅/维护产物，不是 active knowledge。
 - 这些路径不参与同步，也不能作为事实注入。
 
@@ -20,6 +20,7 @@ Hook/Subagent 证据只是信号，不是事实源：
 agent-knowledge subagents status
 agent-knowledge subagents logs --limit 50
 agent-knowledge maintenance status
+agent-knowledge knowledge audit
 ```
 
 `staging status/drain` 只用于生命周期诊断。不要为了清零 pending 而 drain。普通维护会自动消费新的 SubagentStop；用户不需要编写 `observations.json`。
@@ -79,7 +80,7 @@ Proposal 类型：
   "capture_mode": "automated_session",
   "actor_type": "agent",
   "corroboration_count": 1,
-  "project_ids": ["project_id_if_known"]
+  "project_keys": ["github.com/owner/repo"]
 }
 ```
 

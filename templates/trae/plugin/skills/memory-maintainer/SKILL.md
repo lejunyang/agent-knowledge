@@ -10,6 +10,7 @@ description: 审阅 Agent Knowledge 的 Subagent 日志、observation、feedback
 ```bash
 agent-knowledge subagents status
 agent-knowledge maintenance status
+agent-knowledge knowledge audit
 agent-knowledge maintenance run
 agent-knowledge maintenance list --status pending
 agent-knowledge maintenance show "$PROPOSAL_ID"
@@ -53,3 +54,5 @@ agent-knowledge maintenance cleanup --apply
 先展示 dry-run；有待抽取 Stop 或未结束 Start 时拒绝删除。Cleanup 只删除已消费 Subagent daily logs 和已固化到 ledger 的 feedback 行，保留 query/catalog/Hook 日志、observations、proposals、active knowledge 和 ledger。
 
 不得自动接受 proposal、批准 candidate 或安装 Skill；已有 Skill 永不覆盖。
+
+质量审计只读 V2 Markdown、source manifest 和 project registry；它可以阻止不完整知识进入下一步，但不能自行修复或激活知识。

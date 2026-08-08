@@ -167,6 +167,61 @@ describe("CLI user configuration", () => {
     expect(chinese).toContain("--graph-decay");
   });
 
+  it("prints knowledge audit findings and fails only at the configured severity", async () => {
+    const temp = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-audit-cli-")
+    );
+    tempDirs.push(temp);
+    await import("node:fs/promises").then(({ cp }) =>
+      cp("tests/fixtures/basic-knowledge", temp, { recursive: true })
+    );
+
+    const report = JSON.parse(
+      await runCli([
+        "knowledge",
+        "audit",
+        "--root",
+        temp,
+        "--fail-on",
+        "never"
+      ])
+    ) as {
+      summary: { knowledgeDocuments: number };
+      findings: Array<{ severity: string }>;
+    };
+    expect(report.summary.knowledgeDocuments).toBe(2);
+    expect(report.findings.some((finding) => finding.severity === "warning")).toBe(
+      true
+    );
+
+    await expect(
+      execFileAsync(
+        "node",
+        [
+          "--import",
+          tsxLoader,
+          path.resolve("src/cli.ts"),
+          "knowledge",
+          "audit",
+          "--root",
+          temp,
+          "--fail-on",
+          "warning"
+        ],
+        {
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            AGENT_KNOWLEDGE_DISABLE_PROJECT_CONFIG: "1"
+          }
+        }
+      )
+    ).rejects.toMatchObject({
+      code: 2,
+      stdout: expect.stringContaining('"knowledge_body_too_thin"')
+    });
+  });
+
   it("automatically scopes query to the current Git project unless project IDs are explicit", async () => {
     const temp = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-project-"));
     tempDirs.push(temp);
@@ -220,7 +275,7 @@ describe("CLI user configuration", () => {
         ],
         { TEST_CWD: nested }
       )
-    ) as { relevant_facts: Array<{ id: string }> };
+    ) as { claims: Array<{ id: string }> };
     const explicitOther = JSON.parse(
       await runCli(
         [
@@ -238,11 +293,11 @@ describe("CLI user configuration", () => {
         ],
         { TEST_CWD: nested }
       )
-    ) as { relevant_facts: Array<{ id: string }> };
+    ) as { claims: Array<{ id: string }> };
 
-    expect(automatic.relevant_facts.map((item) => item.id)).toContain(
+    expect(automatic.claims.map((item) => item.id)).toContain(
       "k_project_scoped_query_marker"
     );
-    expect(explicitOther.relevant_facts).toEqual([]);
+    expect(explicitOther.claims).toEqual([]);
   });
 });

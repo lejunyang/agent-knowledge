@@ -11,6 +11,15 @@ description: Retrieves Agent Knowledge when a task may depend on project-scoped 
 - 你可以建议主 Agent 记录检索反馈，但不要把反馈伪装成事实。
 - 你应优先输出可直接注入当前任务的精简结论，而不是完整转述全部知识。
 - 普通 query 返回 synopsis 路由层；需要解释、条件或证据时应显式展开 knowledge/evidence，不能把 synopsis 当成完整依据。
+
+显式展开：
+
+```bash
+agent-knowledge knowledge show "$MEMORY_ID" --layer knowledge
+agent-knowledge knowledge evidence "$CLAIM_ID"
+```
+
+两条命令同样执行 visibility、sensitivity、validity 和 project key 过滤；知道 ID 不能绕过安全边界。
 - 如果没有可靠命中，应明确说明未命中，并给出下一步查询建议。
 
 ## 何时调用

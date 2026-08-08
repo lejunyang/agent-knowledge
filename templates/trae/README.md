@@ -54,7 +54,7 @@ agent-knowledge integration install \
 `hooks.json` 遵循 TRAE Hook `version: 1` 配置格式，包含：
 
 - `SessionStart`：初始化 `AGENT_KNOWLEDGE_ROOT`，并向当前会话补充知识库路径说明。
-- `UserPromptSubmit`：高相关命中时注入 token-budgeted context packet；无命中或低分时完全静默。
+- `UserPromptSubmit`：高相关命中时注入 token-budgeted Context Packet 2.0 synopsis；无命中或低分时完全静默。
 - `SubagentStart` / `SubagentStop`：异步记录本地详细 Subagent payload、配对和持续时间，同时保留 staging 信号。
 - `Stop` / `SessionEnd`：异步记录回合/会话结束信号。
 
@@ -73,7 +73,7 @@ Hook 输出会包含 runtime context：
 - `isGit`：该目录是否位于 Git 工作树。
 - `gitRoot`：可探测到时输出 Git 根目录。
 - `gitOrigin`：可探测到时输出 `remote.origin.url`。
-- `project ID`：Git remote 或 canonical Git root 生成的稳定 ID。
+- `project key`：规范化 Git remote，例如 `github.com/owner/repo`；无 remote 时显式使用 `local/...`。
 
 如果需要确认 TRAE 当前环境到底把 hook 放在哪个目录执行，可以运行：
 
@@ -83,7 +83,7 @@ agent-knowledge project detect
 agent-knowledge staging status
 ```
 
-`UserPromptSubmit` 未命中或低于相关性阈值时完全静默，不输出 Hook stdout。可靠命中时只注入 `context_packet`；只有用户明确要求查看知识目录时，才返回最多 5 条与 prompt 相关的菜单项。
+`UserPromptSubmit` 未命中或低于相关性阈值时完全静默，不输出 Hook stdout。可靠命中时只注入 Context Packet 2.0 synopsis；完整 knowledge/evidence 使用 `knowledge show/evidence` 显式展开。只有用户明确要求查看知识目录时，才返回最多 5 条与 prompt 相关的菜单项。
 
 ## agent-knowledge-reader 能力
 
@@ -111,13 +111,16 @@ Hook 自动路径不加载 embedding 或 reranker。
 - `description`
 - `tools: ""`
 
-该 Subagent 只输出候选 JSON，不调用工具，不写文件。候选 JSON 支持：
+该 Subagent 只输出候选 JSON，不调用工具，不写文件。V2 候选 JSON 支持：
 
-- `aliases`
+- `kind` / `layer`
+- `synopsis` / `explanation`
+- weighted `aliases` / `scenarios` / `tags`
+- evidence-backed `claims`
 - `capture_mode`
 - `actor_type`
 - `corroboration_count`
-- `project_ids`
+- `project_keys`
 - `visibility`
 - `sensitivity`
 - `episodes`
@@ -125,7 +128,7 @@ Hook 自动路径不加载 embedding 或 reranker。
 - `supersedes`
 - `conflicts_with`
 - `id`（可选稳定外部文档映射）
-- `content`（仅完整 `source` 证据）
+- `source` / evidence handles
 
 外部客户和 automatic session 只能生成 proposed observation，不能直接成为 active 事实。
 

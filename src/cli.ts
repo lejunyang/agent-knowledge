@@ -23,6 +23,7 @@ import {
   appendSubagentEvent,
   buildKnowledgeGraph,
   buildContextPacket,
+  auditKnowledgeQuality,
   calibrateRetrieval,
   catalogKnowledge,
   captureMaterial,
@@ -63,6 +64,8 @@ import {
   readMaintenanceObservations,
   showMaintenanceProposal,
   exportKnowledgeGraph,
+  expandEvidence,
+  expandKnowledge,
   S3HttpObjectClient,
   S3SyncBackend,
   TransformersBatchReranker,
@@ -820,6 +823,156 @@ program
   .action(async (options: { root?: string; write: boolean }) => {
     const result = await catalogKnowledge(resolveCliRoot(options.root), { write: options.write });
     console.log(JSON.stringify(result, null, 2));
+  });
+
+const knowledge = program
+  .command("knowledge")
+  .description(
+    t(
+      "审计和展开 V2 知识",
+      "Audit and expand V2 knowledge"
+    )
+  );
+
+knowledge
+  .command("audit")
+  .description(
+    t(
+      "检查正文、metadata、source、claim evidence 和 project key 质量",
+      "Audit body, metadata, source, claim evidence, and project key quality"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option(
+    "--fail-on <severity>",
+    t(
+      "error、warning 或 never；命中后以状态码 2 退出",
+      "error, warning, or never; exit with status 2 when matched"
+    ),
+    "never"
+  )
+  .action(async (options: { root?: string; failOn: string }) => {
+    if (
+      options.failOn !== "error" &&
+      options.failOn !== "warning" &&
+      options.failOn !== "never"
+    ) {
+      throw new Error("--fail-on must be error, warning, or never");
+    }
+    const report = await auditKnowledgeQuality(resolveCliRoot(options.root));
+    console.log(JSON.stringify(report, null, 2));
+    const shouldFail =
+      options.failOn !== "never" &&
+      report.findings.some(
+        (finding) =>
+          finding.severity === "error" ||
+          (options.failOn === "warning" && finding.severity === "warning")
+      );
+    if (shouldFail) {
+      process.exitCode = 2;
+    }
+  });
+
+knowledge
+  .command("show")
+  .description(
+    t(
+      "显式展开 synopsis 或 knowledge 正文",
+      "Explicitly expand synopsis or knowledge body"
+    )
+  )
+  .argument("<knowledge-id>", t("知识 ID", "knowledge ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option(
+    "--layer <layer>",
+    t("synopsis 或 knowledge", "synopsis or knowledge"),
+    "knowledge"
+  )
+  .option("--project <key...>", t("允许的项目 key", "allowed project keys"))
+  .option("--visibility <scope...>", t("允许的可见范围", "allowed visibility scopes"))
+  .option(
+    "--sensitivity-clearance <level>",
+    t("敏感级别权限", "sensitivity clearance")
+  )
+  .action(async (
+    knowledgeId: string,
+    options: {
+      root?: string;
+      layer: string;
+      project?: string[];
+      visibility?: string[];
+      sensitivityClearance?: string;
+    }
+  ) => {
+    if (options.layer !== "synopsis" && options.layer !== "knowledge") {
+      throw new Error("--layer must be synopsis or knowledge");
+    }
+    const root = resolveCliRoot(options.root);
+    rebuildIndex(root);
+    const projectKeys = await resolveQueryProjectKeys(root, options.project);
+    console.log(
+      JSON.stringify(
+        expandKnowledge(root, {
+          id: knowledgeId,
+          layer: options.layer,
+          request: {
+            projectKeys,
+            visibilityScopes: resolveVisibilityScopes(options.visibility),
+            sensitivityClearance: resolveSensitivityClearance(
+              options.sensitivityClearance
+            )
+          }
+        }),
+        null,
+        2
+      )
+    );
+  });
+
+knowledge
+  .command("evidence")
+  .description(
+    t(
+      "显式展开 claim 的 source/section/hash evidence handle",
+      "Explicitly expand source/section/hash evidence handles for a claim"
+    )
+  )
+  .argument("<claim-id>", t("Claim ID", "Claim ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--project <key...>", t("允许的项目 key", "allowed project keys"))
+  .option("--visibility <scope...>", t("允许的可见范围", "allowed visibility scopes"))
+  .option(
+    "--sensitivity-clearance <level>",
+    t("敏感级别权限", "sensitivity clearance")
+  )
+  .action(async (
+    claimId: string,
+    options: {
+      root?: string;
+      project?: string[];
+      visibility?: string[];
+      sensitivityClearance?: string;
+    }
+  ) => {
+    const root = resolveCliRoot(options.root);
+    rebuildIndex(root);
+    const projectKeys = await resolveQueryProjectKeys(root, options.project);
+    console.log(
+      JSON.stringify(
+        await expandEvidence(root, {
+          claimId,
+          request: {
+            projectKeys,
+            visibilityScopes: resolveVisibilityScopes(options.visibility),
+            sensitivityClearance: resolveSensitivityClearance(
+              options.sensitivityClearance
+            )
+          }
+        }),
+        null,
+        2
+      )
+    );
   });
 
 program

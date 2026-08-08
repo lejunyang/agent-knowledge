@@ -64,6 +64,7 @@ agent-knowledge integration install
 agent-knowledge init
 agent-knowledge index
 agent-knowledge query --task "审查 Vue SFC lint 迁移方案"
+agent-knowledge knowledge audit
 ```
 
 项目作用域使用规范化 Git remote，例如 `github.com/lejunyang/agent-knowledge`。普通 query 会自动发现当前仓库 remote；跨项目诊断使用：
@@ -106,11 +107,12 @@ agent-knowledge index
 日常不需要在每个任务前手工查询。推荐分工是：
 
 1. `UserPromptSubmit` Hook 只在高相关命中时注入精简 `context_packet`；无命中和低分命中完全静默。
-2. Hook 内容不足、任务依赖历史决策或业务规则时，主 Agent 主动调用 `agent-knowledge-reader`；reader 先直接 query，只有不知道领域或用户明确想浏览知识时才看 catalog。
-3. 用户明确要求记忆，或任务产生了已验证且可复用的结果时，主 Agent 调用 `agent-knowledge-writer` 生成 candidate JSON。
-4. candidate 通过 `write-candidate` 进入 `_inbox`；不会因为 Subagent 输出就直接修改 active 知识。
-5. 主 Agent 实际使用或拒绝某条知识时记录 `feedback`，为阈值校准和 Skill 沉淀提供证据。
-6. 每周或知识积累较多时运行一次 maintenance 和 inbox 审阅。
+2. Context Packet 2.0 只注入 synopsis 路由层；需要完整条件、例外或来源时，主 Agent 使用 `knowledge show` / `knowledge evidence` 显式展开。
+3. Hook 内容不足、任务依赖历史决策或业务规则时，主 Agent 主动调用 `agent-knowledge-reader`；reader 先直接 query，只有不知道领域或用户明确想浏览知识时才看 catalog。
+4. 用户明确要求记忆，或任务产生了已验证且可复用的结果时，主 Agent 调用 `agent-knowledge-writer` 生成 candidate JSON。
+5. candidate 通过 `write-candidate` 进入 `_inbox`；不会因为 Subagent 输出就直接修改 active 知识。
+6. 主 Agent 实际使用或拒绝某条知识时记录 `feedback`，为阈值校准和 Skill 沉淀提供证据。
+7. 每周或知识积累较多时运行一次 maintenance 和 inbox 审阅。
 
 推荐的每周维护：
 
@@ -277,6 +279,7 @@ agent-knowledge query --task "当前任务" --retrieval hybrid-graph
 - `_inbox-skills` 使用 Skill frontmatter，只供人工审阅/安装；不会进入 index、embedding、catalog、graph 或同步。
 - 自动会话和客户陈述只能生成 proposed observation，不能直接激活。
 - 查询和关系扩展都执行 validity、visibility、sensitivity 和 project 过滤。
+- `knowledge show/evidence` 也执行相同安全过滤；知道 ID 不能绕过 project 或敏感级别隔离。
 - 同步只处理正式 Markdown；冲突必须人工解决，不能静默覆盖。
 - Integration 默认结构化 merge；只有显式 overwrite 才删除目标文件或 symlink。
 
@@ -317,6 +320,11 @@ agent-knowledge eval-calibrate --input calibration-observations.json
 agent-knowledge graph build
 agent-knowledge graph query --text "关键词"
 agent-knowledge graph export --format html --output knowledge-graph.html
+
+# 质量审计与渐进展开
+agent-knowledge knowledge audit --fail-on warning
+agent-knowledge knowledge show <knowledge-id> --layer knowledge
+agent-knowledge knowledge evidence <claim-id>
 
 # 同步
 agent-knowledge sync run

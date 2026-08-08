@@ -337,10 +337,11 @@ export async function runEvalCase(
   const packet = buildContextPacket({ request, ranked });
   const matchedIds = ranked.map((item) => item.document.frontmatter.id);
   const injectedIds = [
-    ...packet.always_apply,
-    ...packet.relevant_facts,
+    ...packet.route,
+    ...packet.claims,
     ...packet.procedures,
-    ...packet.examples
+    ...packet.principles,
+    ...packet.episodes
   ].map((item) => item.id);
   // Expected/forbidden 评估最终注入结果；matchedIds 和 rankById 继续保留候选排序诊断。
   const missingExpected = evalCase.expected_memories.filter(

@@ -171,6 +171,40 @@ describe("syncKnowledge", () => {
     expect([...backend.files.keys()]).toEqual(["knowledge/semantic/test/team.md"]);
   });
 
+  it("never uploads deprecated or proposed Markdown from formal directories", async () => {
+    const root = await createRoot();
+    const backend = new MemorySyncBackend();
+    const active = knowledgeMarkdown("active", {
+      id: "k_20260719_sync_active"
+    });
+    await writeFile(
+      path.join(root, "knowledge", "semantic", "test", "active.md"),
+      active,
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "knowledge", "semantic", "test", "deprecated.md"),
+      active
+        .replace("k_20260719_sync_active", "k_20260719_sync_deprecated")
+        .replace("status: active", "status: deprecated"),
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "knowledge", "semantic", "test", "proposed.md"),
+      active
+        .replace("k_20260719_sync_active", "k_20260719_sync_proposed")
+        .replace("status: active", "status: proposed"),
+      "utf8"
+    );
+
+    const result = await syncKnowledge(root, backend);
+
+    expect(result.pushed).toEqual(["knowledge/semantic/test/active.md"]);
+    expect([...backend.files.keys()]).toEqual([
+      "knowledge/semantic/test/active.md"
+    ]);
+  });
+
   it("skips inaccessible remote objects from manifest metadata before reading content", async () => {
     const root = await createRoot();
     const backend = new MemorySyncBackend();

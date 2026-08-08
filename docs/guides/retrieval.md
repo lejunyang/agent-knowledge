@@ -45,6 +45,15 @@ Alias 除了 query 覆盖率，还保存显式 weight/source/kind。`uid`、`商
 
 构建 context packet 时还会过滤低相关长尾：所有候选至少需要 `finalScore >= 0.35`；普通直接候选还需达到首条结果分数的 65%，明确 `related_knowledge` 扩展只豁免这条相对门槛。该门控只减少最终注入，不删除 `query --debug` 中的候选和分项分数，便于人工继续诊断召回。
 
+Context Packet 2.0 默认只装入 `synopsis`，并按 route/claims/procedures/principles/episodes 分区。它只返回 evidence handle 和显式展开命令，不自动注入完整正文或原文：
+
+```bash
+agent-knowledge knowledge show <knowledge-id> --layer knowledge
+agent-knowledge knowledge evidence <claim-id>
+```
+
+两条命令会重新执行 active、validity、visibility、sensitivity、project 和 kind 过滤；知道 ID 或 claim ID 不能绕过隔离。当前 `evidence` 返回 source/section/hash handle，完整原文读取等 Evidence Vault 交付后再增加。
+
 ## Hybrid
 
 ```bash
@@ -68,7 +77,7 @@ Embedding 缓存包含 model、revision、dtype、dimensions、pooling、prefix 
 
 `embedding status`、`embedding download`、`embed-index`、hybrid query 和 reranker 必须使用同一个 `embeddings.cacheDir`。默认目录是 `~/.cache/agent-knowledge/models`；项目 local 配置可以复用全局已下载模型。状态显示 cached 但运行时仍找不到模型，通常说明 provider 没有使用该缓存目录，应先修配置贯通，不能重新下载一份到 `node_modules` 或其他默认目录。
 
-`type: source` 用于保存完整原始证据，不属于默认 query `includeTypes`，因此 `index` 和 `embed-index` 都不把 source 原文放入 FTS/向量缓存。应由 `knowledge-organizer` 从 source 中拆出精炼 semantic/procedural/episodic/profile 知识承担检索，避免超长原文污染 lexical/dense topK。
+`kind: source` / `layer: evidence` 用于保存 evidence，不属于默认 query `includeTypes`，因此 `index` 和 `embed-index` 都不把 source 原文放入 FTS/向量缓存。应由 `knowledge-organizer` 从 source 中拆出 semantic/procedural/episodic/profile/principle 知识承担检索，避免超长原文污染 lexical/dense topK。
 
 `embedding status` 只检查本地缓存，不联网；`embedding download` 是普通工作流中唯一默认允许显式下载模型的命令：
 

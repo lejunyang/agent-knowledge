@@ -100,9 +100,14 @@ async function writeBaseManifest(rootDir: string, backendId: string, manifest: R
 function contentMetadata(
   filePath: string,
   content: string
-): { visibility: Visibility; sensitivity: Sensitivity } {
+): {
+  status: "proposed" | "active" | "deprecated" | "rejected";
+  visibility: Visibility;
+  sensitivity: Sensitivity;
+} {
   const document = parseKnowledgeMarkdown(filePath, content);
   return {
+    status: document.frontmatter.status,
     visibility: document.frontmatter.visibility,
     sensitivity: document.frontmatter.sensitivity
   };
@@ -140,10 +145,16 @@ async function readLocalFiles(
     }
     const content = await readFile(resolveWorkspacePath(rootDir, normalized), "utf8");
     const metadata = contentMetadata(normalized, content);
-    if (!metadataAllowed(metadata, policy)) {
+    // 正式目录仍可能保留 deprecated/proposed 文档；同步事实链只传播 active。
+    if (metadata.status !== "active" || !metadataAllowed(metadata, policy)) {
       continue;
     }
-    files.set(normalized, { hash: sha256(content), content, ...metadata });
+    files.set(normalized, {
+      hash: sha256(content),
+      content,
+      visibility: metadata.visibility,
+      sensitivity: metadata.sensitivity
+    });
   }
   return files;
 }
@@ -179,11 +190,16 @@ async function readRemoteState(
     }
     const content = await backend.readFile(filePath);
     const metadata = contentMetadata(filePath, content);
-    if (!metadataAllowed(metadata, policy)) {
+    if (metadata.status !== "active" || !metadataAllowed(metadata, policy)) {
       inaccessible.add(filePath);
       continue;
     }
-    state.set(filePath, { hash: sha256(content), content, ...metadata });
+    state.set(filePath, {
+      hash: sha256(content),
+      content,
+      visibility: metadata.visibility,
+      sensitivity: metadata.sensitivity
+    });
   }
   return { state, inaccessible };
 }

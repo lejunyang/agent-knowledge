@@ -60,6 +60,15 @@ agent-knowledge write-candidate --input candidate.json
 
 候选会经过 secret-like 扫描、来源治理、去重和 schema 校验。
 
+周期维护前建议先运行确定性质量审计：
+
+```bash
+agent-knowledge knowledge audit
+agent-knowledge knowledge audit --fail-on warning
+```
+
+审计检查正文是否过薄、frontmatter 是否压过正文、metadata 数量、source 是否已分类、supported claim 的 section/hash 是否仍有效，以及 project key 是否存在于 registry。它只输出报告，不修改知识。
+
 `agent-knowledge-writer` 只输出 JSON，不调用工具、不写文件。主 Agent 负责把 JSON 保存为临时文件并执行 `write-candidate`。即使候选因 `user_confirmed` 或高置信 verified procedural 被判为 active status，文件仍先落在 `_inbox`，不会直接进入正式检索。
 
 用户直接提供的材料可由 `knowledge-organizer` 拆分，再使用：
@@ -308,7 +317,7 @@ Skill 安装后不会自动修改 integration 目标中的其他第三方 Skill�
 - `captureMode=automated_session`
 - visibility 为 `project,team`
 - sensitivity 为 `internal`
-- 按租户/业务划分 root 或 project ID，避免跨客户召回。
+- 按租户/业务划分 root 或 project key，避免跨客户召回。
 
 防护层：
 
@@ -317,7 +326,7 @@ Skill 安装后不会自动修改 integration 目标中的其他第三方 Skill�
 3. **独立佐证**：同一 actor/session 重复不算多个证据；Skill 要求至少 3 个独立 session。
 4. **受信验证**：业务事实需要 owner、正式文档或实际验证支持。
 5. **显式晋升**：只有列出具体知识 ID 的 `--approve` 才能激活不可信来源候选。
-6. **检索隔离**：visibility、sensitivity、project ID、validity 在直接和图关系扩展中都重新检查。
+6. **检索隔离**：visibility、sensitivity、project key、validity 在直接、图关系扩展和显式 knowledge/evidence 展开中都重新检查。
 7. **Secret 扫描**：常见 token/API key/私钥格式在 candidate 写入前拒绝。
 8. **同步边界**：只同步正式 Markdown，不同步日志、observations、proposals 或 inbox。
 

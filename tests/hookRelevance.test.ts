@@ -9,26 +9,36 @@ import type { ContextPacket, RankedMemory } from "../src/core/types.js";
 
 function makePacket(): ContextPacket {
   return {
-    context_version: "1.0",
+    context_version: "2.0",
     scene: {
       task_type: "main",
       domains: [],
-      scenarios: []
+      scenarios: [],
+      project_keys: []
     },
-    always_apply: [],
-    relevant_facts: [
+    route: [],
+    claims: [
       {
         id: "k_lint",
         title: "Vue lint 规则",
         content: "Vue SFC template 需要 ESLint fallback。",
         confidence: 0.9,
+        projectKeys: [],
         source: ["test"]
       }
     ],
     procedures: [],
-    examples: [],
+    principles: [],
+    episodes: [],
+    evidence_handles: [],
     warnings: [],
-    sources: ["test"]
+    sources: ["test"],
+    expansion: {
+      available: true,
+      commands: [
+        "agent-knowledge knowledge show k_lint --layer knowledge"
+      ]
+    }
   };
 }
 
@@ -205,7 +215,7 @@ describe("hook relevance", () => {
     });
 
     expect(result.decision).toBe("context");
-    expect(result.additionalContext).toContain("relevant_facts");
+    expect(result.additionalContext).toContain('"claims"');
     expect(result.additionalContext).not.toContain("catalog");
     expect(result.additionalContext).not.toContain("runtime");
   });

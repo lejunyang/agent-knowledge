@@ -774,8 +774,15 @@ describe("buildContextPacket", () => {
 
     const packet = buildContextPacket({ request, ranked });
 
-    expect(packet.relevant_facts[0]?.id).toBe("k_20260705_frontend_lint_vue_sfc");
+    expect(packet.context_version).toBe("2.0");
+    expect(packet.claims[0]?.id).toBe("k_20260705_frontend_lint_vue_sfc");
     expect(packet.procedures[0]?.id).toBe("k_20260705_lint_validation_flow");
+    expect(packet.claims[0]?.content).toBe(
+      "Oxlint 负责 TS/JS 快速检查，Vue SFC template 仍需要 ESLint fallback。"
+    );
+    expect(packet.expansion.commands).toContain(
+      "agent-knowledge knowledge show k_20260705_frontend_lint_vue_sfc --layer knowledge"
+    );
   });
 
   it("enforces maxTokens while preserving a valid packet", async () => {
@@ -802,10 +809,11 @@ describe("buildContextPacket", () => {
 
     expect(estimateContextPacketTokens(packet)).toBeLessThanOrEqual(request.maxTokens);
     expect(
-      packet.always_apply.length +
-        packet.relevant_facts.length +
+      packet.route.length +
+        packet.claims.length +
         packet.procedures.length +
-        packet.examples.length
+        packet.principles.length +
+        packet.episodes.length
     ).toBeLessThan(2);
   });
 
@@ -861,7 +869,7 @@ describe("buildContextPacket", () => {
       ranked: [strongest, weakDirect, explicitRelated]
     });
     const injectedIds = [
-      ...packet.relevant_facts,
+      ...packet.claims,
       ...packet.procedures
     ].map((item) => item.id);
 

@@ -39,6 +39,7 @@ function toItem(memory: RankedMemory): ContextPacketItem {
     title: document.frontmatter.title,
     content: document.frontmatter.synopsis,
     confidence: document.frontmatter.confidence,
+    projectKeys: document.frontmatter.project_keys,
     source: document.frontmatter.source
   };
 }
@@ -47,32 +48,78 @@ function toItem(memory: RankedMemory): ContextPacketItem {
 function clonePacket(packet: ContextPacket): ContextPacket {
   return {
     ...packet,
-    scene: { ...packet.scene, domains: [...packet.scene.domains], scenarios: [...packet.scene.scenarios] },
-    always_apply: [...packet.always_apply],
-    relevant_facts: [...packet.relevant_facts],
+    scene: {
+      ...packet.scene,
+      domains: [...packet.scene.domains],
+      scenarios: [...packet.scene.scenarios],
+      project_keys: [...packet.scene.project_keys]
+    },
+    route: [...packet.route],
+    claims: [...packet.claims],
     procedures: [...packet.procedures],
-    examples: [...packet.examples],
+    principles: [...packet.principles],
+    episodes: [...packet.episodes],
+    evidence_handles: [...packet.evidence_handles],
     warnings: [...packet.warnings],
-    sources: [...packet.sources]
+    sources: [...packet.sources],
+    expansion: {
+      available: packet.expansion.available,
+      commands: [...packet.expansion.commands]
+    }
   };
 }
 
 /** 试装一个条目，只有估算 token 未超预算时才提交到目标分区。 */
 function addWithinBudget(
   packet: ContextPacket,
-  section: "always_apply" | "relevant_facts" | "procedures" | "examples",
+  section: "route" | "claims" | "procedures" | "principles" | "episodes",
   item: ContextPacketItem,
-  maxTokens: number
+  maxTokens: number,
+  evidenceHandles: ContextPacket["evidence_handles"],
+  commands: string[]
 ): boolean {
   const candidate = clonePacket(packet);
   candidate[section].push(item);
   candidate.sources = [...new Set([...candidate.sources, ...item.source])].slice(0, 10);
+  candidate.evidence_handles.push(...evidenceHandles);
+  candidate.expansion.commands = [
+    ...new Set([...candidate.expansion.commands, ...commands])
+  ];
+  candidate.expansion.available = candidate.expansion.commands.length > 0;
   if (estimateContextPacketTokens(candidate) > maxTokens) {
     return false;
   }
   packet[section].push(item);
   packet.sources = candidate.sources;
+  packet.evidence_handles = candidate.evidence_handles;
+  packet.expansion = candidate.expansion;
   return true;
+}
+
+/** 从知识 claims 构建可显式展开的 evidence handles，不包含原始正文。 */
+function evidenceHandlesFor(memory: RankedMemory): ContextPacket["evidence_handles"] {
+  return memory.document.frontmatter.claims.flatMap((claim) =>
+    claim.evidence.map((anchor) => ({
+      knowledgeId: memory.document.frontmatter.id,
+      claimId: claim.id,
+      sourceId: anchor.source_id,
+      sectionId: anchor.section_id,
+      quoteHash: anchor.quote_hash
+    }))
+  );
+}
+
+/** 为已装入 packet 的知识生成显式展开命令。 */
+function expansionCommandsFor(memory: RankedMemory): string[] {
+  const commands = [
+    `agent-knowledge knowledge show ${memory.document.frontmatter.id} --layer knowledge`
+  ];
+  for (const claim of memory.document.frontmatter.claims) {
+    if (claim.evidence.length > 0) {
+      commands.push(`agent-knowledge knowledge evidence ${claim.id}`);
+    }
+  }
+  return commands;
 }
 
 /**
@@ -100,18 +147,25 @@ export function estimateContextPacketTokens(packet: ContextPacket): number {
  */
 export function buildContextPacket(input: BuildContextPacketInput): ContextPacket {
   const packet: ContextPacket = {
-    context_version: "1.0",
+    context_version: "2.0",
     scene: {
       task_type: input.request.agentRole,
       domains: input.request.domains,
-      scenarios: input.request.scenarios
+      scenarios: input.request.scenarios,
+      project_keys: input.request.projectKeys
     },
-    always_apply: [],
-    relevant_facts: [],
+    route: [],
+    claims: [],
     procedures: [],
-    examples: [],
+    principles: [],
+    episodes: [],
+    evidence_handles: [],
     warnings: [],
-    sources: []
+    sources: [],
+    expansion: {
+      available: false,
+      commands: []
+    }
   };
 
   const topScore = input.ranked[0]?.finalScore ?? 0;
@@ -120,18 +174,58 @@ export function buildContextPacket(input: BuildContextPacketInput): ContextPacke
   )) {
     const type = ranked.document.frontmatter.kind;
     const item = toItem(ranked);
+    const evidenceHandles = evidenceHandlesFor(ranked);
+    const commands = expansionCommandsFor(ranked);
 
     if (type === "profile") {
-      addWithinBudget(packet, "always_apply", item, input.request.maxTokens);
+      addWithinBudget(
+        packet,
+        "route",
+        item,
+        input.request.maxTokens,
+        evidenceHandles,
+        commands
+      );
     }
     if (type === "semantic") {
-      addWithinBudget(packet, "relevant_facts", item, input.request.maxTokens);
+      addWithinBudget(
+        packet,
+        "claims",
+        item,
+        input.request.maxTokens,
+        evidenceHandles,
+        commands
+      );
     }
     if (type === "procedural") {
-      addWithinBudget(packet, "procedures", item, input.request.maxTokens);
+      addWithinBudget(
+        packet,
+        "procedures",
+        item,
+        input.request.maxTokens,
+        evidenceHandles,
+        commands
+      );
+    }
+    if (type === "principle") {
+      addWithinBudget(
+        packet,
+        "principles",
+        item,
+        input.request.maxTokens,
+        evidenceHandles,
+        commands
+      );
     }
     if (type === "episodic") {
-      addWithinBudget(packet, "examples", item, input.request.maxTokens);
+      addWithinBudget(
+        packet,
+        "episodes",
+        item,
+        input.request.maxTokens,
+        evidenceHandles,
+        commands
+      );
     }
 
     for (const conflict of ranked.document.frontmatter.conflicts_with) {
@@ -151,6 +245,7 @@ export function buildContextPacket(input: BuildContextPacketInput): ContextPacke
   if (estimateContextPacketTokens(packet) > input.request.maxTokens) {
     packet.scene.domains = [];
     packet.scene.scenarios = [];
+    packet.scene.project_keys = [];
   }
   if (estimateContextPacketTokens(packet) > input.request.maxTokens) {
     throw new Error(`maxTokens=${input.request.maxTokens} is too small for the context packet envelope`);

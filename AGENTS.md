@@ -15,7 +15,8 @@
 - `.memory/subagents/*.jsonl` 是本地完整 Subagent 调试日志，不是事实源，不参与同步或上下文注入。
 - `.memory/observations/*.jsonl` 和 `.memory/proposals/*.json` 是自动维护的中间审阅产物，不是事实源。
 - `.memory/graph.json` 是从 Markdown/proposal 重建的知识关系图索引，不是事实源。
-- `agent-knowledge query` 输出主 agent 可注入的 `context packet`，`--debug` 附带 scorer/reranker 和分项分数。
+- `agent-knowledge query` 输出主 agent 可注入的 Context Packet 2.0，默认只含 synopsis 与 evidence handles；`--debug` 附带 scorer/reranker 和分项分数。
+- `agent-knowledge knowledge audit` 检查正文密度、metadata 膨胀、source 处理状态、claim evidence 和 project registry；`knowledge show/evidence` 执行安全过滤后显式展开。
 - `agent-knowledge embed-index` 使用本地 provider 生成 embedding 缓存；`agent-knowledge suggest-aliases` 只输出 dry-run JSON 建议。
 - `agent-knowledge write-candidate` 只写候选知识到 `knowledge/_inbox/`。
 - `agent-knowledge integration` 为 TRAE、TRAE CN 和 Claude Code 安装可选 hooks/agents/skills/plugin bundle，使用普通托管文件和结构化 merge，不创建 symlink。
@@ -206,7 +207,7 @@ src/cli.ts            命令行入口和各模块编排
   - 检查 `templates/trae/README.md` 和 integration 安装/卸载/merge 测试。
   - 审视后确实无需修改某类模板时保持文件不动，并在进度或提交说明中明确“已检查、无需变化”，不要制造无意义 churn。
   - Subagent 模板必须遵循宿主要求的 Markdown + YAML frontmatter；TRAE Hook 必须保持 `version: 1` JSON 格式。
-- `UserPromptSubmit` 无命中、低于阈值或异常时默认静默；普通命中只能注入最小 `context_packet`。禁止恢复全量 catalog、runtime context 或无命中说明。知识目录仅在显式 catalog intent 下返回配置上限内的相关条目（默认 5）。
+- `UserPromptSubmit` 无命中、低于阈值或异常时默认静默；普通命中只能注入最小 Context Packet 2.0 synopsis。禁止自动展开 knowledge/evidence、恢复全量 catalog、runtime context 或无命中说明。知识目录仅在显式 catalog intent 下返回配置上限内的相关条目（默认 5）。
 - `SubagentStart` / `SubagentStop` 可记录本地完整 payload 到 `.memory/subagents/`，但不得同步、注入模型上下文或作为 active 事实；其他 Hook 继续使用脱敏 staging。
 - 修改产品安装时同时 review `templates/claude-code/`、`templates/trae/plugin/` 和 integration merge/uninstall 测试。
 - `trae` 项目/用户资源根是 `.trae`，必须同时管理 `.trae/hooks.json` 和 `.trae/cli/hooks.json`；`trae-cn` 使用 `.trae-cn/hooks.json`；Claude Code 使用 `.claude/settings.json`。
@@ -318,7 +319,7 @@ Hook 主动记忆边界：
 
 - `SubagentStart` / `SubagentStop` 同时写本地完整 `.memory/subagents` 调试日志和脱敏 staging；`Stop` / `SessionEnd` 只写脱敏 staging。
 - 详细 Subagent 日志默认不脱敏，供本机所有者调试；不得同步、注入模型上下文或直接作为事实。
-- Staging 只保存 hash、长度、agent type、reason、project ID，不保存完整文本。
+- Staging 只保存 hash、长度、agent type、reason、project key，不保存完整文本。
 - 当前 command hook 不直接调用 Subagent；语义抽取由主 Agent 委派 `agent-knowledge-writer` 或触发 `memory-maintainer`。
 - 不在 Stop hook 中强制续跑模型。
 

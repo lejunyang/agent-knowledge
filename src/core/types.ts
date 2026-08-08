@@ -68,27 +68,44 @@ export type ContextPacketItem = {
   title: string;
   content: string;
   confidence: number;
+  projectKeys: string[];
   source: string[];
+};
+
+export type ContextEvidenceHandle = {
+  knowledgeId: string;
+  claimId: string;
+  sourceId: string;
+  sectionId: string;
+  quoteHash: string;
 };
 
 /**
  * ContextPacket 是本项目对外最重要的输出协议。
  *
- * 调用方应按区域注入：稳定规则、相关事实、流程、案例、风险和来源。
+ * 默认只注入 synopsis，并提供显式 knowledge/evidence 展开命令。完整正文和 evidence
+ * 不能因为检索命中就自动进入 Hook 上下文。
  */
 export type ContextPacket = {
-  context_version: "1.0";
+  context_version: "2.0";
   scene: {
     task_type: string;
     domains: string[];
     scenarios: string[];
+    project_keys: string[];
   };
-  always_apply: ContextPacketItem[];
-  relevant_facts: ContextPacketItem[];
+  route: ContextPacketItem[];
+  claims: ContextPacketItem[];
   procedures: ContextPacketItem[];
-  examples: ContextPacketItem[];
+  principles: ContextPacketItem[];
+  episodes: ContextPacketItem[];
+  evidence_handles: ContextEvidenceHandle[];
   warnings: Array<{ type: string; message: string; source?: string }>;
   sources: string[];
+  expansion: {
+    available: boolean;
+    commands: string[];
+  };
 };
 
 /**

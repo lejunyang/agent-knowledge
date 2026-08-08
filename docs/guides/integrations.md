@@ -46,7 +46,7 @@ agent-knowledge integration install
 `UserPromptSubmit` 默认保持静默：
 
 - 无命中或低于相关性阈值时不输出 stdout，也不污染 Agent 上下文。
-- 可靠命中时只注入受 token budget 限制的 `context_packet`。
+- 可靠命中时只注入受 token budget 限制的 Context Packet 2.0 synopsis；完整 knowledge/evidence 必须显式展开。
 - 只有明确询问“有哪些知识/记忆/SOP/目录”时，才返回最多 5 条与 prompt 相关的知识菜单。
 - 普通任务不会注入 runtime context、全量 catalog、aliases registry 或“没有命中”的提示。
 
@@ -97,7 +97,7 @@ agent-knowledge subagents status
 
 - `integration doctor`：检查 manifest、目标文件和已安装组件。
 - `hook doctor`：查看 Hook 实际 cwd、Git root 和 origin。
-- `project detect`：确认当前 Git 项目映射到哪个稳定 project ID。
+- `project detect`：确认当前 Git 项目映射到哪个规范 project key；无 remote 时使用 `--project-key local/...`。
 - `subagents status`：确认 Start/Stop 是否被宿主实际调用和配对。
 
 卸载：

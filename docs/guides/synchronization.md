@@ -92,7 +92,8 @@ agent-knowledge sync watch --interval-minutes 15
 
 ## 多设备和客服机器人建议
 
-- 个人电脑与机器人不要默认共用同一个无隔离 root/prefix；至少按租户、业务或环境设置不同 project ID/prefix。
+- 个人电脑与机器人不要默认共用同一个无隔离 root/prefix；至少按租户、业务或环境设置不同 project key/prefix。
+- 只有 `status: active` 的正式 Markdown 参与同步；正式目录中的 proposed/deprecated/rejected 不上传，也不从远端拉取。
 - 只把已经人工审阅的正式知识同步给机器人。日志、客户原始对话、proposal 和 inbox 不应通过同步传播。
 - 机器人使用 `actorType=customer` / `captureMode=automated_session` 生成本地 proposal；人工确认后再把 active Markdown 同步到共享端。
 - 多台机器同时运行 `sync watch` 时保持合理间隔，并定期检查 `.memory/sync/conflicts`。
