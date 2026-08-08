@@ -6,6 +6,7 @@ import { buildContextPacket } from "../src/retrieval/contextPacket.js";
 import { rebuildIndex } from "../src/storage/indexer.js";
 import { captureMaterial } from "../src/memory/organizer.js";
 import { queryMemories, queryMemoriesWithDebug } from "../src/retrieval/query.js";
+import { weightedMetadataScore } from "../src/retrieval/scoring.js";
 import { getLogFilePath } from "../src/core/logging.js";
 import type { MemoryQueryRequest } from "../src/core/types.js";
 import type { EmbeddingScorer, MemoryReranker } from "../src/retrieval/scoring.js";
@@ -20,6 +21,34 @@ afterEach(async () => {
 });
 
 describe("queryMemories", () => {
+  it("weights metadata by relevance, coverage, and corpus specificity", () => {
+    const documentFrequency = new Map([
+      ["getcanreuseaccountfordouyinmerchant", 1],
+      ["internal-doc", 90]
+    ]);
+    const specific = weightedMetadataScore({
+      query: "GetCanReuseAccountForDouyinMerchant 为什么过滤资质",
+      values: [
+        {
+          value: "GetCanReuseAccountForDouyinMerchant",
+          weight: 0.95
+        }
+      ],
+      documentFrequency,
+      documentCount: 100
+    });
+    const generic = weightedMetadataScore({
+      query: "internal-doc 为什么过滤资质",
+      values: [{ value: "internal-doc", weight: 0.1 }],
+      documentFrequency,
+      documentCount: 100
+    });
+
+    expect(specific).toBeGreaterThan(generic);
+    expect(specific).toBeGreaterThan(0.4);
+    expect(generic).toBeLessThan(0.05);
+  });
+
   it("retrieves lint migration knowledge with related procedures", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-"));
     tempDirs.push(root);
@@ -356,6 +385,94 @@ describe("queryMemories", () => {
     expect(
       accountScores.get("k_eval_generic_product_overview")?.lexicalScore
     ).toBeLessThan(1);
+  });
+
+  it("exposes weighted metadata as an independent debug feature", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-query-weighted-metadata-")
+    );
+    tempDirs.push(root);
+    await captureMaterial(
+      root,
+      [
+        {
+          id: "k_eval_specific_weighted_alias",
+          title: "资质复用过滤排查",
+          kind: "procedural",
+          layer: "knowledge",
+          synopsis: "按具体接口和账户 ID 排查资质复用过滤。",
+          explanation:
+            "# 资质复用过滤排查\n\n先使用具体接口定位候选账户，再检查过滤原因。",
+          aliases: [
+            {
+              value: "GetCanReuseAccountForDouyinMerchant",
+              kind: "technical_identifier",
+              weight: 0.98,
+              source: "documented"
+            }
+          ],
+          domain: "business/qualification",
+          related_domains: [],
+          scenarios: [
+            {
+              id: "qualification-reuse",
+              role: "primary",
+              weight: 0.95
+            }
+          ],
+          tags: [],
+          claims: [],
+          confidence: 0.9,
+          source_authority: "documented",
+          evidence: ["test:specific"]
+        },
+        {
+          id: "k_eval_generic_weighted_tag",
+          title: "内部文档概览",
+          kind: "semantic",
+          layer: "knowledge",
+          synopsis: "内部文档提供一般背景。",
+          explanation: "# 内部文档概览\n\n只提供一般背景。",
+          aliases: [],
+          domain: "business/overview",
+          related_domains: [],
+          scenarios: [
+            { id: "business-knowledge", role: "primary", weight: 0.4 }
+          ],
+          tags: [
+            {
+              value: "internal-doc",
+              weight: 0.1,
+              source: "documented",
+              retrieval: true
+            }
+          ],
+          claims: [],
+          confidence: 0.9,
+          source_authority: "documented",
+          evidence: ["test:generic"]
+        }
+      ],
+      { target: "active", rebuild: true }
+    );
+
+    const result = queryMemoriesWithDebug(root, {
+      task: "GetCanReuseAccountForDouyinMerchant 为什么过滤资质",
+      agentRole: "main"
+    });
+    const scores = new Map(
+      result.debug.resultScores.map((item) => [item.id, item])
+    );
+
+    expect(result.ranked[0]?.document.frontmatter.id).toBe(
+      "k_eval_specific_weighted_alias"
+    );
+    expect(
+      scores.get("k_eval_specific_weighted_alias")?.metadataScore
+    ).toBeGreaterThan(0);
+    expect(
+      scores.get("k_eval_generic_weighted_tag")?.metadataScore ?? 0
+    ).toBe(0);
   });
 
   it("suppresses full-table fallback when domain and scenario are missing", async () => {

@@ -27,7 +27,8 @@ import {
   defaultMemoryReranker,
   type EmbeddingScorer,
   type MemoryReranker,
-  type ScoreFeatures
+  type ScoreFeatures,
+  weightedMetadataScore
 } from "./scoring.js";
 import {
   applyBatchRerank,
@@ -47,13 +48,16 @@ type MemoryRow = {
   title: string;
   synopsis: string;
   aliases: string;
+  weighted_aliases: string;
   domain: string;
   related_domains: string;
   scenarios: string;
+  weighted_scenarios: string;
   status: string;
   confidence: number;
   source_authority: SourceAuthority;
   tags: string;
+  weighted_tags: string;
   summary: string;
   body: string;
   visibility: string;
@@ -100,6 +104,7 @@ export type QueryDebugInfo = {
     id: string;
     lexicalScore: number;
     embeddingScore: number;
+    metadataScore: number;
     scenarioScore: number;
     confidenceScore: number;
     sourceAuthorityScore: number;
@@ -169,6 +174,85 @@ function toFtsQuery(tokens: string[]): string {
 function parseJsonArray(value: string): string[] {
   const parsed = JSON.parse(value) as unknown;
   return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+}
+
+/** 从 SQLite JSON 字段恢复带 value/weight 的 metadata，损坏项按无证据跳过。 */
+function parseWeightedValues(
+  value: string,
+  valueField: "value" | "id",
+  options: { requireRetrieval?: boolean } = {}
+): Array<{ value: string; weight: number }> {
+  const parsed = JSON.parse(value) as unknown;
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  return parsed.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const record = item as Record<string, unknown>;
+    if (
+      typeof record[valueField] !== "string" ||
+      typeof record.weight !== "number" ||
+      (options.requireRetrieval && record.retrieval !== true)
+    ) {
+      return [];
+    }
+    return [{ value: record[valueField], weight: record.weight }];
+  });
+}
+
+/** 汇总单条索引记录中参与 metadata scoring 的规范值。 */
+function rowWeightedMetadata(
+  row: MemoryRow
+): Array<{ value: string; weight: number }> {
+  return [
+    { value: row.domain, weight: 1 },
+    ...parseJsonArray(row.related_domains).map((value) => ({
+      value,
+      weight: 0.6
+    })),
+    ...parseWeightedValues(row.weighted_aliases, "value"),
+    ...parseWeightedValues(row.weighted_scenarios, "id"),
+    ...parseWeightedValues(row.weighted_tags, "value", {
+      requireRetrieval: true
+    })
+  ];
+}
+
+type MetadataStatistics = {
+  documentCount: number;
+  documentFrequency: Map<string, number>;
+};
+
+/** 使用与 label 比较一致的形式生成全库 metadata frequency key。 */
+function metadataFrequencyKey(value: string): string {
+  return normalizeLabel(value);
+}
+
+/** 从完整 SQLite 索引构建 document frequency；同一文档内重复值只计一次。 */
+function loadMetadataStatistics(rootDir: string): MetadataStatistics {
+  const db = new DatabaseSync(getIndexDbPath(rootDir), { readOnly: true });
+  try {
+    const rows = db
+      .prepare(
+        `SELECT domain, related_domains, weighted_aliases, weighted_scenarios, weighted_tags
+         FROM memories`
+      )
+      .all() as MemoryRow[];
+    const documentFrequency = new Map<string, number>();
+    for (const row of rows) {
+      const values = new Set(
+        rowWeightedMetadata(row).map((item) => metadataFrequencyKey(item.value))
+      );
+      for (const value of values) {
+        documentFrequency.set(value, (documentFrequency.get(value) ?? 0) + 1);
+      }
+    }
+    return { documentCount: rows.length, documentFrequency };
+  } finally {
+    db.close();
+  }
 }
 
 /** 从索引记录的相对路径重新读取 Markdown，保证最终内容始终来自事实源。 */
@@ -242,27 +326,22 @@ function domainIntersects(left: string[], right: string[]): boolean {
   return left.some((leftItem) => right.some((rightItem) => domainLabelMatches(leftItem, rightItem)));
 }
 
-/** 给 metadata exact-match 通道计算离散分数，随后仅用于生成 rank。 */
-function metadataMatchScore(row: MemoryRow, request: MemoryQueryRequest): number {
-  const domains = [row.domain, ...parseJsonArray(row.related_domains)];
-  const scenarios = parseJsonArray(row.scenarios);
-  const aliases = parseJsonArray(row.aliases);
-  let score = 0;
-
-  if (
-    request.domains.some((requested) =>
-      domains.some((domain) => normalizeLabel(domain) === normalizeLabel(requested))
-    )
-  ) {
-    score += 2;
-  }
-  if (request.scenarios.length > 0 && fuzzyIntersects(scenarios, request.scenarios)) {
-    score += 2;
-  }
-  if (aliasCoverageScore(aliases, request.task) >= 0.45) {
-    score += 1;
-  }
-  return score;
+/** 计算当前 query 对单条 V2 weighted metadata 的覆盖和特异性分数。 */
+function metadataMatchScore(
+  row: MemoryRow,
+  request: MemoryQueryRequest,
+  statistics: MetadataStatistics
+): number {
+  return weightedMetadataScore({
+    query: [
+      request.task,
+      ...request.domains,
+      ...request.scenarios
+    ].join(" "),
+    values: rowWeightedMetadata(row),
+    documentFrequency: statistics.documentFrequency,
+    documentCount: statistics.documentCount
+  });
 }
 
 const SENSITIVITY_LEVEL = {
@@ -460,6 +539,7 @@ function scoreRow(
   normalizedLexicalScore: number,
   relationScore: number,
   denseScore: number | undefined,
+  metadataScore: number,
   rrfScore: number,
   embeddingScorer: EmbeddingScorer,
   reranker: MemoryReranker
@@ -480,6 +560,7 @@ function scoreRow(
   const features: ScoreFeatures = {
     lexicalScore,
     embeddingScore,
+    metadataScore,
     scenarioScore,
     confidenceScore,
     sourceAuthorityScore,
@@ -491,6 +572,7 @@ function scoreRow(
   return {
     lexicalScore,
     embeddingScore,
+    metadataScore,
     scenarioScore,
     confidenceScore,
     sourceAuthorityScore,
@@ -747,6 +829,7 @@ function rankSelectedRows(
   const embeddingScorer = scoringOptions.embeddingScorer ?? defaultEmbeddingScorer;
   const reranker = scoringOptions.reranker ?? defaultMemoryReranker;
   const expandedRequest = expandRequestWithAliases(request, selection.rows);
+  const metadataStatistics = loadMetadataStatistics(rootDir);
   const directRows = selection.rows.filter((row) => rowMatchesRequest(row, expandedRequest));
   const directIds = new Set(directRows.map((row) => row.id));
   const relatedIds = new Set<string>();
@@ -773,7 +856,14 @@ function rankSelectedRows(
 
   const metadataRanks = new Map(
     directRows
-      .map((row) => ({ row, score: metadataMatchScore(row, expandedRequest) }))
+      .map((row) => ({
+        row,
+        score: metadataMatchScore(
+          row,
+          expandedRequest,
+          metadataStatistics
+        )
+      }))
       // 0 分表示没有 metadata 证据，不能仅因进入候选池就获得 RRF 通道排名。
       .filter((item) => item.score > 0)
       .sort(
@@ -810,6 +900,7 @@ function rankSelectedRows(
           selection.lexicalScores.get(row.id) ?? 0,
           relationScore,
           selection.denseScores.get(row.id),
+          metadataMatchScore(row, expandedRequest, metadataStatistics),
           rrfFor(row.id),
           embeddingScorer,
           reranker
@@ -832,6 +923,7 @@ function rankSelectedRows(
       id: item.document.frontmatter.id,
       lexicalScore: item.lexicalScore,
       embeddingScore: item.embeddingScore,
+      metadataScore: item.metadataScore,
       scenarioScore: item.scenarioScore,
       confidenceScore: item.confidenceScore,
       sourceAuthorityScore: item.sourceAuthorityScore,
@@ -944,6 +1036,7 @@ export function loadAccessibleMemoriesByIds(
   const request = MemoryQueryRequestSchema.parse(rawRequest);
   const embeddingScorer = scoringOptions.embeddingScorer ?? defaultEmbeddingScorer;
   const reranker = scoringOptions.reranker ?? defaultMemoryReranker;
+  const metadataStatistics = loadMetadataStatistics(rootDir);
   return selectRowsByIds(rootDir, ids)
     .filter(
       (row) =>
@@ -963,6 +1056,7 @@ export function loadAccessibleMemoriesByIds(
           0,
           0,
           undefined,
+          metadataMatchScore(row, request, metadataStatistics),
           0,
           embeddingScorer,
           reranker

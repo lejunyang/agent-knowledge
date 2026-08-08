@@ -155,6 +155,7 @@ export async function queryMemoriesGraphWithDebug(
           id,
           lexicalScore: memory.lexicalScore,
           embeddingScore: memory.embeddingScore,
+          metadataScore: memory.metadataScore,
           scenarioScore: memory.scenarioScore,
           confidenceScore: memory.confidenceScore,
           sourceAuthorityScore: memory.sourceAuthorityScore,

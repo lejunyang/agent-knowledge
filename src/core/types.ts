@@ -98,6 +98,7 @@ export type RankedMemory = {
   document: KnowledgeDocument;
   lexicalScore: number;
   embeddingScore: number;
+  metadataScore: number;
   scenarioScore: number;
   confidenceScore: number;
   sourceAuthorityScore: number;

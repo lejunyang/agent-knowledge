@@ -5,7 +5,12 @@
  * 这样 query 模块可以先稳定暴露 scorer / reranker 接口，后续替换为真正 embedding
  * 或更复杂的重排器时，不需要改动 CLI 输出协议。
  */
-import type { KnowledgeDocument, MemoryQueryRequest, RankedMemory, SourceAuthority } from "../core/types.js";
+import type {
+  KnowledgeDocument,
+  MemoryQueryRequest,
+  RankedMemory,
+  SourceAuthority
+} from "../core/types.js";
 import {
   aliasValues,
   scenarioIds,
@@ -44,12 +49,13 @@ export const AUTHORITY_SCORE: Record<SourceAuthority, number> = {
 
 export const DEFAULT_RERANK_WEIGHTS = {
   lexicalScore: 0.15,
-  embeddingScore: 0.2,
-  scenarioScore: 0.15,
+  embeddingScore: 0.15,
+  metadataScore: 0.15,
+  scenarioScore: 0.1,
   confidenceScore: 0.1,
   sourceAuthorityScore: 0.1,
   relationScore: 0.05,
-  rrfScore: 0.25
+  rrfScore: 0.2
 } as const;
 
 /** 把非有限值和越界特征分数收敛到 0-1，防止污染最终排序。 */
@@ -104,6 +110,61 @@ function cosineSimilarity(left: Map<string, number>, right: Map<string, number>)
   return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
 }
 
+/** 统一 metadata 文本，使 query 覆盖和 document frequency 使用相同比较形式。 */
+function normalizeMetadataValue(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[_\s]+/g, "-")
+    .replace(/-+/g, "-");
+}
+
+/** 按字符串长度估算 metadata 对完整 query 的覆盖，短通用词只能提供弱证据。 */
+function metadataCoverage(value: string, query: string): number {
+  const normalizedValue = normalizeMetadataValue(value);
+  const normalizedQuery = normalizeMetadataValue(query);
+  if (
+    normalizedValue.length === 0 ||
+    !normalizedQuery.includes(normalizedValue)
+  ) {
+    return 0;
+  }
+  return Math.min(1, normalizedValue.length / Math.max(1, normalizedQuery.length));
+}
+
+/**
+ * 计算带人工权重和语料特异性的 metadata 分数。
+ *
+ * `documentFrequency` 来自当前索引快照；高频通用 tag 会自动降权。分数按匹配项的
+ * weighted coverage 累积并限制到 0-1，不让未命中 metadata 因进入候选池获得信用。
+ */
+export function weightedMetadataScore(input: {
+  query: string;
+  values: Array<{ value: string; weight: number }>;
+  documentFrequency: Map<string, number>;
+  documentCount: number;
+}): number {
+  let score = 0;
+  for (const item of input.values) {
+    const coverage = metadataCoverage(item.value, input.query);
+    if (coverage === 0) {
+      continue;
+    }
+    const normalized = normalizeMetadataValue(item.value);
+    const frequency = input.documentFrequency.get(normalized) ?? 1;
+    const denominator = Math.log(Math.max(2, input.documentCount + 1));
+    const specificity =
+      denominator === 0
+        ? 1
+        : Math.log((input.documentCount + 1) / (frequency + 1)) / denominator;
+    score +=
+      clampScore(item.weight) *
+      coverage *
+      Math.max(0.1, clampScore(specificity));
+  }
+  return clampScore(score);
+}
+
 /**
  * 本地 deterministic embedding scorer。
  *
@@ -153,6 +214,7 @@ export class DefaultMemoryReranker implements MemoryReranker {
     return clampScore(
       DEFAULT_RERANK_WEIGHTS.lexicalScore * features.lexicalScore +
         DEFAULT_RERANK_WEIGHTS.embeddingScore * features.embeddingScore +
+        DEFAULT_RERANK_WEIGHTS.metadataScore * features.metadataScore +
         DEFAULT_RERANK_WEIGHTS.scenarioScore * features.scenarioScore +
         DEFAULT_RERANK_WEIGHTS.confidenceScore * features.confidenceScore +
         DEFAULT_RERANK_WEIGHTS.sourceAuthorityScore * features.sourceAuthorityScore +

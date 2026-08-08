@@ -20,6 +20,15 @@ import type {
 } from "../core/types.js";
 import type { EpisodeProvenance } from "../core/types.js";
 
+type CandidateWeightedAlias = Omit<
+  WeightedAlias,
+  "evidence_refs" | "positive_hits" | "negative_hits"
+> & {
+  evidence_refs?: string[];
+  positive_hits?: number;
+  negative_hits?: number;
+};
+
 export type CandidateMemoryInput = {
   id?: string;
   title: string;
@@ -28,7 +37,7 @@ export type CandidateMemoryInput = {
   layer?: KnowledgeLayer;
   synopsis?: string;
   explanation?: string;
-  aliases?: WeightedAlias[] | string[];
+  aliases?: CandidateWeightedAlias[] | string[];
   domain: string;
   related_domains: string[];
   scenarios?: WeightedScenario[];
@@ -122,7 +131,12 @@ function normalizeAliases(input: CandidateMemoryInput): WeightedAlias[] {
           positive_hits: 0,
           negative_hits: 0
         }
-      : alias
+      : {
+          ...alias,
+          evidence_refs: alias.evidence_refs ?? [],
+          positive_hits: alias.positive_hits ?? 0,
+          negative_hits: alias.negative_hits ?? 0
+        }
   );
 }
 

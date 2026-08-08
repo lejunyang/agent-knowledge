@@ -92,6 +92,7 @@ function makeRanked(score: number): RankedMemory[] {
       },
       lexicalScore: score,
       embeddingScore: score,
+      metadataScore: score,
       scenarioScore: score,
       confidenceScore: 0.9,
       sourceAuthorityScore: 0.75,
