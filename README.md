@@ -17,6 +17,9 @@ Agent Knowledge 是一个本地、可审计的 Agent 知识持久化工具。V2 
 - [用户配置与全部选项](docs/guides/configuration.md)
 - [检索、Embedding、Reranker、图检索与评测](docs/guides/retrieval.md)
 - [候选治理、自动维护和 Skill 生命周期](docs/guides/memory-governance.md)
+- [后台 Agent、通知回调与常驻运行](docs/guides/automation.md)
+- [Hindsight、memU、Mem0 Shadow Sidecar](docs/guides/sidecars.md)
+- [Retrieval Lesson 与 Reasoning Policy](docs/guides/retrieval-lessons.md)
 - [TRAE、TRAE CN、Claude Code 与 Codex 接入](docs/guides/integrations.md)
 - [WebDAV、S3 与定时同步](docs/guides/synchronization.md)
 - [完整文档、会话与工具轨迹的加密 Evidence Vault](docs/guides/evidence-vault.md)
@@ -377,8 +380,9 @@ agent-knowledge source list --needs-review
 ```
 
 Git/GitHub 同理：`source check` 只观察登记的本地 ref。需要远端新鲜度时先显式
-`git fetch origin`，并让 Connector 使用希望检查的本地或 remote-tracking ref；工具本身不会
-联网。`source check` 状态中：
+`git fetch origin`，并让 Connector 使用希望检查的本地或 remote-tracking ref。交互式
+`source check/refresh` 不会自行联网；只有用户显式运行且 profile allowlist 校验通过的
+`automation run` 才会 fetch 指定 remote/refs。`source check` 状态中：
 
 - `metadata_only/content_changed/new/removed/restored` 是当前 probe 可确定的变化。
 - `update_unknown` 表示 revision/ETag/mtime 已变化，但必须重新 ingest 比较脱敏 content hash。
@@ -439,6 +443,11 @@ obsolete/blocked。`source list --needs-review` 会列出 pending、stale 和尚
 Hindsight、memU 或 Mem0，它们只能以 shadow/sidecar 输出 proposal，不能替代 Git Markdown
 事实源或绕过人工审阅。
 
+Retrieval Lesson/Reasoning Policy 分别表示“某类问题应该先找什么、哪些结果不要混入”和
+“事实、SOP、例外、时序、冲突应如何组合”。当前把这些信号保留在 eval regression、feedback
+和 maintenance proposal 中，不新增全局 active schema，也不自动注入 Hook；详见
+[使用记忆的路由与推理策略](docs/guides/retrieval-lessons.md)。
+
 ## 主动记忆何时发生
 
 主动记忆不是“所有对话自动写入”：
@@ -451,10 +460,17 @@ Hindsight、memU 或 Mem0，它们只能以 shadow/sidecar 输出 proposal，不
 
 如果希望明确保存某件事，最可靠的方式仍是直接告诉 Agent“记住这条规则”，或主动运行 `knowledge-organizer`。
 
-当前仍未提供“静默常驻、自动登录在线飞书并主动向用户提问”的后台 Agent。现有
-`source refresh` 只复用已登记的本地 Git ref、文件或离线 export；`maintenance watch`
-只消费本地日志并生成 proposal。在线爬取需要凭据、限流、通知策略、失败恢复和用户显式
-选择的进程管理器，后续实现时仍不得自动写 active knowledge。
+后台自动化现在使用严格 automation profile：
+
+- 在线飞书只访问 allowlist roots，并应用批次、限流和重试。
+- Git 只 fetch allowlist remote/refs，不 pull、checkout、merge、reset 或 push。
+- 确定性 runner 执行 source refresh、audit、maintenance 和 eval。
+- `knowledge-automation-operator` 使用系统提示词审阅结果并一次汇总确认问题。
+- Notification outbox 可通过 callback 投递到用户已有通知系统。
+- launchd/systemd/Docker 只生成模板，由用户显式安装并提供外部 Agent CLI wrapper。
+
+后台 Agent 仍不得自动写 active knowledge、批准 inbox 或接受 proposal。完整说明见
+[后台自动化指南](docs/guides/automation.md)。
 
 ## 客服机器人怎么部署
 
@@ -613,6 +629,20 @@ agent-knowledge staging status
 agent-knowledge staging drain --limit 100
 agent-knowledge maintenance run
 agent-knowledge maintenance list --status pending
+
+# 后台 Agent 与通知
+agent-knowledge automation validate --profile /secure/profile.json
+agent-knowledge automation inspect --profile /secure/profile.json
+agent-knowledge automation run --profile /secure/profile.json --no-deliver
+agent-knowledge automation service render --help
+agent-knowledge notifications list
+agent-knowledge notifications deliver --profile /secure/profile.json
+
+# External memory sidecar
+agent-knowledge sidecar setup --provider hindsight --id hindsight-shadow --scope business --output /secure/hindsight
+agent-knowledge sidecar doctor --config /secure/hindsight/sidecar.json
+agent-knowledge sidecar compare --config /secure/hindsight/sidecar.json --eval /secure/eval.yaml --output /secure/reports
+agent-knowledge sidecar history --limit 100
 ```
 
 ## 默认位置
@@ -657,6 +687,11 @@ events/projects/*.jsonl           需求 initiative 脱敏 hash-chain 时间线
 ```
 
 命令行显式参数优先于项目 local，项目 local 优先于项目共享，项目共享优先于用户配置，用户配置优先于兼容环境变量。完整规则见[配置指南](docs/guides/configuration.md)。
+全局 `--config/--locale/--json` 放在首个子命令之前；例如用户配置与 sidecar 配置同时使用时：
+
+```bash
+agent-knowledge --config /secure/user.json sidecar doctor --config /secure/sidecar.json
+```
 
 ## 开发
 

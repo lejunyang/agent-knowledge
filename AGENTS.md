@@ -30,6 +30,9 @@
 - `agent-knowledge integration` 为 TRAE、TRAE CN、Claude Code 和 Codex 安装可选 hooks/agents/skills/plugin bundle，使用普通托管文件和结构化 merge，不创建 symlink。
 - `agent-knowledge sync run|watch` 通过配置的 WebDAV/S3 backend 只同步正式 Markdown，冲突不自动覆盖。
 - `agent-knowledge maintenance` 从 SubagentStop 日志抽取 observation 并生成可审阅 proposal，不直接修改 active 知识。
+- `agent-knowledge automation` 按严格 profile 执行 allowlist Lark/Git 刷新、audit、maintenance 和 eval；只写 source/Vault/.memory/proposal/notification，不批准或修改 active knowledge。
+- `agent-knowledge notifications` 管理持久 outbox 和 callback delivery；callback 只发送脱敏 metadata，不发送 Vault evidence。
+- `agent-knowledge sidecar` 管理 Hindsight/memU/Mem0 shadow adapter、scaffold 和 native A/B 报告；外部结果永远不是事实源。
 - `agent-knowledge graph` 构建、查询和导出轻量知识关系图；`query --retrieval graph|hybrid-graph` 才会让图遍历参与检索。
 - V2 frontmatter 使用 `kind` + `layer`：`kind` 表达 profile/semantic/procedural/episodic/principle/skill/source，`layer` 表达 synopsis/knowledge/evidence。
 - `aliases`、`scenarios`、`tags` 是带 `weight/source` 的结构化 metadata，不替代规范 `domain`；supported claim 必须包含 source/section/hash evidence anchor。
@@ -55,6 +58,9 @@ CLI 的 workspace root 解析优先级：
 ```
 
 `XDG_CONFIG_HOME` 会替换 `~/.config`；`AGENT_KNOWLEDGE_CONFIG` 或全局 `--config <file>` 可指定用户配置层。项目共享配置位于 Git root `.agent-knowledge.json`，项目 local 位于 `.agent-knowledge.local.json` 并应忽略。其他设置遵循“命令行显式参数 > 项目 local > 项目共享 > 用户配置 > 兼容环境变量 > 内置默认值”。
+
+全局 `--config`、`--locale`、`--json` 必须位于首个子命令之前；sidecar 业务 `--config` 位于
+`sidecar <command>` 之后。修改 Commander 解析时必须保持两者可同时使用的回归测试。
 
 项目配置对象递归合并，数组整体替换。`AGENT_KNOWLEDGE_DISABLE_PROJECT_CONFIG=1` 仅供测试和故障诊断临时关闭自动发现。
 
@@ -245,6 +251,13 @@ src/cli.ts            命令行入口和各模块编排
 - Calibration 只能输出 dry-run 参数建议，不得自动改用户配置；目标函数必须优先惩罚 forbidden injection、abstention failure 和 not_useful feedback。
 - 共享同步默认不包含 `private` 或高于 `internal` 的知识；当前实现会同步允许范围内的正式 `kind: source` Markdown，且不提供客户端加密，因此不能把它当作完整会话/附件 Evidence Vault。修改同步范围或加密策略时必须更新威胁模型和测试。
 - 定时同步使用前台 `agent-knowledge sync watch` 循环；不要在安装或配置命令中静默创建 cron、launchd 或 systemd 任务。需要后台常驻时由用户显式交给系统进程管理器托管。
+- Automation service renderer 只生成 launchd/systemd/Docker 文件和 install/uninstall 命令，不得自动调用 `launchctl`、`systemctl` 或 `docker compose up`；runner 必须是用户提供的绝对 wrapper 路径。
+- Automation profile 只保存 Lark/Git allowlist、预算、限流、重试和 callback 凭据环境变量名；禁止保存 token/Cookie/key 原值。在线刷新不得扩大 roots/refs 或绕过权限。
+- Notification outbox 必须幂等、0600、可重试和可 ack；408/429/5xx 可重试，其他 4xx 视为契约/权限错误。外部 Agent 的 confirmation 问题必须一次汇总且不超过 `maxQuestions`。
+- Sidecar 配置只保存凭据环境变量名；endpoint 可覆盖且 doctor 必须先通过。Hindsight/memU/Mem0 只允许 shadow ingest/search/compare，响应 artifact 有大小上限且只写 `.memory/sidecars`。
+- Sidecar compare 必须包含 native lexical baseline、forbidden、abstention failure、latency 和 unmapped results；没有 `native_memory_id` 的外部文本不得伪装成 expected memory 命中。
+- `sidecar setup` 必须同时生成 owner-only config 与部署/环境骨架，但不拉镜像、不启动服务、不写真实凭据；`sidecar history` 只读取安全指标 artifact，损坏记录必须隔离为 skipped。
+- Docker automation renderer 必须要求固定 tag/digest 且由用户提供预装所需 CLI 的镜像；profile 引用路径必须按最小权限同路径挂载，禁止默认 `latest`、裸 Node 镜像或 host 根目录挂载。
 - `sync.intervalMinutes: 0` 表示禁用定时同步；`sync watch` 要求正数间隔，并在单次失败后记录错误、等待下一周期重试。
 - Maintenance worker 只能写 `.memory/proposals` 和 watermark/lock，禁止直接修改 active Markdown。Skill proposal 必须满足至少 3 个独立 session、trusted authority、positive feedback、无 unresolved conflict，并且不得自动写入或安装 `.trae/skills`。
 - Proposal accept 默认只写知识 `_inbox` 或 Skill `_inbox-skills`；项目/用户 Skill 安装必须显式指定 target，并拒绝覆盖已有文件。
@@ -254,6 +267,7 @@ src/cli.ts            命令行入口和各模块编排
 - 任何流程变动、行为优化、默认值调整或推荐方式变化，都必须完成“流程联动审视”，不能只改实现：
   - 检查主 README 的首次、日常、周期维护、机器人和人工审阅推荐流程。
   - 检查 `docs/guides/configuration.md`、`retrieval.md`、`memory-governance.md`、`integrations.md` 和 `synchronization.md` 中受影响的说明。
+  - Automation/sidecar 变化时检查 `docs/guides/automation.md`、`sidecars.md`、`retrieval-lessons.md`、Operator system prompt、service renderer 和 provider preset。
   - Hook 行为、事件、命令或注入上下文变化时，检查 TRAE、TRAE plugin、Claude Code、Codex 及 Windows Hook 模板。
   - 检查 `templates/trae/agents/*.md` 和 `templates/claude-code/agents/*.md` 的触发条件、输入输出、工具权限和命令。
   - 检查项目 `.trae/skills/*/SKILL.md`，确保 Skill 使用真实且推荐的 CLI 流程。
@@ -369,7 +383,7 @@ agent-knowledge write-candidate \
 如果使用 graph 浏览或 graph retrieval，也重新运行 `agent-knowledge graph build`。
 
 使用 `agent-knowledge integration install --product trae|trae-cn|claude-code|codex --scope user|project` 安装产品接入。安装器不使用 symlink；hooks 结构化 merge 且只管理 `agent-knowledge hook` handler，agents/skills/plugin bundle 由本地 manifest 记录所有权。
-`agent-knowledge-guide`、`knowledge-organizer`、`source-distiller`、`lifecycle-recorder` 和 `memory-maintainer` Skills 位于项目 `.trae/skills/`，这是本仓库自身的开发/测试资源，不代表已安装到用户产品目录。它们分别提供教程与诊断路由、整理直接材料/inbox、蒸馏 versioned source、记录客服/需求事件、维护 observation/proposal。
+`agent-knowledge-guide`、`knowledge-automation-operator`、`knowledge-organizer`、`source-distiller`、`lifecycle-recorder` 和 `memory-maintainer` Skills 位于项目 `.trae/skills/`，这是本仓库自身的开发/测试资源，不代表已安装到用户产品目录。它们分别提供教程与诊断路由、后台巡检与批量确认、整理直接材料/inbox、蒸馏 versioned source、记录客服/需求事件、维护 observation/proposal。
 
 Hook 主动记忆边界：
 

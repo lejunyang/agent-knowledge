@@ -334,12 +334,13 @@ Letta 更像完整 Agent runtime，提供 core/archival memory、MemFS、后台 
 
 当前项目把事实检索做得比最初稳定，但缺少 MetaMem 所强调的“如何组合和使用记忆”。
 
-需要新增两类资产：
+值得明确区分两类“如何使用记忆”的信号：
 
 - Retrieval Lesson：某类问题应该先查什么、后查什么、哪些信号是噪声。
 - Reasoning Policy：如何把事实、经历、SOP、例外和时序变化组合成判断。
 
-它们不能与业务事实混在一起，也不能由一次任务自动晋升。
+它们不能与业务事实混在一起，也不能由一次任务自动晋升。当前决策不是立即新增 active
+schema，而是先用 eval regression、feedback 和 maintenance proposal 积累可重复证据。
 
 ### 2. 原始经历、世界事实和稳定认识必须分开
 
@@ -470,19 +471,18 @@ discover -> incremental read -> prepare jobs -> agent synthesis -> commit
 | 教程与能力说明 Skill | 已完成 | `agent-knowledge-guide` + workflows/diagnostics references |
 | TRAE、TRAE CN、Claude Code、Codex 接入 | 已完成 | managed Hooks/Agents/Skills；Codex standalone + marketplace |
 | WebDAV/S3 多机同步 | 已完成 | 三方同步、冲突 artifact、前台 watch |
-| 在线飞书主动爬取并追问用户 | 未完成 | 当前只处理显式刷新后的 offline export，不静默联网 |
-| 后台自主 Agent 常驻 | 部分完成 | 有前台 `maintenance watch` / `sync watch`；不自动创建系统服务 |
-| Hindsight/memU/Mem0 shadow A/B | 未完成 | 已有架构与评测方向，尚未接入 sidecar |
-| Retrieval Lesson / Reasoning Policy 独立 schema | 部分完成 | 现有 principle、feedback、eval 可承载部分信号，未单独产品化 |
-| 更完整领域 DLP | 部分完成 | 有确定性 secret/PII 与 Connector normalize；姓名、地址、业务 UID 仍需领域 adapter |
+| 在线飞书/Git 主动刷新并追问用户 | 已完成受控版本 | automation profile allowlist + 限流/重试 + Operator Skill + callback outbox |
+| 后台自主 Agent 常驻 | 已完成模板 | launchd/systemd/Docker renderer；固定镜像、提示词快照、环境文件和显式挂载；用户提供外部 Agent wrapper |
+| Hindsight/memU/Mem0 shadow A/B | 已完成基础设施 | 一键 setup、doctor、shadow ingest/search、native compare、定时执行和 history |
+| Retrieval Lesson / Reasoning Policy 独立 schema | 已完成产品决策 | 当前保留为 eval/feedback/proposal 审阅信号；未证明收益前不新增全局 active schema |
+| 更完整领域 DLP | 不在当前范围 | 保留现有确定性 DLP 与 Connector extension point，不新增领域 adapter |
 
-当前真正剩余的高价值事项不是继续批量蒸馏本地验证库，而是：
+当前真正剩余的高价值验收不是继续批量蒸馏本地验证库，也不是强行新增 policy schema，而是：
 
-1. 为在线飞书/GitHub 等来源设计用户授权、限流、重试、通知和主动提问策略。
-2. 选择显式进程管理器方案，让 watch 在用户决定后可靠常驻，而不是安装时静默启动。
-3. 用同一批中文业务、客服和生命周期 case 对 Hindsight/memU/Mem0 做 shadow A/B。
-4. 将 retrieval lesson / reasoning policy 从普通 principle 中进一步产品化，并增加对应评测。
-5. 为具体业务补领域 DLP adapter，阻断姓名、地址、业务 UID 等当前确定性规则无法完整覆盖的 PII。
+1. 用用户选定的真实外部 Agent CLI、固定容器镜像和通知系统做长期运行验收。
+2. 固定 Hindsight/memU/Mem0 上游版本、模型和成本配置，并用真实业务 eval 积累 history。
+3. 先积累 Retrieval Lesson / Reasoning Policy 的重复失败证据；达到门槛后再决定是否独立
+   schema/router，不把“产品化”本身当作当前必做项。
 
 这些能力都不能绕过现有 Git Markdown 事实源、Vault、proposal/inbox 和人工批准边界。
 

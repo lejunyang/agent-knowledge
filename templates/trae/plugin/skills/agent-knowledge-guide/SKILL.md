@@ -27,6 +27,8 @@ Markdown 是正式事实源；SQLite、embedding、graph、logs、observations �
 | 整理直接材料、审阅 inbox、激活候选 | `knowledge-organizer` |
 | 记录客服 case 或需求全生命周期 | `lifecycle-recorder` |
 | 从会话、反馈和 observation 发现重复、冲突、更新和 Skill 候选 | `memory-maintainer` |
+| 定时刷新在线飞书/Git、批量确认和 callback | `knowledge-automation-operator` |
+| 对接 Hindsight/memU/Mem0 并做 A/B | `sidecar` 命令；读取 `references/diagnostics.md` |
 | 排查知识薄、metadata 过多、source 未分类、claim 失效或检索误召回 | 本 Skill；读取 `references/diagnostics.md` |
 
 用户要求实际执行某条专业流程时，切换到对应 Skill；不要在本 Skill 中复制另一 Skill 的全部步骤。
@@ -165,4 +167,4 @@ agent-knowledge eval --input "$EVAL_FILE" --pipeline lexical
 ## 按需参考
 
 - 学习首次、日常、文档、客服、需求、同步和 Git 工作流时读取 `references/workflows.md`。
-- 解释审计 finding、版本健康、检索误召回、maintenance、Hook 和 integration 问题时读取 `references/diagnostics.md`。
+- 解释审计 finding、版本健康、检索误召回、maintenance、Hook、automation、sidecar 和 integration 问题时读取 `references/diagnostics.md`。

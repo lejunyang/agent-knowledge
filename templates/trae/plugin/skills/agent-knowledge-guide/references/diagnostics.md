@@ -9,6 +9,8 @@
 - [Maintenance](#maintenance)
 - [Hook 与 Subagent](#hook-与-subagent)
 - [Integration](#integration)
+- [Automation 与通知](#automation-与通知)
+- [Sidecar A/B](#sidecar-ab)
 - [图谱与索引](#图谱与索引)
 - [处置优先级](#处置优先级)
 
@@ -231,6 +233,29 @@ agent-knowledge graph export --format html --output knowledge-graph.html
 - proposal 分布。
 
 图和 embedding 不是事实源。图中存在边不代表关系天然正确；关系必须来自明确 frontmatter 或 proposal evidence。
+
+## Automation 与通知
+
+```bash
+agent-knowledge automation status --profile /secure/profile.json
+agent-knowledge notifications list --root /secure/agent-knowledge-data
+```
+
+重点检查：job 是否幂等、失败 step、retry 是否耗尽、callback 是否 4xx、是否有
+`confirmation_required`、eval regression 和 incomplete inventory。不要通过扩大 roots/refs 或
+提升权限让 job “变绿”。
+
+## Sidecar A/B
+
+```bash
+agent-knowledge sidecar doctor --config /secure/sidecar.json
+agent-knowledge sidecar compare --config /secure/sidecar.json --eval /secure/eval.yaml --output /secure/reports
+agent-knowledge sidecar history --root /secure/agent-knowledge-data --limit 100
+```
+
+优先看 false injection、abstention failure、unmapped results 和 latency。外部 recall 高但错误
+注入也高时不能替换 native pipeline。Retrieval Lesson / Reasoning Policy 的具体边界见
+`docs/guides/retrieval-lessons.md`。
 
 ## 处置优先级
 

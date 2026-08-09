@@ -39,6 +39,15 @@ agent-knowledge configure
 
 `--config <file>` 只替换用户配置层的位置，不关闭项目配置发现。需要测试或故障诊断时，可临时设置 `AGENT_KNOWLEDGE_DISABLE_PROJECT_CONFIG=1`。
 
+全局 `--config`、`--locale` 和 `--json` 必须写在首个子命令之前，例如：
+
+```bash
+agent-knowledge --config /secure/user.json sidecar doctor --config /secure/sidecar.json
+```
+
+前一个 `--config` 是用户配置层，后一个是 sidecar 配置。采用位置区分可保留现有命令名称，同时
+避免 sidecar 配置被误读为用户配置。
+
 交互写入不同层：
 
 ```bash
@@ -291,6 +300,13 @@ codex plugin add agent-knowledge@agent-knowledge-local
 ```bash
 agent-knowledge integration install
 ```
+
+Automation、notification callback 和 sidecar 使用独立 profile/config 文件，不进入全局用户配置：
+
+- Automation profile 示例和字段见 `docs/guides/automation.md`。
+- Callback 只保存 token 环境变量名。
+- Sidecar 接入包由 `agent-knowledge sidecar setup` 生成；只连已有服务时用 `sidecar init`。
+- 常驻 service renderer 只生成文件，不自动安装或启动。
 
 ## 同步
 

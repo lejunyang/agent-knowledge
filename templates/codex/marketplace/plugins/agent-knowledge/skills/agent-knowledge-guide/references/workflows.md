@@ -9,6 +9,8 @@
 - [客服问题](#客服问题)
 - [需求全生命周期](#需求全生命周期)
 - [经验与 Skill 改进](#经验与-skill-改进)
+- [后台自动化与通知](#后台自动化与通知)
+- [外部 Memory Sidecar](#外部-memory-sidecar)
 - [同步与多机](#同步与多机)
 - [Git 审计](#git-审计)
 
@@ -236,6 +238,36 @@ agent-knowledge sync watch
 - logs
 
 WebDAV/S3 配置只保存凭据环境变量名。冲突写本地 artifact，不能自动覆盖。
+
+## 后台自动化与通知
+
+```bash
+agent-knowledge automation validate --profile /secure/profile.json
+agent-knowledge automation inspect --profile /secure/profile.json
+agent-knowledge automation run --profile /secure/profile.json --no-deliver
+agent-knowledge notifications list --root /secure/agent-knowledge-data
+agent-knowledge notifications deliver --profile /secure/profile.json
+```
+
+需要语义问题汇总时使用 `knowledge-automation-operator`。常驻模板：
+
+```bash
+agent-knowledge automation service render --help
+```
+
+完整说明见 `docs/guides/automation.md`。
+
+## 外部 Memory Sidecar
+
+```bash
+agent-knowledge sidecar setup --provider hindsight --id hindsight-shadow --scope business --output /secure/hindsight
+agent-knowledge sidecar doctor --config /secure/hindsight/sidecar.json
+agent-knowledge sidecar compare --config /secure/hindsight/sidecar.json --eval /secure/eval.yaml --output /secure/reports
+agent-knowledge sidecar history --limit 100
+```
+
+支持 Hindsight、memU、Mem0。Sidecar 永远是 shadow-only，完整说明见
+`docs/guides/sidecars.md`。
 
 ## Git 审计
 

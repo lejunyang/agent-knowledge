@@ -209,6 +209,20 @@ Source 更新时旧 fingerprint 会拒绝 mark；content change/restored 回 pen
 `references/diagnostics.md`。Canonical Skill、TRAE plugin bundle 和 Codex plugin bundle
 通过逐文件测试保持一致。
 
+## knowledge-automation-operator
+
+`knowledge-automation-operator` 面向外部 Agent CLI 的定时后台任务：
+
+- 严格读取 automation profile 和 allowlist。
+- 运行 `automation validate/inspect/run/status`。
+- 审阅 notification outbox，并按 `maxQuestions` 一次汇总确认问题。
+- 通过 callback 投递通知；失败保留 outbox。
+- 输出固定 `FINAL_REPORT_JSON`。
+- 不修改 active knowledge、不批准 inbox、不接受 proposal。
+
+系统提示词位于 `templates/automation/knowledge-automation-system-prompt.md`，常驻 wrapper 契约见
+`templates/automation/runner-contract.md`。
+
 ## lifecycle-recorder
 
 `lifecycle-recorder` 记录客服 case 和需求 initiative：完整 conversation/tool/report payload
@@ -289,6 +303,8 @@ agent-knowledge query --retrieval graph --graph-depth 1 --debug
 - 同步审视项目 `.trae/skills/*/SKILL.md`。
 - 同步审视 `templates/trae/plugin/agents/*.md` 与 `templates/trae/plugin/skills/*/SKILL.md`。
 - 同步审视 `templates/codex/hooks*.json`、Codex marketplace manifest 和 plugin Skills。
+- Automation 变化时同步审视 Operator Skill、系统提示词、callback envelope 和三类 service renderer。
+- Sidecar 变化时同步审视 provider presets、setup/scaffold、shadow artifacts、compare metrics 和 history。
 - 同步审视主 README 的推荐流程和 `docs/guides/*`。
 - 若 TRAE 官方 Hook/Subagent 格式有变化，按官方文档同步模板。
 

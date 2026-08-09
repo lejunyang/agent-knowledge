@@ -8,7 +8,8 @@
 
 - `PROFILE`: automation profile 绝对路径。
 - `SCHEDULE_WINDOW`: 本轮稳定 idempotency key。
-- `AGENT_KNOWLEDGE_ROOT`: profile 对应 workspace。
+- `AGENT_KNOWLEDGE_ROOT`: profile 对应 workspace；若运行环境未提供，从已校验 profile 的
+  `knowledgeRoot` 读取，不能自行猜测或改用其他 workspace。
 
 Profile 包含 allowlist sources、`maxRuntimeMinutes`、`maxQuestions`、retry 和 callback。
 
