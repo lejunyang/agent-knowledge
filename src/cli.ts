@@ -67,6 +67,7 @@ import {
   listNotifications,
   listPolicies,
   listPolicyProposals,
+  listPolicySimulationHistory,
   readSidecarComparisonHistory,
   retainQueryTaskEvidence,
   listSources,
@@ -116,6 +117,7 @@ import {
   stageHookEvent,
   scaffoldSidecar,
   searchSidecar,
+  simulatePolicies,
   getStagingStatus,
   getIntegrationProduct,
   drainStagedEvents,
@@ -1923,6 +1925,74 @@ policy
       throw new Error(`Policy proposal not found: ${proposalId}`);
     }
     console.log(JSON.stringify(proposal, null, 2));
+  });
+
+policy
+  .command("simulate")
+  .description(
+    t(
+      "在显式 eval 上运行 baseline/shadow Policy 回放",
+      "Replay baseline and shadow Policies on an explicit eval suite"
+    )
+  )
+  .requiredOption("--eval <file>", t("Eval YAML 文件", "Eval YAML file"))
+  .requiredOption(
+    "--output <dir>",
+    t("安全 JSON/Markdown 报告目录", "safe JSON/Markdown report directory")
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .addHelpText(
+    "after",
+    t(
+      `
+Simulation 只在内存中编译临时 QueryPlan/ReasoningContract；不修改普通 query、Hook、配置或知识。
+报告和 .memory history 不保存 task 原文。`,
+      `
+Simulation compiles temporary QueryPlan/ReasoningContract objects in memory only. It never changes normal query, Hooks, configuration, or knowledge.
+Reports and .memory history do not retain task text.`
+    )
+  )
+  .action(
+    async (options: { eval: string; output: string; root?: string }) => {
+      console.log(
+        JSON.stringify(
+          await simulatePolicies({
+            rootDir: resolveCliRoot(options.root),
+            evalFile: options.eval,
+            outputDir: options.output
+          }),
+          null,
+          2
+        )
+      );
+    }
+  );
+
+policy
+  .command("history")
+  .description(
+    t(
+      "读取不含 task 原文的 Policy simulation history",
+      "Read Policy simulation history without task text"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--limit <count>", t("最多返回多少次 simulation", "maximum simulations to return"), "50")
+  .action(async (options: { root?: string; limit: string }) => {
+    const history = await listPolicySimulationHistory(
+      resolveCliRoot(options.root)
+    );
+    const limit = Number.parseInt(options.limit, 10);
+    console.log(
+      JSON.stringify(
+        {
+          ...history,
+          entries: history.entries.slice(0, limit)
+        },
+        null,
+        2
+      )
+    );
   });
 
 policy

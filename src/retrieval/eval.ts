@@ -43,6 +43,14 @@ export type EvalCase = {
   language?: string;
   domain?: string;
   now?: string;
+  reasoning_context?: {
+    has_unresolved_conflict: boolean;
+    has_expired_fact: boolean;
+    has_documented_evidence: boolean;
+    expanded_layers: Array<"synopsis" | "knowledge" | "evidence">;
+    operation_risk: "low" | "medium" | "high";
+  };
+  expected_reasoning_decision?: "proceed" | "warn" | "abstain";
 };
 
 export type EvalSuite = {
@@ -115,7 +123,22 @@ const EvalCaseSchema = z.object({
   abstain: z.boolean().default(false),
   language: z.string().min(1).default("unknown"),
   domain: z.string().min(1).optional(),
-  now: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+  now: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  reasoning_context: z
+    .object({
+      has_unresolved_conflict: z.boolean(),
+      has_expired_fact: z.boolean(),
+      has_documented_evidence: z.boolean(),
+      expanded_layers: z.array(
+        z.enum(["synopsis", "knowledge", "evidence"])
+      ),
+      operation_risk: z.enum(["low", "medium", "high"])
+    })
+    .strict()
+    .optional(),
+  expected_reasoning_decision: z
+    .enum(["proceed", "warn", "abstain"])
+    .optional()
 });
 
 const EvalSuiteSchema = z.object({
