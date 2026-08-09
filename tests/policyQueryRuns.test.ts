@@ -5,11 +5,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { rebuildIndex } from "../src/storage/indexer.js";
 import {
   getQueryRunLedgerPath,
+  getVaultObject,
   getLogFilePath,
   listQueryRuns,
   MemoryQueryRequestSchema,
   queryMemoriesWithDebug,
-  readQueryRun
+  readQueryRun,
+  retainQueryTaskEvidence
 } from "../src/index.js";
 import { buildContextPacket } from "../src/retrieval/contextPacket.js";
 
@@ -91,6 +93,28 @@ describe("privacy-safe query run ledger", () => {
     );
 
     expect(await listQueryRuns(root)).toEqual([]);
+    await expect(access(getQueryRunLedgerPath(root))).rejects.toThrow();
+  });
+
+  it("retains an explicitly selected redacted task only in the encrypted Vault", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "ak-policy-query-vault-"));
+    tempDirs.push(root);
+    const key = Buffer.alloc(32, 11);
+    const task =
+      "联系 test@example.com，token=sk-abcdefghijklmnopqrstuvwxyz，排查账号问题";
+
+    const retained = await retainQueryTaskEvidence(root, task, { key });
+    const restored = await getVaultObject(root, retained.vaultId, { key });
+    const text = restored.bytes.toString("utf8");
+
+    expect(retained.redactionCounts).toMatchObject({
+      email: 1,
+      openai_style_key: 1
+    });
+    expect(text).not.toContain("test@example.com");
+    expect(text).not.toContain("sk-abcdefghijklmnopqrstuvwxyz");
+    expect(text).toContain("[REDACTED_EMAIL]");
+    expect(text).toContain("[REDACTED_SECRET]");
     await expect(access(getQueryRunLedgerPath(root))).rejects.toThrow();
   });
 });

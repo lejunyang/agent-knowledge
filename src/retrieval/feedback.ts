@@ -10,21 +10,58 @@ import { appendJsonlLog } from "../core/logging.js";
 
 export const MemoryUsefulnessSchema = z.enum(["useful", "not_useful", "neutral"]);
 
-export const MemoryFeedbackInputSchema = z.object({
-  memoryId: z.string().min(1),
-  usefulness: MemoryUsefulnessSchema,
-  queryRunId: z.string().min(1).optional(),
-  task: z.string().min(1).optional(),
-  note: z.string().max(500).optional()
-});
+export const FeedbackReasonSchema = z.enum([
+  "relevant",
+  "wrong_route",
+  "missing_expected",
+  "forbidden_injection",
+  "should_abstain",
+  "stale_source",
+  "insufficient_detail",
+  "conflicting_evidence",
+  "reasoning_failure",
+  "other"
+]);
+
+export const MemoryFeedbackInputSchema = z
+  .object({
+    memoryId: z.string().min(1).optional(),
+    usefulness: MemoryUsefulnessSchema,
+    reason: FeedbackReasonSchema.optional(),
+    queryRunId: z.string().min(1).optional(),
+    expectedMemoryIds: z.array(z.string().min(1)).max(100).default([]),
+    forbiddenMemoryIds: z.array(z.string().min(1)).max(100).default([]),
+    task: z.string().min(1).optional(),
+    note: z.string().max(500).optional()
+  })
+  .superRefine((input, context) => {
+    if (!input.memoryId && !input.queryRunId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["queryRunId"],
+        message: "feedback requires memoryId or queryRunId"
+      });
+    }
+    if (
+      input.reason === "relevant" &&
+      input.usefulness === "not_useful"
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["reason"],
+        message: "relevant reason is incompatible with not_useful"
+      });
+    }
+  });
 
 export type MemoryUsefulness = z.infer<typeof MemoryUsefulnessSchema>;
+export type FeedbackReason = z.infer<typeof FeedbackReasonSchema>;
 export type MemoryFeedbackInput = z.infer<typeof MemoryFeedbackInputSchema>;
 
 export type MemoryFeedbackResult = {
   status: "logged";
   logPath: string;
-  memoryId: string;
+  memoryId?: string;
   usefulness: MemoryUsefulness;
 };
 
@@ -40,7 +77,10 @@ export function logMemoryFeedback(rootDir: string, rawInput: unknown): MemoryFee
     eventId: randomUUID(),
     memoryId: input.memoryId,
     usefulness: input.usefulness,
+    reason: input.reason,
     queryRunId: input.queryRunId,
+    expectedMemoryIds: input.expectedMemoryIds,
+    forbiddenMemoryIds: input.forbiddenMemoryIds,
     taskLength: input.task?.length,
     note: input.note
   });

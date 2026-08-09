@@ -14,12 +14,16 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { resolveWorkspacePath } from "../core/paths.js";
+import type { FeedbackReason } from "../retrieval/feedback.js";
 
 export type FeedbackLedgerEntry = {
   key: string;
-  memoryId: string;
+  memoryId?: string;
   queryRunId?: string;
   usefulness: "useful" | "not_useful" | "neutral";
+  reason?: FeedbackReason;
+  expectedMemoryIds: string[];
+  forbiddenMemoryIds: string[];
   timestamp: string;
 };
 
@@ -35,7 +39,10 @@ type FeedbackLogEvent = {
   eventId?: string;
   memoryId?: string;
   usefulness?: "useful" | "not_useful" | "neutral";
+  reason?: FeedbackReason;
   queryRunId?: string;
+  expectedMemoryIds?: string[];
+  forbiddenMemoryIds?: string[];
 };
 
 /** 返回 feedback ledger 路径。 */
@@ -61,7 +68,19 @@ export function readFeedbackLedger(rootDir: string): FeedbackLedger {
   ) {
     throw new Error("Invalid feedback ledger");
   }
-  return parsed;
+  return {
+    ...parsed,
+    entries: Object.fromEntries(
+      Object.entries(parsed.entries).map(([key, entry]) => [
+        key,
+        {
+          ...entry,
+          expectedMemoryIds: entry.expectedMemoryIds ?? [],
+          forbiddenMemoryIds: entry.forbiddenMemoryIds ?? []
+        }
+      ])
+    )
+  };
 }
 
 /** 原子写入 ledger，避免清理日志后只留下半写状态。 */
@@ -79,7 +98,7 @@ function feedbackKey(
   fileName: string,
   lineIndex: number
 ): string {
-  return `${event.memoryId}\0${
+  return `${event.memoryId ?? "query"}\0${
     event.queryRunId ?? event.eventId ?? `${fileName}:${lineIndex}`
   }`;
 }
@@ -118,8 +137,8 @@ export function refreshFeedbackLedger(rootDir: string): {
         }
         if (
           event.event !== "feedback.memory_usefulness" ||
-          !event.memoryId ||
-          !event.usefulness
+          !event.usefulness ||
+          (!event.memoryId && !event.queryRunId)
         ) {
           continue;
         }
@@ -133,6 +152,9 @@ export function refreshFeedbackLedger(rootDir: string): {
             memoryId: event.memoryId,
             queryRunId: event.queryRunId,
             usefulness: event.usefulness,
+            reason: event.reason,
+            expectedMemoryIds: event.expectedMemoryIds ?? [],
+            forbiddenMemoryIds: event.forbiddenMemoryIds ?? [],
             timestamp
           };
         }
@@ -152,6 +174,9 @@ export function readFeedbackScores(rootDir: string): Map<string, number> {
   const ledger = readFeedbackLedger(rootDir);
   const scores = new Map<string, number>();
   for (const entry of Object.values(ledger.entries)) {
+    if (!entry.memoryId) {
+      continue;
+    }
     const score =
       entry.usefulness === "useful"
         ? 1

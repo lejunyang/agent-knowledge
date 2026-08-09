@@ -65,6 +65,7 @@ import {
   listKnowledge,
   listNotifications,
   readSidecarComparisonHistory,
+  retainQueryTaskEvidence,
   listSources,
   logMemoryFeedback,
   markSourceReviewed,
@@ -1550,6 +1551,14 @@ program
   .option("--graph-depth <depth>", t("图遍历深度：1 或 2；默认读取用户配置", "graph traversal depth: 1 or 2; defaults to user config"))
   .option("--graph-decay <decay>", t("图检索每跳衰减系数：(0, 1]；默认读取用户配置", "graph score decay per hop: (0, 1]; defaults to user config"))
   .option("--rerank", t("使用本地 cross-encoder 批量重排", "use local cross-encoder batch reranking"), false)
+  .option(
+    "--retain-task-evidence",
+    t(
+      "显式把经 secrets-and-pii 脱敏的任务文本加密写入 Vault",
+      "explicitly redact and encrypt task text into the Vault"
+    ),
+    false
+  )
   .option("--allow-remote-models", t("允许远程下载模型", "allow remote model downloads"), false)
   .action(async (options: {
     task: string;
@@ -1569,6 +1578,7 @@ program
     graphDepth?: string;
     graphDecay?: string;
     rerank: boolean;
+    retainTaskEvidence: boolean;
     allowRemoteModels: boolean;
   }) => {
     const configuredEmbeddings = userConfig().embeddings;
@@ -1591,6 +1601,11 @@ program
     const sensitivityClearance = resolveSensitivityClearance(options.sensitivityClearance);
     const root = resolveCliRoot(options.root);
     const projectKeys = await resolveQueryProjectKeys(root, options.project);
+    const retainedTask = options.retainTaskEvidence
+      ? await retainQueryTaskEvidence(root, options.task, {
+          key: configuredVaultKey()
+        })
+      : undefined;
     const request = MemoryQueryRequestSchema.parse({
       task: options.task,
       agentRole: options.agentRole,
@@ -1637,17 +1652,20 @@ program
         embeddingProvider:
           retrievalMode === "hybrid-graph" ? embeddingProvider : undefined,
         embeddingTopK,
-        log: !options.rerank
+        log: !options.rerank,
+        taskVaultId: retainedTask?.vaultId
       });
     } else if (retrievalMode === "hybrid") {
       baseResult = await queryMemoriesHybridWithDebug(root, request, {
         embeddingProvider,
         embeddingTopK,
-        log: !options.rerank
+        log: !options.rerank,
+        taskVaultId: retainedTask?.vaultId
       });
     } else {
       baseResult = queryMemoriesWithDebug(root, request, {
-        log: !options.rerank
+        log: !options.rerank,
+        taskVaultId: retainedTask?.vaultId
       });
     }
     const { ranked, debug } = options.rerank
@@ -1664,7 +1682,8 @@ program
           resultLimit: configuredEmbeddings.rerankerResultLimit,
           minScore: configuredEmbeddings.rerankerMinScore,
           baseWeight: configuredEmbeddings.rerankerBaseWeight,
-          rerankerWeight: configuredEmbeddings.rerankerModelWeight
+          rerankerWeight: configuredEmbeddings.rerankerModelWeight,
+          taskVaultId: retainedTask?.vaultId
         })
       : baseResult;
     const packet = buildContextPacket({
@@ -1672,31 +1691,81 @@ program
       ranked,
       queryRun: { rootDir: root, queryRunId: debug.queryRunId }
     });
-    console.log(JSON.stringify(options.debug ? { packet, debug } : packet, null, 2));
+    console.log(
+      JSON.stringify(
+        options.debug
+          ? {
+              packet,
+              debug,
+              ...(retainedTask
+                ? {
+                    taskEvidence: {
+                      vaultId: retainedTask.vaultId,
+                      bytes: retainedTask.bytes,
+                      redactionCounts: retainedTask.redactionCounts
+                    }
+                  }
+                : {})
+            }
+          : retainedTask
+            ? {
+                packet,
+                taskEvidence: {
+                  vaultId: retainedTask.vaultId,
+                  bytes: retainedTask.bytes,
+                  redactionCounts: retainedTask.redactionCounts
+                }
+              }
+            : packet,
+        null,
+        2
+      )
+    );
   });
 
 program
   .command("feedback")
   .description(t("记录检索知识是否有用，不修改 Markdown 事实", "Log whether a retrieved memory was useful without modifying Markdown facts"))
-  .requiredOption("--memory-id <id>", t("查询输出中的知识 ID", "knowledge id shown in query output"))
+  .option("--memory-id <id>", t("查询输出中的知识 ID", "knowledge id shown in query output"))
   .requiredOption("--usefulness <value>", t("useful、not_useful 或 neutral", "useful, not_useful, or neutral"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--query-run-id <id>", t("之前查询的 debug.queryRunId", "debug.queryRunId from a prior query"))
+  .option(
+    "--reason <reason>",
+    t(
+      "relevant、wrong_route、missing_expected、forbidden_injection、should_abstain、stale_source、insufficient_detail、conflicting_evidence、reasoning_failure 或 other",
+      "structured feedback reason"
+    )
+  )
+  .option(
+    "--expected-memory-id <id...>",
+    t("本次本应使用的知识 ID", "knowledge IDs that should have been used")
+  )
+  .option(
+    "--forbidden-memory-id <id...>",
+    t("本次不应注入的知识 ID", "knowledge IDs that should not have been injected")
+  )
   .option("--task <task>", t("反馈关联的简短任务文本", "short task text associated with the feedback"))
   .option("--note <note>", t("可选备注，最多 500 字符", "optional feedback note, max 500 characters"))
   .action(
     (options: {
-      memoryId: string;
+      memoryId?: string;
       usefulness: string;
       root?: string;
       queryRunId?: string;
+      reason?: string;
+      expectedMemoryId?: string[];
+      forbiddenMemoryId?: string[];
       task?: string;
       note?: string;
     }) => {
       const result = logMemoryFeedback(resolveCliRoot(options.root), {
         memoryId: options.memoryId,
         usefulness: options.usefulness,
+        reason: options.reason,
         queryRunId: options.queryRunId,
+        expectedMemoryIds: options.expectedMemoryId ?? [],
+        forbiddenMemoryIds: options.forbiddenMemoryId ?? [],
         task: options.task,
         note: options.note
       });

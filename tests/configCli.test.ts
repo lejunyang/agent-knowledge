@@ -277,6 +277,8 @@ describe("CLI user configuration", () => {
     const sidecarSetup = await runCli(["sidecar", "setup", "--help"]);
     const sidecarCompare = await runCli(["sidecar", "compare", "--help"]);
     const sidecarHistory = await runCli(["sidecar", "history", "--help"]);
+    const feedback = await runCli(["feedback", "--help"]);
+    const query = await runCli(["query", "--help"]);
 
     expect(top).toContain("把单个候选 JSON 安全写入");
     expect(top).toContain("全局 --config/--locale/--json 必须放在子命令之前");
@@ -298,6 +300,31 @@ describe("CLI user configuration", () => {
     expect(sidecarCompare).toContain("native_memory_id");
     expect(sidecarCompare).toContain("abstention failure");
     expect(sidecarHistory).toContain("历次 native/sidecar 比较指标");
+    expect(feedback).toContain("--reason");
+    expect(feedback).toContain("wrong_route");
+    expect(query).toContain("--retain-task-evidence");
+  });
+
+  it("records query-level structured feedback without a memory ID", async () => {
+    const temp = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-feedback-cli-"));
+    tempDirs.push(temp);
+
+    const result = JSON.parse(
+      await runCli([
+        "feedback",
+        "--root",
+        temp,
+        "--usefulness",
+        "not_useful",
+        "--reason",
+        "should_abstain",
+        "--query-run-id",
+        "query-cli-abstain"
+      ])
+    ) as { status: string; memoryId?: string };
+
+    expect(result.status).toBe("logged");
+    expect(result.memoryId).toBeUndefined();
   });
 
   it("documents graph retrieval modes and traversal controls in query help", async () => {

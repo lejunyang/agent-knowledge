@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,6 +15,7 @@ import {
 } from "../src/memory/cleanup.js";
 import {
   getFeedbackLedgerPath,
+  readFeedbackLedger,
   readFeedbackScores
 } from "../src/memory/feedbackLedger.js";
 import {
@@ -182,5 +183,31 @@ describe("maintenance cleanup", () => {
     });
     await applyMaintenanceCleanup(root);
     expect(readFeedbackScores(root).get("k_feedback")).toBe(2);
+  });
+
+  it("fills structured feedback defaults when reading a legacy ledger", async () => {
+    const root = await createRoot();
+    const target = getFeedbackLedgerPath(root);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(
+      target,
+      `${JSON.stringify({
+        version: 1,
+        updatedAt: "2026-08-09T00:00:00.000Z",
+        entries: {
+          legacy: {
+            key: "legacy",
+            memoryId: "k_legacy",
+            usefulness: "useful",
+            timestamp: "2026-08-09T00:00:00.000Z"
+          }
+        }
+      })}\n`,
+      "utf8"
+    );
+
+    const entry = readFeedbackLedger(root).entries.legacy;
+    expect(entry?.expectedMemoryIds).toEqual([]);
+    expect(entry?.forbiddenMemoryIds).toEqual([]);
   });
 });

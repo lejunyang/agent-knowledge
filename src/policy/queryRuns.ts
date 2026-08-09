@@ -16,6 +16,8 @@ import {
 import path from "node:path";
 import { z } from "zod";
 import { resolveWorkspacePath } from "../core/paths.js";
+import { redactEvidenceText } from "../ingestion/redaction.js";
+import { putVaultObject, type VaultOptions } from "../vault/core.js";
 
 const HashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 
@@ -78,6 +80,12 @@ export const QueryRunSchema = z
 
 export type QueryRun = z.output<typeof QueryRunSchema>;
 type QueryRunEvent = z.output<typeof QueryRunEventSchema>;
+
+export type RetainedQueryTaskEvidence = {
+  vaultId: string;
+  bytes: number;
+  redactionCounts: Record<string, number>;
+};
 
 /** 返回按日分片的 query-run ledger 路径。 */
 export function getQueryRunLedgerPath(
@@ -172,6 +180,29 @@ export function recordQueryPacket(
       abstained: input.injectedIds.length === 0
     })
   );
+}
+
+/** 显式把经 secrets-and-pii 脱敏的 task 加密进 Vault；普通 query 永远不会自动调用。 */
+export async function retainQueryTaskEvidence(
+  rootDir: string,
+  task: string,
+  options: VaultOptions
+): Promise<RetainedQueryTaskEvidence> {
+  const redacted = redactEvidenceText(task, "secrets-and-pii");
+  const bytes = Buffer.from(redacted.text, "utf8");
+  const stored = await putVaultObject(
+    rootDir,
+    {
+      bytes,
+      contentType: "text/plain; charset=utf-8"
+    },
+    { ...options, actor: options.actor ?? "policy-query-task" }
+  );
+  return {
+    vaultId: stored.id,
+    bytes: stored.bytes,
+    redactionCounts: redacted.counts
+  };
 }
 
 /** 读取全部合法 ledger 事件；损坏行跳过，避免单行破坏长期诊断。 */

@@ -127,6 +127,7 @@ export type QueryScoringOptions = {
   embeddingScorer?: EmbeddingScorer;
   reranker?: MemoryReranker;
   log?: boolean;
+  taskVaultId?: string;
 };
 
 export type QueryHybridOptions = QueryScoringOptions & {
@@ -154,14 +155,15 @@ export function recordFinalQueryResult(
   rootDir: string,
   request: MemoryQueryRequest,
   result: QueryMemoriesDebugResult,
-  enabled = true
+  options: { enabled?: boolean; taskVaultId?: string } = {}
 ): void {
-  if (!enabled) {
+  if (options.enabled === false) {
     return;
   }
   recordQueryRetrieval(rootDir, {
     queryRunId: result.debug.queryRunId,
     task: request.task,
+    taskVaultId: options.taskVaultId,
     domains: request.domains,
     scenarios: request.scenarios,
     projectKeys: request.projectKeys,
@@ -1066,7 +1068,10 @@ export function queryMemoriesWithDebug(
   const selection = selectCandidateRows(rootDir, request);
   const result = rankSelectedRows(rootDir, request, selection, scoringOptions);
 
-  recordFinalQueryResult(rootDir, request, result, scoringOptions.log !== false);
+  recordFinalQueryResult(rootDir, request, result, {
+    enabled: scoringOptions.log !== false,
+    taskVaultId: scoringOptions.taskVaultId
+  });
 
   return result;
 }
@@ -1109,7 +1114,10 @@ export async function queryMemoriesHybridWithDebug(
   };
   const result = rankSelectedRows(rootDir, request, selection, options);
 
-  recordFinalQueryResult(rootDir, request, result, options.log !== false);
+  recordFinalQueryResult(rootDir, request, result, {
+    enabled: options.log !== false,
+    taskVaultId: options.taskVaultId
+  });
 
   return result;
 }
@@ -1235,6 +1243,9 @@ export async function queryMemoriesRerankedWithDebug(
       })
     }
   };
-  recordFinalQueryResult(rootDir, request, result, options.log !== false);
+  recordFinalQueryResult(rootDir, request, result, {
+    enabled: options.log !== false,
+    taskVaultId: options.taskVaultId
+  });
   return result;
 }

@@ -92,6 +92,7 @@ export async function queryMemoriesGraphWithDebug(
     embeddingProvider?: EmbeddingProvider;
     embeddingTopK?: number;
     log?: boolean;
+    taskVaultId?: string;
   }
 ): Promise<QueryMemoriesDebugResult> {
   const request = MemoryQueryRequestSchema.parse(rawRequest);
@@ -184,7 +185,10 @@ export async function queryMemoriesGraphWithDebug(
       })
     }
   };
-  recordFinalQueryResult(rootDir, request, result, options.log !== false);
+  recordFinalQueryResult(rootDir, request, result, {
+    enabled: options.log !== false,
+    taskVaultId: options.taskVaultId
+  });
   return result;
 }
 
