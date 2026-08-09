@@ -48,6 +48,7 @@ function profile(root: string) {
       maintenance: true,
       audit: true,
       evalFiles: [path.join(root, "eval.yaml")],
+      sidecarComparisons: [],
       deliverNotifications: false
     },
     agent: {
@@ -200,6 +201,65 @@ describe("bounded automation runner", () => {
     expect(invoked).not.toContain("maintenance accept");
     expect((await listNotifications(root))[0]?.type).toBe(
       "source_refresh_failed"
+    );
+  });
+
+  it("runs scheduled sidecar comparisons and notifies when a provider regresses", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "ak-automation-sidecar-"));
+    tempDirs.push(root);
+    const raw = profile(root);
+    const configured = AutomationProfileSchema.parse({
+      ...raw,
+      sources: [],
+      tasks: {
+        refreshSources: false,
+        maintenance: false,
+        audit: false,
+        evalFiles: [],
+        deliverNotifications: false,
+        sidecarComparisons: [
+          {
+            configs: [path.join(root, "hindsight.json")],
+            evalFile: path.join(root, "eval.yaml"),
+            outputDir: path.join(root, "reports")
+          }
+        ]
+      }
+    });
+    const command = vi.fn(
+      async (_executable: string, _args: string[]) => ({
+        stdout: JSON.stringify({
+          providers: {
+            native: {
+              passed: 10,
+              failed: 0,
+              falseInjectionRate: 0,
+              abstentionFailureRate: 0
+            },
+            hindsight: {
+              passed: 8,
+              failed: 2,
+              falseInjectionRate: 0.1,
+              abstentionFailureRate: 0.2
+            }
+          }
+        }),
+        stderr: ""
+      })
+    );
+
+    const result = await runAutomation(configured, {
+      command,
+      idempotencyKey: "sidecar-window"
+    });
+
+    expect(result.status).toBe("needs_confirmation");
+    expect(command).toHaveBeenCalledTimes(1);
+    expect(
+      (command.mock.calls[0]?.[1] as string[]).join(" ")
+    ).toContain("sidecar compare");
+    expect((await listNotifications(root))[0]?.type).toBe(
+      "sidecar_regression"
     );
   });
 });

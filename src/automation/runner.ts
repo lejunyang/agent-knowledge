@@ -30,7 +30,8 @@ export type AutomationStepKind =
   | "source_refresh"
   | "audit"
   | "maintenance"
-  | "eval";
+  | "eval"
+  | "sidecar_compare";
 
 export type AutomationStep = {
   id: string;
@@ -220,6 +221,27 @@ export async function inspectAutomation(
       ])
     );
   }
+  for (const [index, comparison] of profile.tasks.sidecarComparisons.entries()) {
+    steps.push(
+      agentKnowledgeStep(
+        "sidecar_compare",
+        `${index + 1}:${path.basename(comparison.evalFile)}`,
+        [
+          "sidecar",
+          "compare",
+          "--root",
+          profile.knowledgeRoot,
+          "--config",
+          ...comparison.configs,
+          "--eval",
+          comparison.evalFile,
+          "--output",
+          comparison.outputDir
+        ],
+        profile.agent.maxRuntimeMinutes * 60_000
+      )
+    );
+  }
   return {
     profileId: profile.id,
     knowledgeRoot: profile.knowledgeRoot,
@@ -402,6 +424,71 @@ async function notifyEvalRegression(
   return [notification.id];
 }
 
+/** Sidecar 低于 native 安全/通过率时创建 regression 通知。 */
+async function notifySidecarRegression(
+  profile: AutomationProfile,
+  job: AutomationJobHandle,
+  step: AutomationStep,
+  value: unknown
+): Promise<string[]> {
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+  const providers = (value as { providers?: unknown }).providers;
+  if (!providers || typeof providers !== "object") {
+    return [];
+  }
+  const metrics = providers as Record<
+    string,
+    {
+      passed?: number;
+      falseInjectionRate?: number;
+      abstentionFailureRate?: number;
+    }
+  >;
+  const native = metrics.native;
+  if (!native) {
+    return [];
+  }
+  const regressions = Object.entries(metrics)
+    .filter(([name]) => name !== "native")
+    .filter(
+      ([, current]) =>
+        (current.passed ?? 0) < (native.passed ?? 0) ||
+        (current.falseInjectionRate ?? 0) >
+          (native.falseInjectionRate ?? 0) ||
+        (current.abstentionFailureRate ?? 0) >
+          (native.abstentionFailureRate ?? 0)
+    )
+    .map(([name, current]) => ({
+      name,
+      passed: current.passed ?? 0,
+      falseInjectionRate: current.falseInjectionRate ?? 0,
+      abstentionFailureRate: current.abstentionFailureRate ?? 0
+    }));
+  if (regressions.length === 0) {
+    return [];
+  }
+  const notification = await enqueueNotification(profile.knowledgeRoot, {
+    type: "sidecar_regression",
+    severity: "warning",
+    title: "External memory sidecar 低于 native baseline",
+    summary: `${regressions.length} 个 sidecar 在通过率或安全指标上退化。`,
+    dedupeKey: `${job.id}:${step.id}:sidecar-regression`,
+    details: {
+      jobId: job.id,
+      comparison: step.id,
+      native: {
+        passed: native.passed ?? 0,
+        falseInjectionRate: native.falseInjectionRate ?? 0,
+        abstentionFailureRate: native.abstentionFailureRate ?? 0
+      },
+      regressions
+    }
+  });
+  return [notification.id];
+}
+
 /** 执行 profile；任何用户判断都通过 outbox 暴露，不直接修改 active facts。 */
 export async function runAutomation(
   rawProfile: AutomationProfile,
@@ -453,6 +540,10 @@ export async function runAutomation(
       } else if (step.kind === "eval") {
         notificationIds.push(
           ...(await notifyEvalRegression(profile, job, step, value))
+        );
+      } else if (step.kind === "sidecar_compare") {
+        notificationIds.push(
+          ...(await notifySidecarRegression(profile, job, step, value))
         );
       }
     } catch (error) {

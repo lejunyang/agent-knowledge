@@ -97,6 +97,18 @@ export const AutomationProfileSchema = z
         maintenance: z.boolean().default(true),
         audit: z.boolean().default(true),
         evalFiles: z.array(AbsolutePathSchema).max(50).default([]),
+        sidecarComparisons: z
+          .array(
+            z
+              .object({
+                configs: z.array(AbsolutePathSchema).min(1).max(20),
+                evalFile: AbsolutePathSchema,
+                outputDir: AbsolutePathSchema
+              })
+              .strict()
+          )
+          .max(20)
+          .default([]),
         deliverNotifications: z.boolean().default(true)
       })
       .strict()

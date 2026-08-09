@@ -47,7 +47,17 @@ function profile(root: string) {
       refreshSources: true,
       maintenance: true,
       audit: true,
-      evalFiles: [path.join(root, "eval.yaml")]
+      evalFiles: [path.join(root, "eval.yaml")],
+      sidecarComparisons: [
+        {
+          configs: [
+            path.join(root, "sidecars", "hindsight.json"),
+            path.join(root, "sidecars", "mem0.json")
+          ],
+          evalFile: path.join(root, "eval.yaml"),
+          outputDir: path.join(root, "reports", "sidecars")
+        }
+      ]
     },
     agent: {
       maxRuntimeMinutes: 20,
@@ -82,6 +92,7 @@ describe("automation profile and jobs", () => {
       throw new Error("Expected the first automation source to be Lark");
     }
     expect(larkSource.rateLimit.minIntervalMs).toBe(250);
+    expect(parsed.tasks.sidecarComparisons[0]?.configs).toHaveLength(2);
   });
 
   it("rejects embedded callback secrets and unbounded retry settings", () => {
