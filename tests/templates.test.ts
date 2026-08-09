@@ -60,7 +60,7 @@ afterEach(async () => {
 });
 
 describe("managed integrations", () => {
-  it("keeps plugin-bundle Skills identical to the canonical project Skills", async () => {
+  it("keeps every plugin-bundle Skill identical to the canonical project Skills", async () => {
     for (const skillName of [
       "knowledge-organizer",
       "memory-maintainer",
@@ -68,23 +68,42 @@ describe("managed integrations", () => {
       "lifecycle-recorder",
       "agent-knowledge-guide"
     ]) {
-      const canonical = await readFile(
-        path.join(".trae", "skills", skillName, "SKILL.md"),
-        "utf8"
-      );
-      const bundled = await readFile(
+      const canonicalRoot = path.join(".trae", "skills", skillName);
+      const canonicalFiles = await listRelativeFiles(canonicalRoot);
+      const bundleRoots = [
+        path.join("templates", "trae", "plugin", "skills", skillName),
         path.join(
           "templates",
-          "trae",
-          "plugin",
+          "codex",
+          "marketplace",
+          "plugins",
+          "agent-knowledge",
           "skills",
-          skillName,
-          "SKILL.md"
-        ),
-        "utf8"
-      );
+          skillName
+        )
+      ];
 
-      expect(bundled, `${skillName} plugin Skill drifted`).toBe(canonical);
+      for (const bundledRoot of bundleRoots) {
+        expect(
+          await listRelativeFiles(bundledRoot),
+          `${skillName} plugin file set drifted`
+        ).toEqual(canonicalFiles);
+        for (const relativePath of canonicalFiles) {
+          const canonical = await readFile(
+            path.join(canonicalRoot, relativePath),
+            "utf8"
+          );
+          const bundled = await readFile(
+            path.join(bundledRoot, relativePath),
+            "utf8"
+          );
+
+          expect(
+            bundled,
+            `${skillName}/${relativePath} plugin content drifted`
+          ).toBe(canonical);
+        }
+      }
     }
   });
 
@@ -94,13 +113,24 @@ describe("managed integrations", () => {
       "skills",
       "agent-knowledge-guide"
     );
-    const bundledRoot = path.join(
-      "templates",
-      "trae",
-      "plugin",
-      "skills",
-      "agent-knowledge-guide"
-    );
+    const bundledRoots = [
+      path.join(
+        "templates",
+        "trae",
+        "plugin",
+        "skills",
+        "agent-knowledge-guide"
+      ),
+      path.join(
+        "templates",
+        "codex",
+        "marketplace",
+        "plugins",
+        "agent-knowledge",
+        "skills",
+        "agent-knowledge-guide"
+      )
+    ];
     const canonicalFiles = await listRelativeFiles(canonicalRoot);
 
     expect(canonicalFiles).toEqual([
@@ -109,13 +139,15 @@ describe("managed integrations", () => {
       path.join("references", "diagnostics.md"),
       path.join("references", "workflows.md")
     ]);
-    expect(await listRelativeFiles(bundledRoot)).toEqual(canonicalFiles);
-    for (const relativePath of canonicalFiles) {
-      await expect(
-        readFile(path.join(bundledRoot, relativePath), "utf8")
-      ).resolves.toBe(
-        await readFile(path.join(canonicalRoot, relativePath), "utf8")
-      );
+    for (const bundledRoot of bundledRoots) {
+      expect(await listRelativeFiles(bundledRoot)).toEqual(canonicalFiles);
+      for (const relativePath of canonicalFiles) {
+        await expect(
+          readFile(path.join(bundledRoot, relativePath), "utf8")
+        ).resolves.toBe(
+          await readFile(path.join(canonicalRoot, relativePath), "utf8")
+        );
+      }
     }
 
     const guide = await readFile(
@@ -640,6 +672,157 @@ describe("managed integrations", () => {
       targetDir: windowsTarget
     });
     expect(doctor.healthy).toBe(true);
-    expect(listIntegrationProducts().map((product) => product.id)).toEqual(["trae", "trae-cn", "claude-code"]);
+    expect(listIntegrationProducts().map((product) => product.id)).toEqual([
+      "trae",
+      "trae-cn",
+      "claude-code",
+      "codex"
+    ]);
+  });
+
+  it("installs Codex hooks, standalone Skills, and a valid local marketplace without fake agents", async () => {
+    const targetDir = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-codex-")
+    );
+    tempDirs.push(targetDir);
+    await writeFile(
+      path.join(targetDir, "hooks.json"),
+      `${JSON.stringify(
+        {
+          hooks: {
+            Stop: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command: "foreign-codex-stop",
+                    timeout: 5
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const options = {
+      packageRoot: process.cwd(),
+      product: "codex" as const,
+      scope: "project" as const,
+      targetDir,
+      components: ["hooks", "skills", "plugin-bundle"] as const
+    };
+    const first = await installIntegration(options);
+    const second = await installIntegration(options);
+
+    const hooks = await readFile(path.join(targetDir, "hooks.json"), "utf8");
+    const marketplaceRoot = path.join(
+      targetDir,
+      "agent-knowledge-marketplace"
+    );
+    const marketplace = JSON.parse(
+      await readFile(
+        path.join(marketplaceRoot, ".agents", "plugins", "marketplace.json"),
+        "utf8"
+      )
+    ) as {
+      plugins: Array<{
+        name: string;
+        source: { source: string; path: string };
+      }>;
+    };
+    const pluginRoot = path.join(
+      marketplaceRoot,
+      "plugins",
+      "agent-knowledge"
+    );
+
+    expect(hooks).toContain("foreign-codex-stop");
+    expect(hooks).toContain("agent-knowledge hook user-prompt-submit");
+    expect(hooks).toContain("agent-knowledge hook subagent-event");
+    expect(hooks).not.toContain("SubagentStart");
+    expect(hooks).not.toContain("SessionEnd");
+    await expect(
+      readFile(
+        path.join(
+          targetDir,
+          "skills",
+          "agent-knowledge-guide",
+          "SKILL.md"
+        ),
+        "utf8"
+      )
+    ).resolves.toContain("Agent Knowledge 使用向导");
+    expect(await exists(path.join(targetDir, "agents"))).toBe(false);
+    expect(marketplace.plugins).toEqual([
+      {
+        name: "agent-knowledge",
+        source: {
+          source: "local",
+          path: "./plugins/agent-knowledge"
+        },
+        policy: {
+          installation: "AVAILABLE",
+          authentication: "ON_INSTALL"
+        },
+        category: "Productivity"
+      }
+    ]);
+    await expect(
+      readFile(
+        path.join(pluginRoot, ".codex-plugin", "plugin.json"),
+        "utf8"
+      )
+    ).resolves.toContain('"skills": "./skills/"');
+    await expect(
+      readFile(
+        path.join(
+          pluginRoot,
+          "skills",
+          "agent-knowledge-guide",
+          "references",
+          "diagnostics.md"
+        ),
+        "utf8"
+      )
+    ).resolves.toContain("检索是否会用记忆");
+    expect(first.conflicts).toEqual([]);
+    expect(second.managed.every((item) => item.status === "unchanged")).toBe(
+      true
+    );
+
+    const doctor = await doctorIntegration({
+      product: "codex",
+      scope: "project",
+      targetDir
+    });
+    expect(doctor.healthy).toBe(true);
+
+    await expect(
+      installIntegration({
+        packageRoot: process.cwd(),
+        product: "codex",
+        scope: "project",
+        targetDir,
+        components: ["agents"]
+      })
+    ).rejects.toThrow("codex does not support component: agents");
+
+    const removed = await uninstallIntegration({
+      product: "codex",
+      scope: "project",
+      targetDir
+    });
+    expect(removed.preserved).toEqual([]);
+    expect(removed.removed).toContain(path.join(targetDir, "hooks.json"));
+    await expect(readFile(path.join(targetDir, "hooks.json"), "utf8")).resolves.toContain(
+      "foreign-codex-stop"
+    );
+    expect(await exists(path.join(targetDir, "skills", "agent-knowledge-guide"))).toBe(false);
+    expect(await exists(marketplaceRoot)).toBe(false);
   });
 });

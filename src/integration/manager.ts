@@ -12,7 +12,11 @@ import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:
 import { homedir } from "node:os";
 import path from "node:path";
 
-export type IntegrationProductId = "trae" | "trae-cn" | "claude-code";
+export type IntegrationProductId =
+  | "trae"
+  | "trae-cn"
+  | "claude-code"
+  | "codex";
 export type IntegrationScope = "user" | "project";
 export type IntegrationComponent = "hooks" | "agents" | "skills" | "plugin-bundle";
 export type IntegrationInstallMode = "merge" | "overwrite";
@@ -50,6 +54,7 @@ export type InstallIntegrationResult = {
   roots: {
     hooks: string;
     resources: string;
+    skills?: string;
   };
   manifestPath: string;
   managed: Array<ManagedResource & { status: "installed" | "updated" | "unchanged" }>;
@@ -104,6 +109,11 @@ const PRODUCTS: IntegrationProduct[] = [
     id: "claude-code",
     displayName: "Claude Code",
     components: ["hooks", "agents", "skills"]
+  },
+  {
+    id: "codex",
+    displayName: "Codex",
+    components: ["hooks", "skills", "plugin-bundle"]
   }
 ];
 
@@ -120,16 +130,24 @@ function resolveRoots(
   product: IntegrationProductId,
   scope: IntegrationScope,
   targetDir?: string
-): { hooks: string; resources: string } {
+): { hooks: string; resources: string; skills?: string } {
   if (targetDir) {
     const resolved = path.resolve(targetDir);
     return {
       hooks: product === "trae" ? path.join(resolved, "cli") : resolved,
-      resources: resolved
+      resources: resolved,
+      ...(product === "codex" ? { skills: resolved } : {})
     };
   }
 
   if (scope === "project") {
+    if (product === "codex") {
+      return {
+        hooks: path.join(process.cwd(), ".codex"),
+        resources: path.join(process.cwd(), ".codex"),
+        skills: path.join(process.cwd(), ".agents")
+      };
+    }
     const root = path.join(
       process.cwd(),
       product === "trae" ? ".trae" : product === "trae-cn" ? ".trae-cn" : ".claude"
@@ -146,6 +164,20 @@ function resolveRoots(
   if (product === "trae-cn") {
     const root = path.resolve(process.env.TRAE_CN_HOME ?? path.join(homedir(), ".trae-cn"));
     return { hooks: root, resources: root };
+  }
+
+  if (product === "codex") {
+    const codexHome = path.resolve(
+      process.env.CODEX_HOME ?? path.join(homedir(), ".codex")
+    );
+    const agentsHome = path.resolve(
+      process.env.AGENTS_HOME ?? path.join(homedir(), ".agents")
+    );
+    return {
+      hooks: codexHome,
+      resources: codexHome,
+      skills: agentsHome
+    };
   }
 
   const claudeHome = path.join(homedir(), ".claude");
@@ -315,6 +347,14 @@ function hookTemplatePath(
   if (product === "trae" || product === "trae-cn") {
     return path.join(packageRoot, "templates", "trae", platform === "win32" ? "hooks.windows.json" : "hooks.json");
   }
+  if (product === "codex") {
+    return path.join(
+      packageRoot,
+      "templates",
+      "codex",
+      platform === "win32" ? "hooks.windows.json" : "hooks.json"
+    );
+  }
   return path.join(
     packageRoot,
     "templates",
@@ -326,7 +366,7 @@ function hookTemplatePath(
 /** 返回产品实际读取的全部 Hook 目标；TRAE 必须同时覆盖根目录和 CLI 目录。 */
 function hookTargetPaths(
   product: IntegrationProductId,
-  roots: { hooks: string; resources: string }
+  roots: { hooks: string; resources: string; skills?: string }
 ): string[] {
   if (product === "trae") {
     return [
@@ -337,6 +377,9 @@ function hookTargetPaths(
   if (product === "trae-cn") {
     return [path.join(roots.resources, "hooks.json")];
   }
+  if (product === "codex") {
+    return [path.join(roots.hooks, "hooks.json")];
+  }
   return [path.join(roots.hooks, "settings.json")];
 }
 
@@ -345,6 +388,37 @@ function agentSourceRoot(packageRoot: string, product: IntegrationProductId): st
   const templateProduct = product === "trae-cn" ? "trae" : product;
   const productRoot = path.join(packageRoot, "templates", templateProduct, "agents");
   return existsSync(productRoot) ? productRoot : path.join(packageRoot, "templates", "trae", "agents");
+}
+
+/** Codex 的 standalone Skill 位于 `.agents/skills`，其他宿主则位于各自资源根。 */
+function skillTargetRoot(
+  product: IntegrationProductId,
+  roots: { hooks: string; resources: string; skills?: string }
+): string {
+  return path.join(
+    product === "codex" ? (roots.skills ?? roots.resources) : roots.resources,
+    "skills"
+  );
+}
+
+/** 按宿主选择 plugin bundle 源；Codex 使用可注册的本地 marketplace，而非裸插件目录。 */
+function pluginBundleSource(
+  packageRoot: string,
+  product: IntegrationProductId
+): string {
+  return product === "codex"
+    ? path.join(packageRoot, "templates", "codex", "marketplace")
+    : path.join(packageRoot, "templates", "trae", "plugin");
+}
+
+/** 返回宿主加载 plugin bundle 所需的托管目标路径。 */
+function pluginBundleTarget(
+  product: IntegrationProductId,
+  roots: { hooks: string; resources: string; skills?: string }
+): string {
+  return product === "codex"
+    ? path.join(roots.resources, "agent-knowledge-marketplace")
+    : path.join(roots.resources, "plugins", "agent-knowledge");
 }
 
 /** 判断上一版 manifest 中的资源是不是需要退休的旧 Subagent 模板。 */
@@ -461,7 +535,14 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
   if (!product) {
     throw new Error(`Unsupported integration product: ${options.product}`);
   }
-  const components = [...new Set(options.components ?? DEFAULT_COMPONENTS)];
+  const components = [
+    ...new Set(
+      options.components ??
+        DEFAULT_COMPONENTS.filter((component) =>
+          product.components.includes(component)
+        )
+    )
+  ];
   const mode = options.mode ?? "merge";
   for (const component of components) {
     if (!product.components.includes(component)) {
@@ -527,7 +608,7 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
     if (existsSync(sourceRoot)) {
       const entries = await readdir(sourceRoot, { withFileTypes: true });
       for (const entry of entries.filter((item) => item.isDirectory())) {
-        const target = path.join(roots.resources, "skills", entry.name);
+        const target = path.join(skillTargetRoot(options.product, roots), entry.name);
         const outcome = await copyManagedPath(
           path.join(sourceRoot, entry.name),
           target,
@@ -545,8 +626,11 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
   }
 
   if (components.includes("plugin-bundle")) {
-    const source = path.join(path.resolve(options.packageRoot), "templates", "trae", "plugin");
-    const target = path.join(roots.resources, "plugins", "agent-knowledge");
+    const source = pluginBundleSource(
+      path.resolve(options.packageRoot),
+      options.product
+    );
+    const target = pluginBundleTarget(options.product, roots);
     const outcome = await copyManagedPath(source, target, previousByPath.get(target), "directory", mode);
     if ("conflict" in outcome) {
       conflicts.push(outcome.conflict);

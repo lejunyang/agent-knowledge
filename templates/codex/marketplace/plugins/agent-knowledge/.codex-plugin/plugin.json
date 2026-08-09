@@ -1,0 +1,24 @@
+{
+  "name": "agent-knowledge",
+  "version": "0.1.0",
+  "description": "Local governed knowledge retrieval, lifecycle recording, and memory maintenance for Codex",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Agent Knowledge",
+    "shortDescription": "Governed local knowledge and memory workflows",
+    "longDescription": "Teaches Codex how to query, expand, record, review, and improve versioned local Agent Knowledge without bypassing evidence or human approval.",
+    "developerName": "Agent Knowledge",
+    "category": "Productivity",
+    "capabilities": [
+      "Knowledge retrieval",
+      "Memory governance",
+      "Lifecycle recording"
+    ],
+    "defaultPrompt": [
+      "Explain the safest Agent Knowledge workflow for this task.",
+      "Search and expand relevant active knowledge before making assumptions.",
+      "Diagnose Agent Knowledge quality, source freshness, and maintenance health."
+    ],
+    "brandColor": "#4F46E5"
+  }
+}
