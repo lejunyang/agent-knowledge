@@ -5,7 +5,13 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  writeFile
+} from "node:fs/promises";
 import path from "node:path";
 import { resolveWorkspacePath } from "../core/paths.js";
 import {
@@ -63,6 +69,39 @@ export async function readAutomationJob(
   }
   return AutomationJobSchema.parse(
     JSON.parse(await readFile(target, "utf8"))
+  );
+}
+
+/** 列出 automation jobs，按更新时间倒序，供 status/外部 Agent 恢复最近任务。 */
+export async function listAutomationJobs(
+  rootDir: string,
+  options: { profileId?: string } = {}
+): Promise<AutomationJob[]> {
+  const directory = resolveWorkspacePath(
+    rootDir,
+    ".memory",
+    "automation",
+    "jobs"
+  );
+  if (!existsSync(directory)) {
+    return [];
+  }
+  const jobs: AutomationJob[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) {
+      continue;
+    }
+    const job = AutomationJobSchema.parse(
+      JSON.parse(await readFile(path.join(directory, entry.name), "utf8"))
+    );
+    if (!options.profileId || job.profileId === options.profileId) {
+      jobs.push(job);
+    }
+  }
+  return jobs.sort(
+    (left, right) =>
+      right.updatedAt.localeCompare(left.updatedAt) ||
+      left.id.localeCompare(right.id)
   );
 }
 

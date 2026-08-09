@@ -181,6 +181,7 @@ describe("CLI user configuration", () => {
       "install",
       "--help"
     ]);
+    const automationRun = await runCli(["automation", "run", "--help"]);
 
     expect(source).toContain("推荐日常流程");
     expect(source).toContain("source refresh");
@@ -200,6 +201,9 @@ describe("CLI user configuration", () => {
     expect(integrationInstall).toContain(".agents/skills");
     expect(integrationInstall).toContain("codex plugin marketplace add");
     expect(integrationInstall).toContain("不支持 standalone agents");
+    expect(automationRun).toContain("只访问 profile allowlist");
+    expect(automationRun).toContain("不批准 inbox");
+    expect(automationRun).toContain("notification outbox");
   });
 
   it("describes user-facing management commands in parent help", async () => {
@@ -211,6 +215,8 @@ describe("CLI user configuration", () => {
     const maintenance = await runCli(["maintenance", "--help"]);
     const graph = await runCli(["graph", "--help"]);
     const integration = await runCli(["integration", "--help"]);
+    const automation = await runCli(["automation", "--help"]);
+    const notifications = await runCli(["notifications", "--help"]);
 
     expect(top).toContain("把单个候选 JSON 安全写入");
     expect(config).toContain("显示用户配置文件路径");
@@ -223,6 +229,8 @@ describe("CLI user configuration", () => {
     expect(graph).toContain("有限深度子图");
     expect(integration).toContain("结构化安装 hooks");
     expect(integration).toContain("检查产品接入是否完整");
+    expect(automation).toContain("运行有界来源刷新");
+    expect(notifications).toContain("后台通知 outbox");
   });
 
   it("documents graph retrieval modes and traversal controls in query help", async () => {

@@ -18,6 +18,7 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, "..");
 const DEFAULT_OUTPUT = path.join(REPOSITORY_ROOT, "local_exports", "lark");
 const DOCUMENT_TYPES = new Set(["wiki", "docx", "doc"]);
+let lastLarkRequestAt = 0;
 
 /** 对 XML attribute 做最小实体解码，便于恢复标题和 URL。 */
 function decodeXmlAttribute(value) {
@@ -157,28 +158,56 @@ async function writeJson(target, value) {
   await rename(temporary, target);
 }
 
-/** 执行 lark-cli 并校验统一 JSON envelope。 */
-async function runLark(args) {
-  const { stdout, stderr } = await execFileAsync("lark-cli", args, {
-    cwd: REPOSITORY_ROOT,
-    env: {
-      ...process.env,
-      LARKSUITE_CLI_NO_UPDATE_NOTIFIER: "1",
-      LARKSUITE_CLI_NO_SKILLS_NOTIFIER: "1"
-    },
-    maxBuffer: 128 * 1024 * 1024
-  });
-  const payload = JSON.parse(stdout);
-  if (payload.ok !== true) {
-    throw new Error(
-      `lark-cli ${args.join(" ")} failed: ${stderr || stdout}`
+/** 执行有界限流/重试的 lark-cli，并校验统一 JSON envelope。 */
+async function runLark(args, policy) {
+  let lastError = new Error(`lark-cli ${args.join(" ")} failed`);
+  for (let attempt = 1; attempt <= policy.maxAttempts; attempt += 1) {
+    const wait = Math.max(
+      0,
+      policy.minIntervalMs - (Date.now() - lastLarkRequestAt)
     );
+    if (wait > 0) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+    lastLarkRequestAt = Date.now();
+    try {
+      const { stdout, stderr } = await execFileAsync("lark-cli", args, {
+        cwd: REPOSITORY_ROOT,
+        env: {
+          ...process.env,
+          LARKSUITE_CLI_NO_UPDATE_NOTIFIER: "1",
+          LARKSUITE_CLI_NO_SKILLS_NOTIFIER: "1"
+        },
+        maxBuffer: 128 * 1024 * 1024
+      });
+      const payload = JSON.parse(stdout);
+      if (payload.ok !== true) {
+        throw new Error(
+          `lark-cli ${args.join(" ")} failed: ${stderr || stdout}`
+        );
+      }
+      return payload;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt >= policy.maxAttempts) {
+        break;
+      }
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          Math.min(
+            policy.maxDelayMs,
+            policy.baseDelayMs * 2 ** Math.max(0, attempt - 1)
+          )
+        )
+      );
+    }
   }
-  return payload;
+  throw lastError;
 }
 
 /** 尝试解析 Wiki node 元数据；普通 docx 不在 Wiki 时允许返回 null。 */
-async function resolveNode(reference, identity) {
+async function resolveNode(reference, identity, policy) {
   const args = [
     "wiki",
     "+node-get",
@@ -196,7 +225,7 @@ async function resolveNode(reference, identity) {
     );
   }
   try {
-    return await runLark(args);
+    return await runLark(args, policy);
   } catch (error) {
     if (reference.fileType === "wiki") {
       throw error;
@@ -206,7 +235,7 @@ async function resolveNode(reference, identity) {
 }
 
 /** 拉取完整 XML，保留 block ID、cite 和内嵌资源元数据。 */
-async function fetchDocument(reference, identity) {
+async function fetchDocument(reference, identity, policy) {
   return runLark([
     "docs",
     "+fetch",
@@ -220,7 +249,7 @@ async function fetchDocument(reference, identity) {
     "xml",
     "--format",
     "json"
-  ]);
+  ], policy);
 }
 
 /** 从 URL 或 raw token 构造首层 queue item。 */
@@ -246,6 +275,10 @@ function parseArguments(argv) {
   let maxDocuments = 500;
   let retryFailures = false;
   let refreshExisting = false;
+  let minIntervalMs = 0;
+  let maxAttempts = 1;
+  let retryBaseDelayMs = 1_000;
+  let retryMaxDelayMs = 30_000;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--root-url") {
@@ -260,6 +293,14 @@ function parseArguments(argv) {
       retryFailures = true;
     } else if (argument === "--refresh-existing") {
       refreshExisting = true;
+    } else if (argument === "--min-interval-ms") {
+      minIntervalMs = Number.parseInt(argv[++index], 10);
+    } else if (argument === "--max-attempts") {
+      maxAttempts = Number.parseInt(argv[++index], 10);
+    } else if (argument === "--retry-base-delay-ms") {
+      retryBaseDelayMs = Number.parseInt(argv[++index], 10);
+    } else if (argument === "--retry-max-delay-ms") {
+      retryMaxDelayMs = Number.parseInt(argv[++index], 10);
     } else if (argument === "--help") {
       return {
         help: true,
@@ -268,7 +309,11 @@ function parseArguments(argv) {
         identity,
         maxDocuments,
         retryFailures,
-        refreshExisting
+        refreshExisting,
+        minIntervalMs,
+        maxAttempts,
+        retryBaseDelayMs,
+        retryMaxDelayMs
       };
     } else {
       throw new Error(`Unknown argument: ${argument}`);
@@ -283,6 +328,20 @@ function parseArguments(argv) {
   if (!Number.isInteger(maxDocuments) || maxDocuments <= 0) {
     throw new Error("--max-documents must be a positive integer");
   }
+  if (!Number.isInteger(minIntervalMs) || minIntervalMs < 0) {
+    throw new Error("--min-interval-ms must be a non-negative integer");
+  }
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) {
+    throw new Error("--max-attempts must be between 1 and 10");
+  }
+  if (
+    !Number.isInteger(retryBaseDelayMs) ||
+    retryBaseDelayMs < 1 ||
+    !Number.isInteger(retryMaxDelayMs) ||
+    retryMaxDelayMs < retryBaseDelayMs
+  ) {
+    throw new Error("retry delays must be positive and max >= base");
+  }
   return {
     help: false,
     roots,
@@ -290,7 +349,11 @@ function parseArguments(argv) {
     identity,
     maxDocuments,
     retryFailures,
-    refreshExisting
+    refreshExisting,
+    minIntervalMs,
+    maxAttempts,
+    retryBaseDelayMs,
+    retryMaxDelayMs
   };
 }
 
@@ -300,7 +363,8 @@ function printHelp() {
   node scripts/fetch-lark-corpus.mjs \\
     --root-url <wiki-or-doc-url> [--root-url <url> ...] \\
     [--output local_exports/lark] [--as user] [--max-documents 500] \\
-    [--retry-failures] [--refresh-existing]`);
+    [--retry-failures] [--refresh-existing] [--min-interval-ms 250] \\
+    [--max-attempts 3] [--retry-base-delay-ms 1000] [--retry-max-delay-ms 30000]`);
 }
 
 /** 把飞书秒级时间戳或 ISO 时间统一为 ISO，用于廉价版本探测。 */
@@ -323,6 +387,12 @@ function resolveUpstreamUpdatedAt(resolved) {
  * Queue 使用 type+token 去重；失败节点写入 manifest 后继续，便于长任务最终集中处理权限或格式问题。
  */
 export async function fetchLarkCorpus(options) {
+  const requestPolicy = {
+    minIntervalMs: options.minIntervalMs ?? 0,
+    maxAttempts: options.maxAttempts ?? 1,
+    baseDelayMs: options.retryBaseDelayMs ?? 1_000,
+    maxDelayMs: options.retryMaxDelayMs ?? 30_000
+  };
   const output = path.resolve(options.output);
   await mkdir(output, { recursive: true });
   const manifestPath = path.join(output, "manifest.json");
@@ -442,7 +512,11 @@ export async function fetchLarkCorpus(options) {
       `${safeName(reference.title ?? reference.token)}-${shortHash(key)}`
     );
     try {
-      const node = await resolveNode(reference, options.identity);
+      const node = await resolveNode(
+        reference,
+        options.identity,
+        requestPolicy
+      );
       const resolved = node?.data ?? {};
       const previous = manifest.documents[key];
       const probedUpdatedAt = resolveUpstreamUpdatedAt(resolved);
@@ -481,7 +555,11 @@ export async function fetchLarkCorpus(options) {
         fileType: resolved.obj_type ?? reference.fileType,
         title: resolved.title ?? reference.title
       };
-      const document = await fetchDocument(fetchReference, options.identity);
+      const document = await fetchDocument(
+        fetchReference,
+        options.identity,
+        requestPolicy
+      );
       const documentData = document.data?.document;
       if (!documentData?.content) {
         throw new Error(`Document content missing for ${key}`);

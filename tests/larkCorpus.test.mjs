@@ -177,3 +177,57 @@ if (args[0] === "wiki") {
     await rm(output, { recursive: true, force: true });
   }
 });
+
+test("retries transient lark-cli failures with bounded policy", async () => {
+  const output = await mkdtemp(path.join(tmpdir(), "lark-corpus-retry-"));
+  const originalPath = process.env.PATH;
+  const fixtureBin = path.join(output, "bin");
+  const counterPath = path.join(output, "attempt-count.txt");
+  const { mkdir, writeFile, chmod } = await import("node:fs/promises");
+  await mkdir(fixtureBin, { recursive: true });
+  const fakeCli = path.join(fixtureBin, "lark-cli");
+  await writeFile(
+    fakeCli,
+    `#!/usr/bin/env node
+const fs = require("fs");
+const counter = ${JSON.stringify(counterPath)};
+const count = fs.existsSync(counter) ? Number(fs.readFileSync(counter, "utf8")) : 0;
+fs.writeFileSync(counter, String(count + 1));
+if (count === 0) {
+  process.stderr.write("temporary failure");
+  process.exit(1);
+}
+const args = process.argv.slice(2);
+const nodeIndex = args.indexOf("--node-token");
+const docIndex = args.indexOf("--doc");
+const token = nodeIndex >= 0 ? args[nodeIndex + 1] : args[docIndex + 1];
+if (args[0] === "wiki") {
+  process.stdout.write(JSON.stringify({ok:true,data:{node_token:token,obj_token:token,obj_type:"docx",title:token}}));
+} else {
+  process.stdout.write(JSON.stringify({ok:true,data:{document:{document_id:token,revision_id:1,content:'<h1>Retry</h1><p>ok</p>'}}}));
+}
+`,
+    "utf8"
+  );
+  await chmod(fakeCli, 0o755);
+  process.env.PATH = `${fixtureBin}:${originalPath}`;
+  try {
+    const result = await fetchLarkCorpus({
+      roots: ["root"],
+      output,
+      identity: "user",
+      maxDocuments: 10,
+      minIntervalMs: 0,
+      maxAttempts: 2,
+      retryBaseDelayMs: 1,
+      retryMaxDelayMs: 1
+    });
+
+    assert.equal(result.complete, true);
+    assert.equal(Object.keys(result.documents).length, 1);
+    assert.equal(await readFile(counterPath, "utf8"), "3");
+  } finally {
+    process.env.PATH = originalPath;
+    await rm(output, { recursive: true, force: true });
+  }
+});

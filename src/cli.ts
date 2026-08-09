@@ -18,6 +18,7 @@ import { Command } from "commander";
 import {
   MemoryQueryRequestSchema,
   acceptMaintenanceProposal,
+  ackNotification,
   appendLifecycleEvent,
   applyMaintenanceCleanup,
   appendJsonlLog,
@@ -35,6 +36,7 @@ import {
   createConfiguredSyncBackend,
   checkConnectorSourceUpdates,
   decideHookInjection,
+  deliverNotifications,
   downloadRetrievalModel,
   extractMaintenanceObservations,
   getDefaultUserConfigPath,
@@ -55,9 +57,12 @@ import {
   getEventLedgerStatus,
   getEventTimeline,
   initKnowledgeWorkspace,
+  inspectAutomation,
   listEventStreams,
   listConnectorRegistrations,
+  listAutomationJobs,
   listKnowledge,
+  listNotifications,
   listSources,
   logMemoryFeedback,
   markSourceReviewed,
@@ -72,15 +77,19 @@ import {
   queryMemoriesWithDebug,
   rebuildIndex,
   runConnectorIngestion,
+  runAutomation,
   registerConnector,
   runEvalSuite,
   runScheduledSync,
   readSubagentLogs,
+  readAutomationJob,
+  readAutomationProfile,
   readMaintenanceProposals,
   readKnowledgeGraph,
   resolveRetrievalModelDescriptor,
   rejectMaintenanceProposal,
   readMaintenanceObservations,
+  readNotification,
   readConnectorRegistration,
   showMaintenanceProposal,
   showLifecycleEvent,
@@ -118,6 +127,7 @@ import {
   type ConnectorRegistrationInput,
   type KnowledgeConnector,
   type MaintenanceObservation,
+  type AutomationJob,
   type UserConfig,
   resolveLocale,
   translate,
@@ -2843,6 +2853,195 @@ subagents
           event: options.event as "subagent_start" | "subagent_stop" | undefined,
           limit: Number.parseInt(options.limit, 10)
         }),
+        null,
+        2
+      )
+    );
+  });
+
+const automation = program
+  .command("automation")
+  .description(
+    t(
+      "运行有界来源刷新、审计、维护和评测任务",
+      "Run bounded source refresh, audit, maintenance, and evaluation jobs"
+    )
+  );
+
+automation
+  .command("validate")
+  .description(t("严格校验后台自动化 profile", "Strictly validate a background automation profile"))
+  .requiredOption("--profile <file>", t("Automation profile JSON", "Automation profile JSON"))
+  .action(async (options: { profile: string }) => {
+    const profile = await readAutomationProfile(options.profile);
+    console.log(
+      JSON.stringify(
+        {
+          valid: true,
+          profileId: profile.id,
+          knowledgeRoot: profile.knowledgeRoot,
+          sources: profile.sources.length,
+          callbackConfigured: profile.callback !== undefined
+        },
+        null,
+        2
+      )
+    );
+  });
+
+automation
+  .command("inspect")
+  .description(t("只读展开 automation 执行计划", "Expand the automation execution plan without running it"))
+  .requiredOption("--profile <file>", t("Automation profile JSON", "Automation profile JSON"))
+  .action(async (options: { profile: string }) => {
+    console.log(
+      JSON.stringify(
+        await inspectAutomation(await readAutomationProfile(options.profile), {
+          packageRoot: findPackageRoot()
+        }),
+        null,
+        2
+      )
+    );
+  });
+
+automation
+  .command("run")
+  .description(t("执行有界 automation 并写通知 outbox", "Run bounded automation and write the notification outbox"))
+  .requiredOption("--profile <file>", t("Automation profile JSON", "Automation profile JSON"))
+  .option("--idempotency-key <key>", t("调度窗口或外部任务 ID", "scheduler window or external job ID"))
+  .option(
+    "--no-deliver",
+    t(
+      "本轮不投递 callback，只保留本地通知",
+      "keep notifications local without callback delivery"
+    )
+  )
+  .addHelpText(
+    "after",
+    t(
+      `
+安全边界：
+  只访问 profile allowlist 中的 Lark roots 和 Git refs。
+  只写 source/Vault/.memory/proposal/notification，不批准 inbox、不安装 Skill、不修改 active knowledge。
+  需要语义确认时由后台 Agent 读取 notification outbox 后一次汇总提问。`,
+      `
+Safety boundaries:
+  Only Lark roots and Git refs explicitly allowlisted by the profile are accessed.
+  The job writes source/Vault/.memory/proposal/notification state only; it never approves inbox items, installs Skills, or modifies active knowledge.
+  A background agent should batch semantic questions after reading the notification outbox.`
+    )
+  )
+  .action(
+    async (options: {
+      profile: string;
+      idempotencyKey?: string;
+      deliver: boolean;
+    }) => {
+      const profile = await readAutomationProfile(options.profile);
+      const result = await runAutomation(profile, {
+        idempotencyKey: options.idempotencyKey,
+        packageRoot: findPackageRoot()
+      });
+      const delivery =
+        options.deliver &&
+        profile.tasks.deliverNotifications &&
+        profile.callback
+          ? await deliverNotifications(profile.knowledgeRoot, profile.callback)
+          : null;
+      console.log(JSON.stringify({ result, delivery }, null, 2));
+    }
+  );
+
+automation
+  .command("status")
+  .description(t("显示 profile 的最近 automation jobs", "Show recent automation jobs for a profile"))
+  .requiredOption("--profile <file>", t("Automation profile JSON", "Automation profile JSON"))
+  .option("--limit <count>", t("最大 job 数", "maximum jobs"), "20")
+  .action(async (options: { profile: string; limit: string }) => {
+    const profile = await readAutomationProfile(options.profile);
+    const jobs = await listAutomationJobs(profile.knowledgeRoot, {
+      profileId: profile.id
+    });
+    console.log(
+      JSON.stringify(
+        { profileId: profile.id, jobs: jobs.slice(0, Number.parseInt(options.limit, 10)) },
+        null,
+        2
+      )
+    );
+  });
+
+const notifications = program
+  .command("notifications")
+  .description(
+    t(
+      "查看、投递和确认后台通知 outbox",
+      "Inspect, deliver, and acknowledge the background notification outbox"
+    )
+  );
+
+notifications
+  .command("list")
+  .description(t("列出本地通知", "List local notifications"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--status <status>", t("按 pending、delivered、failed、acked 过滤", "filter by pending, delivered, failed, or acked"))
+  .action(async (options: { root?: string; status?: string }) => {
+    const items = await listNotifications(resolveCliRoot(options.root));
+    console.log(
+      JSON.stringify(
+        options.status
+          ? items.filter((item) => item.status === options.status)
+          : items,
+        null,
+        2
+      )
+    );
+  });
+
+notifications
+  .command("show")
+  .description(t("显示单个通知", "Show one notification"))
+  .argument("<notification-id>", t("Notification ID", "Notification ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (notificationId: string, options: { root?: string }) => {
+    const notification = await readNotification(
+      resolveCliRoot(options.root),
+      notificationId
+    );
+    if (!notification) {
+      throw new Error(`Notification not found: ${notificationId}`);
+    }
+    console.log(JSON.stringify(notification, null, 2));
+  });
+
+notifications
+  .command("deliver")
+  .description(t("按 profile callback 投递待处理通知", "Deliver pending notifications using a profile callback"))
+  .requiredOption("--profile <file>", t("Automation profile JSON", "Automation profile JSON"))
+  .action(async (options: { profile: string }) => {
+    const profile = await readAutomationProfile(options.profile);
+    if (!profile.callback) {
+      throw new Error("Automation profile does not configure a callback");
+    }
+    console.log(
+      JSON.stringify(
+        await deliverNotifications(profile.knowledgeRoot, profile.callback),
+        null,
+        2
+      )
+    );
+  });
+
+notifications
+  .command("ack")
+  .description(t("确认一个通知已处理", "Acknowledge a notification as handled"))
+  .argument("<notification-id>", t("Notification ID", "Notification ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (notificationId: string, options: { root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await ackNotification(resolveCliRoot(options.root), notificationId),
         null,
         2
       )
