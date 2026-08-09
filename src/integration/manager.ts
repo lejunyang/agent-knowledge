@@ -84,9 +84,9 @@ export type IntegrationProduct = {
   id: IntegrationProductId;
   displayName: string;
   components: IntegrationComponent[];
+  defaultComponents: IntegrationComponent[];
 };
 
-const DEFAULT_COMPONENTS: IntegrationComponent[] = ["hooks", "agents", "skills"];
 const OWNED_COMMAND_PATTERN = /(?:^|[\s'"])agent-knowledge(?:\.cmd)?\s+hook(?:\s|$)/;
 const MANIFEST_FILE = ".agent-knowledge-integration.json";
 const LEGACY_AGENT_TEMPLATE_NAMES = new Set([
@@ -98,28 +98,51 @@ const PRODUCTS: IntegrationProduct[] = [
   {
     id: "trae",
     displayName: "TRAE",
-    components: ["hooks", "agents", "skills", "plugin-bundle"]
+    components: ["hooks", "agents", "skills", "plugin-bundle"],
+    defaultComponents: ["hooks", "agents", "skills"]
   },
   {
     id: "trae-cn",
     displayName: "TRAE CN",
-    components: ["hooks", "agents", "skills", "plugin-bundle"]
+    components: ["hooks", "agents", "skills", "plugin-bundle"],
+    defaultComponents: ["hooks", "agents", "skills"]
   },
   {
     id: "claude-code",
     displayName: "Claude Code",
-    components: ["hooks", "agents", "skills"]
+    components: ["hooks", "agents", "skills"],
+    defaultComponents: ["hooks", "agents", "skills"]
   },
   {
     id: "codex",
     displayName: "Codex",
-    components: ["hooks", "skills", "plugin-bundle"]
+    components: ["hooks", "skills", "plugin-bundle"],
+    defaultComponents: ["hooks", "skills"]
   }
 ];
 
 /** 返回支持的产品和组件副本，避免调用方修改内部注册表。 */
 export function listIntegrationProducts(): IntegrationProduct[] {
-  return PRODUCTS.map((product) => ({ ...product, components: [...product.components] }));
+  return PRODUCTS.map((product) => ({
+    ...product,
+    components: [...product.components],
+    defaultComponents: [...product.defaultComponents]
+  }));
+}
+
+/** 按 ID 返回支持产品的只读副本，供 CLI 动态过滤组件而不复制产品能力表。 */
+export function getIntegrationProduct(
+  productId: IntegrationProductId
+): IntegrationProduct {
+  const product = PRODUCTS.find((item) => item.id === productId);
+  if (!product) {
+    throw new Error(`Unsupported integration product: ${productId}`);
+  }
+  return {
+    ...product,
+    components: [...product.components],
+    defaultComponents: [...product.defaultComponents]
+  };
 }
 
 /**
@@ -531,16 +554,10 @@ async function copyManagedPath(
  * 默认 merge 保留外部配置；显式 overwrite 只删除目标节点，不跟随 symlink 删除外部源。
  */
 export async function installIntegration(options: InstallIntegrationOptions): Promise<InstallIntegrationResult> {
-  const product = PRODUCTS.find((item) => item.id === options.product);
-  if (!product) {
-    throw new Error(`Unsupported integration product: ${options.product}`);
-  }
+  const product = getIntegrationProduct(options.product);
   const components = [
     ...new Set(
-      options.components ??
-        DEFAULT_COMPONENTS.filter((component) =>
-          product.components.includes(component)
-        )
+      options.components ?? product.defaultComponents
     )
   ];
   const mode = options.mode ?? "merge";

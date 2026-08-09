@@ -94,6 +94,7 @@ import {
   TransformersBatchReranker,
   stageHookEvent,
   getStagingStatus,
+  getIntegrationProduct,
   drainStagedEvents,
   suggestAliases,
   syncKnowledge,
@@ -3211,7 +3212,7 @@ integration
 integration
   .command("install")
   .description(t("结构化安装 hooks、agents、skills 或 plugin bundle", "Structurally install hooks, agents, skills, or a plugin bundle"))
-  .option("--product <product>", t("trae、trae-cn 或 claude-code", "trae, trae-cn, or claude-code"))
+  .option("--product <product>", t("trae、trae-cn、claude-code 或 codex", "trae, trae-cn, claude-code, or codex"))
   .option("--scope <scope>", t("user 或 project", "user or project"))
   .option("--components <components>", t("逗号分隔的 hooks,agents,skills,plugin-bundle", "comma-separated hooks,agents,skills,plugin-bundle"))
   .option("--target-dir <dir>", t("覆盖产品配置根目录", "override product config root"))
@@ -3230,7 +3231,15 @@ integration
     }) => {
       const configuredDefaults = userConfig().integration;
       const partial = {
-        ...(options.product ? { product: options.product as "trae" | "trae-cn" | "claude-code" } : {}),
+        ...(options.product
+          ? {
+              product: options.product as
+                | "trae"
+                | "trae-cn"
+                | "claude-code"
+                | "codex"
+            }
+          : {}),
         ...(options.scope ? { scope: options.scope as "user" | "project" } : {}),
         ...(options.components
           ? {
@@ -3264,10 +3273,16 @@ integration
           prompter.close();
         }
       } else {
+        const selectedProduct =
+          partial.product ?? configuredDefaults.product;
         selected = {
-          product: partial.product ?? configuredDefaults.product,
+          product: selectedProduct,
           scope: partial.scope ?? configuredDefaults.scope,
-          components: partial.components ?? configuredDefaults.components,
+          components:
+            partial.components ??
+            (selectedProduct === configuredDefaults.product
+              ? configuredDefaults.components
+              : getIntegrationProduct(selectedProduct).defaultComponents),
           targetDir: partial.targetDir ?? configuredDefaults.targetDir ?? undefined,
           mode: partial.mode ?? configuredDefaults.mode
         };
@@ -3275,9 +3290,12 @@ integration
       if (
         selected.product !== "trae" &&
         selected.product !== "trae-cn" &&
-        selected.product !== "claude-code"
+        selected.product !== "claude-code" &&
+        selected.product !== "codex"
       ) {
-        throw new Error("--product must be trae, trae-cn, or claude-code");
+        throw new Error(
+          "--product must be trae, trae-cn, claude-code, or codex"
+        );
       }
       if (selected.scope !== "user" && selected.scope !== "project") {
         throw new Error("--scope must be user or project");
@@ -3305,16 +3323,19 @@ integration
 integration
   .command("uninstall")
   .description(t("只卸载 Agent Knowledge 管理的产品资源", "Uninstall only product resources managed by Agent Knowledge"))
-  .requiredOption("--product <product>", t("trae、trae-cn 或 claude-code", "trae, trae-cn, or claude-code"))
+  .requiredOption("--product <product>", t("trae、trae-cn、claude-code 或 codex", "trae, trae-cn, claude-code, or codex"))
   .option("--scope <scope>", t("user 或 project", "user or project"), "user")
   .option("--target-dir <dir>", t("覆盖产品配置根目录", "override product config root"))
   .action(async (options: { product: string; scope: string; targetDir?: string }) => {
     if (
       options.product !== "trae" &&
       options.product !== "trae-cn" &&
-      options.product !== "claude-code"
+      options.product !== "claude-code" &&
+      options.product !== "codex"
     ) {
-      throw new Error("--product must be trae, trae-cn, or claude-code");
+      throw new Error(
+        "--product must be trae, trae-cn, claude-code, or codex"
+      );
     }
     if (options.scope !== "user" && options.scope !== "project") {
       throw new Error("--scope must be user or project");
@@ -3335,16 +3356,19 @@ integration
 integration
   .command("doctor")
   .description(t("检查产品接入是否完整且未发生冲突", "Check whether product integration is complete and conflict-free"))
-  .requiredOption("--product <product>", t("trae、trae-cn 或 claude-code", "trae, trae-cn, or claude-code"))
+  .requiredOption("--product <product>", t("trae、trae-cn、claude-code 或 codex", "trae, trae-cn, claude-code, or codex"))
   .option("--scope <scope>", t("user 或 project", "user or project"), "user")
   .option("--target-dir <dir>", t("覆盖产品配置根目录", "override product config root"))
   .action(async (options: { product: string; scope: string; targetDir?: string }) => {
     if (
       options.product !== "trae" &&
       options.product !== "trae-cn" &&
-      options.product !== "claude-code"
+      options.product !== "claude-code" &&
+      options.product !== "codex"
     ) {
-      throw new Error("--product must be trae, trae-cn, or claude-code");
+      throw new Error(
+        "--product must be trae, trae-cn, claude-code, or codex"
+      );
     }
     if (options.scope !== "user" && options.scope !== "project") {
       throw new Error("--scope must be user or project");

@@ -67,7 +67,7 @@ describe("CLI user configuration", () => {
       configPath,
       resolveUserConfig({
         knowledgeRoot: path.join(temp, "knowledge"),
-        integration: { product: "trae-cn" }
+        integration: { product: "codex" }
       })
     );
 
@@ -77,7 +77,7 @@ describe("CLI user configuration", () => {
     ) as { integration: { product: string } };
 
     expect(printedPath).toBe(configPath);
-    expect(printedConfig.integration.product).toBe("trae-cn");
+    expect(printedConfig.integration.product).toBe("codex");
   });
 
   it("loads project shared and local config above the selected user config", async () => {

@@ -14,6 +14,10 @@ import type {
   IntegrationScope
 } from "../integration/manager.js";
 import {
+  getIntegrationProduct,
+  listIntegrationProducts
+} from "../integration/manager.js";
+import {
   InquirerPrompter,
   promptCheckbox,
   promptInput,
@@ -34,6 +38,84 @@ export type IntegrationInstallSelection = {
   mode: IntegrationInstallMode;
 };
 
+/** 为交互式向导生成产品说明；产品枚举本身来自 integration registry。 */
+function productDescription(
+  product: IntegrationProductId,
+  t: (chinese: string, english: string) => string
+): string {
+  if (product === "trae") {
+    return t(
+      "管理 .trae/hooks.json 和 .trae/cli/hooks.json",
+      "Manage .trae/hooks.json and .trae/cli/hooks.json"
+    );
+  }
+  if (product === "trae-cn") {
+    return t(
+      "管理 .trae-cn/hooks.json",
+      "Manage .trae-cn/hooks.json"
+    );
+  }
+  if (product === "claude-code") {
+    return t(
+      "管理 .claude/settings.json",
+      "Manage .claude/settings.json"
+    );
+  }
+  return t(
+    "管理 .codex/hooks.json、.agents/skills 和可选本地 marketplace",
+    "Manage .codex/hooks.json, .agents/skills, and an optional local marketplace"
+  );
+}
+
+/** 按产品能力过滤组件，避免向用户展示宿主不会加载的资源类型。 */
+function componentChoices(
+  product: IntegrationProductId,
+  t: (chinese: string, english: string) => string
+): Array<{
+  name: string;
+  value: IntegrationComponent;
+  description: string;
+}> {
+  const supported = new Set(getIntegrationProduct(product).components);
+  return [
+    {
+      name: "Hooks",
+      value: "hooks" as const,
+      description: t(
+        "自动检索和生命周期 staging",
+        "Automatic query and lifecycle staging"
+      )
+    },
+    {
+      name: "Agents",
+      value: "agents" as const,
+      description: "agent-knowledge-reader / agent-knowledge-writer"
+    },
+    {
+      name: "Skills",
+      value: "skills" as const,
+      description: t(
+        "知识教程、整理、维护与生命周期流程",
+        "Knowledge guide, organization, maintenance, and lifecycle workflows"
+      )
+    },
+    {
+      name: t("插件包", "Plugin bundle"),
+      value: "plugin-bundle" as const,
+      description:
+        product === "codex"
+          ? t(
+              "安装可由 Codex 注册的本地 marketplace",
+              "Install a local marketplace that Codex can register"
+            )
+          : t(
+              "安装可选 TRAE 插件包",
+              "Install an optional TRAE plugin package"
+            )
+    }
+  ].filter((choice) => supported.has(choice.value));
+}
+
 /**
  * 使用持久默认值和交互选择补全 integration 安装参数。
  *
@@ -52,23 +134,11 @@ export async function promptForIntegrationInstall(options: {
     (await promptSelect(
       prompter,
       t("产品", "Product"),
-      [
-        {
-          name: "TRAE",
-          value: "trae",
-          description: t("管理 .trae/hooks.json 和 .trae/cli/hooks.json", "Manage .trae/hooks.json and .trae/cli/hooks.json")
-        },
-        {
-          name: "TRAE CN",
-          value: "trae-cn",
-          description: t("管理 .trae-cn/hooks.json", "Manage .trae-cn/hooks.json")
-        },
-        {
-          name: "Claude Code",
-          value: "claude-code",
-          description: t("管理 .claude/settings.json", "Manage .claude/settings.json")
-        }
-      ],
+      listIntegrationProducts().map((item) => ({
+        name: item.displayName,
+        value: item.id,
+        description: productDescription(item.id, t)
+      })),
       defaults.product
     ))) as IntegrationProductId;
   const scope = (partial.scope ??
@@ -94,17 +164,10 @@ export async function promptForIntegrationInstall(options: {
     (await promptCheckbox(
       prompter,
       t("组件（空格切换，回车确认）", "Components (space to toggle, enter to confirm)"),
-      [
-        { name: "Hooks", value: "hooks", description: t("自动检索和生命周期 staging", "Automatic query and lifecycle staging") },
-        { name: "Agents", value: "agents", description: "agent-knowledge-reader / agent-knowledge-writer" },
-        { name: "Skills", value: "skills", description: t("知识整理与维护", "knowledge organizer and maintainer") },
-        {
-          name: t("插件包", "Plugin bundle"),
-          value: "plugin-bundle",
-          description: t("安装可选 TRAE 插件包", "Install an optional TRAE plugin package")
-        }
-      ],
-      defaults.components
+      componentChoices(product, t),
+      defaults.components.filter((component) =>
+        getIntegrationProduct(product).components.includes(component)
+      )
     )) as IntegrationComponent[];
   const targetAnswer =
     partial.targetDir !== undefined
@@ -144,7 +207,7 @@ export function formatIntegrationInstallResult(
 ): string {
   const t = (chinese: string, english: string): string => translate(locale, chinese, english);
   const productName =
-    result.product === "trae" ? "TRAE" : result.product === "trae-cn" ? "TRAE CN" : "Claude Code";
+    getIntegrationProduct(result.product).displayName;
   const installed = result.managed.filter((item) => item.status === "installed").length;
   const updated = result.managed.filter((item) => item.status === "updated").length;
   const unchanged = result.managed.filter((item) => item.status === "unchanged").length;

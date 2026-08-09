@@ -15,7 +15,12 @@ import { ActorTypeSchema, CaptureModeSchema, SensitivitySchema, VisibilitySchema
 import type { LocalePreference } from "../i18n/locale.js";
 
 const EmbeddingProfileSchema = z.enum(["multilingual-e5-small", "bge-small-zh-v1.5"]);
-const IntegrationProductSchema = z.enum(["trae", "trae-cn", "claude-code"]);
+const IntegrationProductSchema = z.enum([
+  "trae",
+  "trae-cn",
+  "claude-code",
+  "codex"
+]);
 const IntegrationComponentSchema = z.enum(["hooks", "agents", "skills", "plugin-bundle"]);
 
 const IdentityConfigSchema = z
@@ -54,9 +59,37 @@ const IntegrationConfigSchema = z
   .object({
     product: IntegrationProductSchema.default("trae"),
     scope: z.enum(["user", "project"]).default("user"),
-    components: z.array(IntegrationComponentSchema).min(1).default(["hooks", "agents", "skills"]),
+    components: z.array(IntegrationComponentSchema).min(1).optional(),
     targetDir: z.string().min(1).nullable().default(null),
     mode: z.enum(["merge", "overwrite"]).default("merge")
+  })
+  .transform((value) => ({
+    ...value,
+    // Codex 没有 standalone Markdown subagent；产品级默认必须避免生成宿主不会加载的资源。
+    components:
+      value.components ??
+      (value.product === "codex"
+        ? (["hooks", "skills"] as const)
+        : (["hooks", "agents", "skills"] as const))
+  }))
+  .superRefine((value, context) => {
+    if (value.product === "codex" && value.components.includes("agents")) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["components"],
+        message: "Codex does not support the standalone agents component"
+      });
+    }
+    if (
+      value.product === "claude-code" &&
+      value.components.includes("plugin-bundle")
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["components"],
+        message: "Claude Code does not support the plugin-bundle component"
+      });
+    }
   })
   .default({});
 

@@ -91,6 +91,25 @@ describe("user configuration", () => {
     ).toThrow();
   });
 
+  it("uses Codex-specific integration defaults and rejects fake standalone agents", () => {
+    expect(
+      resolveUserConfig({
+        integration: {
+          product: "codex"
+        }
+      }).integration.components
+    ).toEqual(["hooks", "skills"]);
+
+    expect(() =>
+      resolveUserConfig({
+        integration: {
+          product: "codex",
+          components: ["agents"]
+        }
+      })
+    ).toThrow("Codex does not support the standalone agents component");
+  });
+
   it("deep-merges user, project, and project-local config while replacing arrays", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-project-config-"));
     tempDirs.push(root);

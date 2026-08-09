@@ -11,6 +11,11 @@ import {
 } from "../core/config.js";
 import { translate, type SupportedLocale } from "../i18n/locale.js";
 import {
+  getIntegrationProduct,
+  listIntegrationProducts,
+  type IntegrationComponent
+} from "../integration/manager.js";
+import {
   InquirerPrompter,
   promptCheckbox,
   promptConfirm,
@@ -273,11 +278,21 @@ export async function runConfigurationWizard(options: {
   const integrationProduct = await promptSelect(
     prompter,
     t("集成产品", "Integration product"),
-    [
-      { name: "TRAE", value: "trae", description: t(".trae 和 .trae/cli hooks", ".trae and .trae/cli hooks") },
-      { name: "TRAE CN", value: "trae-cn", description: t(".trae-cn 资源", ".trae-cn resources") },
-      { name: "Claude Code", value: "claude-code", description: t(".claude 资源", ".claude resources") }
-    ],
+    listIntegrationProducts().map((product) => ({
+      name: product.displayName,
+      value: product.id,
+      description:
+        product.id === "trae"
+          ? t(".trae 和 .trae/cli hooks", ".trae and .trae/cli hooks")
+          : product.id === "trae-cn"
+            ? t(".trae-cn 资源", ".trae-cn resources")
+            : product.id === "claude-code"
+              ? t(".claude 资源", ".claude resources")
+              : t(
+                  ".codex hooks、.agents skills 和本地 marketplace",
+                  ".codex hooks, .agents skills, and a local marketplace"
+                )
+    })),
     current.integration.product
   );
   const integrationScope = await promptSelect(
@@ -289,16 +304,27 @@ export async function runConfigurationWizard(options: {
     ],
     current.integration.scope
   );
+  const integrationComponentChoices: Array<{
+    name: string;
+    value: IntegrationComponent;
+  }> = [
+    { name: "Hooks", value: "hooks" },
+    { name: "Agents", value: "agents" },
+    { name: "Skills", value: "skills" },
+    { name: t("插件包", "Plugin bundle"), value: "plugin-bundle" }
+  ];
+  const supportedIntegrationComponents = getIntegrationProduct(
+    integrationProduct
+  ).components;
   const integrationComponents = await promptCheckbox(
     prompter,
     t("集成组件", "Integration components"),
-    [
-      { name: "Hooks", value: "hooks" },
-      { name: "Agents", value: "agents" },
-      { name: "Skills", value: "skills" },
-      { name: t("插件包", "Plugin bundle"), value: "plugin-bundle" }
-    ],
-    current.integration.components
+    integrationComponentChoices.filter((choice) =>
+      supportedIntegrationComponents.includes(choice.value)
+    ),
+    current.integration.components.filter((component) =>
+      supportedIntegrationComponents.includes(component)
+    )
   );
   const integrationTargetAnswer = await promptInput(
     prompter,

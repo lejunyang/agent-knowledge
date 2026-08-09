@@ -25,6 +25,7 @@ class AnswerPrompter implements IntegrationPrompter {
 
 class RichPrompter implements IntegrationPrompter {
   calls: string[] = [];
+  checkboxValues: string[] = [];
 
   async ask(): Promise<string> {
     throw new Error("Plain text fallback should not be used");
@@ -44,6 +45,7 @@ class RichPrompter implements IntegrationPrompter {
     choices: Array<{ name: string; value: T; checked?: boolean }>;
   }): Promise<T[]> {
     this.calls.push(`checkbox:${options.message}`);
+    this.checkboxValues = options.choices.map((choice) => choice.value);
     return options.choices.filter((choice) => choice.checked).map((choice) => choice.value);
   }
 
@@ -116,6 +118,34 @@ describe("integration CLI helpers", () => {
     expect(prompter.calls).toContain("select:Installation scope");
     expect(prompter.calls).toContain("checkbox:Components (space to toggle, enter to confirm)");
     expect(prompter.calls).toContain("select:Write mode");
+  });
+
+  it("offers only supported components when Codex is selected", async () => {
+    const prompter = new RichPrompter();
+    prompter.select = async <T extends string>(options: {
+      message: string;
+      choices: Array<{ name: string; value: T }>;
+      defaultValue: T;
+    }): Promise<T> => {
+      prompter.calls.push(`select:${options.message}`);
+      return (options.message === "Product"
+        ? options.choices.find((choice) => choice.value === "codex")?.value
+        : options.defaultValue) as T;
+    };
+
+    const selected = await promptForIntegrationInstall({
+      defaults: DEFAULT_USER_CONFIG.integration,
+      prompter,
+      locale: "en"
+    });
+
+    expect(selected.product).toBe("codex");
+    expect(prompter.checkboxValues).toEqual([
+      "hooks",
+      "skills",
+      "plugin-bundle"
+    ]);
+    expect(selected.components).toEqual(["hooks", "skills"]);
   });
 
   it("uses a select control to choose embedding or reranker model management", async () => {
