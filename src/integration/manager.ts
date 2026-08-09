@@ -653,9 +653,26 @@ export async function installIntegration(options: InstallIntegrationOptions): Pr
       conflicts.push(outcome.conflict);
     } else {
       if ((options.platform ?? process.platform) === "win32") {
-        const windowsHooks = path.join(source, "hooks", "hooks.windows.json");
+        const windowsHooks =
+          options.product === "codex"
+            ? path.join(
+                source,
+                "plugins",
+                "agent-knowledge",
+                "hooks.windows.json"
+              )
+            : path.join(source, "hooks", "hooks.windows.json");
         if (existsSync(windowsHooks)) {
-          await cp(windowsHooks, path.join(target, "hooks", "hooks.json"), { force: true });
+          const hooksTarget =
+            options.product === "codex"
+              ? path.join(
+                  target,
+                  "plugins",
+                  "agent-knowledge",
+                  "hooks.json"
+                )
+              : path.join(target, "hooks", "hooks.json");
+          await cp(windowsHooks, hooksTarget, { force: true });
           outcome.resource.hash = await hashPath(target);
           outcome.resource.status =
             previousByPath.get(target)?.hash === outcome.resource.hash ? "unchanged" : outcome.resource.status;

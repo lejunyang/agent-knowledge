@@ -828,4 +828,36 @@ describe("managed integrations", () => {
     expect(await exists(path.join(targetDir, "skills", "agent-knowledge-guide"))).toBe(false);
     expect(await exists(marketplaceRoot)).toBe(false);
   });
+
+  it("uses Windows command shims in standalone and plugin Codex Hooks", async () => {
+    const targetDir = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-codex-windows-")
+    );
+    tempDirs.push(targetDir);
+
+    await installIntegration({
+      packageRoot: process.cwd(),
+      product: "codex",
+      scope: "project",
+      targetDir,
+      components: ["hooks", "plugin-bundle"],
+      platform: "win32"
+    });
+
+    await expect(
+      readFile(path.join(targetDir, "hooks.json"), "utf8")
+    ).resolves.toContain("agent-knowledge.cmd hook user-prompt-submit");
+    await expect(
+      readFile(
+        path.join(
+          targetDir,
+          "agent-knowledge-marketplace",
+          "plugins",
+          "agent-knowledge",
+          "hooks.json"
+        ),
+        "utf8"
+      )
+    ).resolves.toContain("agent-knowledge.cmd hook user-prompt-submit");
+  });
 });
