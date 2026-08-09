@@ -1,5 +1,6 @@
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { renderAutomationService } from "../src/automation/index.js";
@@ -55,6 +56,46 @@ describe("background service templates", () => {
     expect(plist).toContain("<string>/secure/agent-knowledge/automation.env</string>");
     expect(plist).toContain("<string>/opt/agent-runners/run-knowledge-agent</string>");
     expect(plist).not.toContain("set -a");
+  });
+
+  it("resolves the default system prompt from the installed module instead of cwd", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "ak-launchd-cwd-"));
+    tempDirs.push(output);
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(output);
+      const result = await renderAutomationService({
+        manager: "launchd",
+        label: "business-refresh",
+        profilePath: "/secure/agent-knowledge/profile.json",
+        runnerPath: "/opt/agent-runners/run-knowledge-agent",
+        intervalMinutes: 30,
+        outputDir: output
+      });
+      const plist = await readFile(result.files[0]!, "utf8");
+      const repositoryRoot = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        ".."
+      );
+      expect(plist).toContain(
+        path.join(
+          repositoryRoot,
+          "templates",
+          "automation",
+          "knowledge-automation-system-prompt.md"
+        )
+      );
+      expect(plist).not.toContain(
+        path.join(
+          output,
+          "templates",
+          "automation",
+          "knowledge-automation-system-prompt.md"
+        )
+      );
+    } finally {
+      process.chdir(previousCwd);
+    }
   });
 
   it("renders a systemd oneshot service and persistent timer", async () => {

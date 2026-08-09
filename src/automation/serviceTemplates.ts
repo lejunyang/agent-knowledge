@@ -5,6 +5,7 @@
  * workspace 和通知投递命令，避免绑定某一个宿主或把凭据写入模板。
  */
 import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { z } from "zod";
 
@@ -57,6 +58,18 @@ function systemdValue(value: string): string {
 /** YAML 双引号值最小转义。 */
 function yamlValue(value: string): string {
   return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
+/** 默认系统提示词相对已安装模块定位，避免从其他工作目录调用时生成失效路径。 */
+function defaultSystemPromptPath(): string {
+  return path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "templates",
+    "automation",
+    "knowledge-automation-system-prompt.md"
+  );
 }
 
 /** 统一生成外部 runner 需要的环境变量。 */
@@ -307,13 +320,7 @@ export async function renderAutomationService(
 ): Promise<AutomationServiceResult> {
   const options = AutomationServiceOptionsSchema.parse(rawOptions);
   const promptPath =
-    options.systemPromptPath ??
-    path.resolve(
-      process.cwd(),
-      "templates",
-      "automation",
-      "knowledge-automation-system-prompt.md"
-    );
+    options.systemPromptPath ?? defaultSystemPromptPath();
   await mkdir(options.outputDir, { recursive: true, mode: 0o700 });
   switch (options.manager) {
     case "launchd":
