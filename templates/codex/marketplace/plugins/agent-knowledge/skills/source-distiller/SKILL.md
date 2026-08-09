@@ -116,6 +116,18 @@ agent-knowledge source export "$SOURCE_ID" \
 
 命令不会向 stdout 输出正文，只返回输出路径、字节数和 content type。默认拒绝覆盖。
 
+导出后、阅读前必须检查：
+
+- 输出文件位于 knowledge workspace 外。
+- 文件权限为 owner-only（POSIX 通常是 `0600`）。
+- 导出正文 SHA-256 与 manifest `contentHash` 一致。
+- Connector 已声明的 redaction 已应用；若再次运行确定性 DLP 仍会改变内容，停止蒸馏。
+- 准备引用的 section 必须按 manifest `char_start/char_end` 取正文、去除 heading 后重新计算
+  `text_hash`，结果必须与当前 section 一致。
+
+这些检查只输出 hash/布尔结果，不把正文打印到终端、聊天或运行日志。若失败，标记 blocked
+或修复 ingestion/sectionizer，不能继续写 claim。
+
 ## 4. 拆分和确认
 
 按 source 的 heading/FAQ/流程/规则/案例拆分，不要“一篇文档一条短总结”。
@@ -176,12 +188,26 @@ Documented owner source 的候选至少包含：
 - weighted aliases/scenarios/tags
 - current claim anchors
 
+候选的 `synopsis` 只承担 L1 路由；`explanation` 是 L2，必须包含足够的业务解释。不要增加
+alias/tag/scenario 数量来补偿正文不足。完整 L3 原文继续留在 Vault，不复制进 Markdown。
+
 完成候选审阅前，不要 mark refined。
 
 ## 6. 标记 source 结果
 
 只有候选对应知识已经成为 **active knowledge**，且其中至少一个 claim anchor 指向当前 source
-section/hash，才能标记 refined：
+section/hash，质量审计和受影响检索回归通过后，才能标记 refined：
+
+```bash
+agent-knowledge knowledge audit
+agent-knowledge index
+agent-knowledge eval --input "$EVAL_FILE" --pipeline lexical
+```
+
+Eval 至少覆盖新增知识的正向问题、相邻主题 hard-negative 和 no-answer/forbidden case。没有适用
+eval 时必须明确报告缺口；不能仅因为 query 能召回新知识就判定检索质量通过。
+
+随后标记：
 
 ```bash
 agent-knowledge source mark "$SOURCE_ID" \
@@ -227,7 +253,8 @@ duplicate target 必须是 available 的规范 source，不能再指向另一个
 
 ## 7. 收尾
 
-删除导出的临时 evidence 文件，并汇报：
+删除导出的临时 evidence 文件，并验证路径已不存在；不能只依赖进程退出或临时目录未来清理。
+随后汇报：
 
 - 审阅的 source ID/fingerprint。
 - 生成的 candidate/active knowledge ID。
@@ -239,7 +266,9 @@ duplicate target 必须是 available 的规范 source，不能再指向另一个
 
 ```bash
 agent-knowledge source check
-agent-knowledge source refresh
 agent-knowledge source list --needs-review
-agent-knowledge knowledge audit --fail-on warning
+agent-knowledge knowledge audit
 ```
+
+如果当前知识库策略要求 warning 为零，再显式使用 `--fail-on warning`；source inventory
+incomplete、尚未分类队列等真实 warning 不应为了“通过”被隐藏或错误清零。
