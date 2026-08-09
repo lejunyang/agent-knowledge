@@ -36,6 +36,27 @@ describe("background service templates", () => {
     expect((await stat(result.files[0]!)).mode & 0o777).toBe(0o600);
   });
 
+  it("exports KEY=value credentials from a launchd environment file", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "ak-launchd-env-"));
+    tempDirs.push(output);
+    const result = await renderAutomationService({
+      manager: "launchd",
+      label: "business-refresh",
+      profilePath: "/secure/agent-knowledge/profile.json",
+      runnerPath: "/opt/agent-runners/run-knowledge-agent",
+      intervalMinutes: 30,
+      outputDir: output,
+      environmentFilePath: "/secure/agent-knowledge/automation.env"
+    });
+
+    const plist = await readFile(result.files[0]!, "utf8");
+    expect(plist).toContain("Invalid environment variable name");
+    expect(plist).toContain("export &quot;$line&quot;");
+    expect(plist).toContain("<string>/secure/agent-knowledge/automation.env</string>");
+    expect(plist).toContain("<string>/opt/agent-runners/run-knowledge-agent</string>");
+    expect(plist).not.toContain("set -a");
+  });
+
   it("renders a systemd oneshot service and persistent timer", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "ak-systemd-"));
     tempDirs.push(output);
@@ -64,7 +85,7 @@ describe("background service templates", () => {
       "AGENT_KNOWLEDGE_AUTOMATION_PROFILE=/secure/agent-knowledge/profile.json"
     );
     expect(service).toContain(
-      "EnvironmentFile=-/secure/agent-knowledge/automation.env"
+      "EnvironmentFile=/secure/agent-knowledge/automation.env"
     );
     expect(timer).toContain("OnUnitActiveSec=15min");
     expect(timer).toContain("Persistent=true");

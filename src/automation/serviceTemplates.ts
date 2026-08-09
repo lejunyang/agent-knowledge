@@ -107,11 +107,23 @@ async function renderLaunchd(
         `      <key>${escapeXml(key)}</key>\n      <string>${escapeXml(value)}</string>`
     )
     .join("\n");
+  // launchd 没有 EnvironmentFile；逐行校验并 export，不能 source 任意 shell 内容。
   const programArguments = options.environmentFilePath
     ? `    <array>
       <string>/bin/sh</string>
-      <string>-lc</string>
-      <string>. ${escapeXml(JSON.stringify(options.environmentFilePath))}; exec ${escapeXml(JSON.stringify(options.runnerPath))}</string>
+      <string>-c</string>
+      <string>${escapeXml(`set -eu
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in ""|"#"*) continue ;; esac
+  case "$line" in *=*) ;; *) echo "Invalid environment entry without = separator" >&2; exit 64 ;; esac
+  key=\${line%%=*}
+  case "$key" in ""|[0-9]*|*[!A-Za-z0-9_]*) echo "Invalid environment variable name: $key" >&2; exit 64 ;; esac
+  export "$line"
+done < "$1"
+exec "$2"`)}</string>
+      <string>agent-knowledge-environment-loader</string>
+      <string>${escapeXml(options.environmentFilePath)}</string>
+      <string>${escapeXml(options.runnerPath)}</string>
     </array>`
     : `    <array>
       <string>${escapeXml(options.runnerPath)}</string>
@@ -184,7 +196,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-${options.environmentFilePath ? `EnvironmentFile=-${options.environmentFilePath}\n` : ""}ExecStart=${options.runnerPath}
+${options.environmentFilePath ? `EnvironmentFile=${options.environmentFilePath}\n` : ""}ExecStart=${options.runnerPath}
 ${environmentLines}
 
 [Install]
