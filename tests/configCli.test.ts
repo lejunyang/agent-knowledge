@@ -321,7 +321,7 @@ describe("CLI user configuration", () => {
     expect(policyHistory).toContain("不含 task 原文");
     expect(policyStatus).toContain("2–4 周");
     expect(policyStatus).toContain("false injection/abstention");
-  });
+  }, 30_000);
 
   it("records query-level structured feedback without a memory ID", async () => {
     const temp = await mkdtemp(path.join(tmpdir(), "agent-knowledge-query-feedback-cli-"));

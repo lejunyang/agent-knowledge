@@ -130,8 +130,13 @@ agent-knowledge feedback \
 agent-knowledge feedback \
   --memory-id "$MEMORY_ID" \
   --usefulness not_useful \
+  --reason wrong_route \
+  --forbidden-memory-id "$MEMORY_ID" \
   --query-run-id "$QUERY_RUN_ID"
 ```
+
+如果整个问题本应 abstain，可省略 `--memory-id` 并使用 `--reason should_abstain`。只有真实
+失败才建议结构化 reason，不要为了生成 Policy proposal 伪造反馈。
 
 ## 输出格式
 

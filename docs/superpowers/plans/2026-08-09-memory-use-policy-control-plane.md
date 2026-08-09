@@ -38,7 +38,7 @@
 - Test: `tests/policyQueryRuns.test.ts`
 - Test: `tests/query.test.ts`
 
-- [ ] **Step 1: 写 query-run ledger 失败测试**
+- [x] **Step 1: 写 query-run ledger 失败测试**
 
 覆盖：
 
@@ -52,7 +52,7 @@ expect(run.abstained).toBe(false);
 
 同时验证 eval `log: false` 不写 ledger，graph/rerank 只产生一个最终 retrieval event。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -62,7 +62,7 @@ pnpm vitest run tests/policyQueryRuns.test.ts tests/query.test.ts
 
 Expected: FAIL，缺少 `recordQueryRetrieval` / `recordQueryPacket`。
 
-- [ ] **Step 3: 实现最小 ledger**
+- [x] **Step 3: 实现最小 ledger**
 
 契约：
 
@@ -86,11 +86,11 @@ type QueryRun = {
 
 `.memory/query-runs/YYYY-MM-DD.jsonl` 权限必须为 `0600`。同 run 的 retrieval/packet 事件读取时合并；不保存 task、token、完整 Markdown 或 result text。
 
-- [ ] **Step 4: 统一 graph/rerank logging**
+- [x] **Step 4: 统一 graph/rerank logging**
 
 Graph/hybrid/rerank 的内部 base 查询必须 `log:false`，只对最终结果写一次 query-run；普通 eval 保持零运行日志。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 pnpm vitest run tests/policyQueryRuns.test.ts tests/query.test.ts tests/graphRetrieval.test.ts tests/reranker.test.ts
@@ -109,7 +109,7 @@ git commit -m "feat: persist privacy-safe query run evidence"
 - Test: `tests/maintenanceCleanup.test.ts`
 - Test: `tests/configCli.test.ts`
 
-- [ ] **Step 1: 写 reason taxonomy 测试**
+- [x] **Step 1: 写 reason taxonomy 测试**
 
 支持：
 
@@ -130,7 +130,7 @@ const FeedbackReasonSchema = z.enum([
 
 反馈还可包含 `expectedMemoryIds`、`forbiddenMemoryIds`。Ledger 按 `memoryId + queryRunId` 最新值去重后仍保留这些字段。
 
-- [ ] **Step 2: 增加 CLI 失败测试**
+- [x] **Step 2: 增加 CLI 失败测试**
 
 ```bash
 agent-knowledge feedback \
@@ -144,14 +144,14 @@ agent-knowledge feedback \
 
 `query --retain-task-evidence` 必须经 `secrets-and-pii` 脱敏后写入 Vault，并只把 Vault ID 写入 query-run；缺少 Vault key 时明确失败。
 
-- [ ] **Step 3: 实现并验证**
+- [x] **Step 3: 实现并验证**
 
 ```bash
 pnpm vitest run tests/feedback.test.ts tests/maintenanceCleanup.test.ts tests/configCli.test.ts tests/vault.test.ts
 pnpm typecheck
 ```
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add src/retrieval/feedback.ts src/memory/feedbackLedger.ts src/cli.ts tests
@@ -169,7 +169,7 @@ git commit -m "feat: capture memory-use failure reasons"
 - Test: `tests/policyStore.test.ts`
 - Test: `tests/gitWorkspace.test.ts`
 
-- [ ] **Step 1: 写 schema/store 失败测试**
+- [x] **Step 1: 写 schema/store 失败测试**
 
 Policy 公共字段：
 
@@ -202,7 +202,7 @@ Retrieval directive：`route_domains`、`route_scenarios`、`prefer_memory_ids`�
 
 Reasoning directive：`checks`、`required_layers`、`authority_order`、`decision_on_violation`。
 
-- [ ] **Step 2: 强制 shadow-only**
+- [x] **Step 2: 强制 shadow-only**
 
 本阶段 schema 不接受 `active`；P3 才引入 runtime status。Policy 文件只允许写入：
 
@@ -213,11 +213,11 @@ policies/reasoning/<id>.yaml
 
 `.memory/policies/proposals` 不是事实源。
 
-- [ ] **Step 3: 初始化目录和 Git 安全说明**
+- [x] **Step 3: 初始化目录和 Git 安全说明**
 
 Workspace README 解释 Policy 与 Knowledge 分离；`.gitignore` 保持排除 `.memory`，但追踪 `policies/`。
 
-- [ ] **Step 4: 验证并提交**
+- [x] **Step 4: 验证并提交**
 
 ```bash
 pnpm vitest run tests/policyStore.test.ts tests/workspace.test.ts tests/gitWorkspace.test.ts
@@ -235,7 +235,7 @@ git commit -m "feat: add git-backed memory-use policies"
 - Test: `tests/policyProposals.test.ts`
 - Test: `tests/configCli.test.ts`
 
-- [ ] **Step 1: 写 proposal 生命周期测试**
+- [x] **Step 1: 写 proposal 生命周期测试**
 
 命令：
 
@@ -252,7 +252,7 @@ agent-knowledge policy reject <proposal-id> --reason "..."
 
 Accept 只能把 pending proposal 的 candidate 以 `status: shadow` 写入 Git Policy；已有同 ID 文件拒绝覆盖。Reject 只更新 proposal。
 
-- [ ] **Step 2: 实现 owner-only proposal store**
+- [x] **Step 2: 实现 owner-only proposal store**
 
 Proposal 包含：
 
@@ -266,7 +266,7 @@ Proposal 包含：
 }
 ```
 
-- [ ] **Step 3: 验证并提交**
+- [x] **Step 3: 验证并提交**
 
 ```bash
 pnpm vitest run tests/policyProposals.test.ts tests/configCli.test.ts
@@ -283,7 +283,7 @@ git commit -m "feat: govern memory-use policy proposals"
 - Modify: `src/cli.ts`
 - Test: `tests/policyMining.test.ts`
 
-- [ ] **Step 1: 写 feedback mining 测试**
+- [x] **Step 1: 写 feedback mining 测试**
 
 三个独立 `queryRunId`、同 domain/scenario、同 reason 才生成 proposal；同一个 run 重复反馈只计一次。没有 domain/scenario/project scope 时拒绝生成全局 Policy。
 
@@ -296,15 +296,15 @@ conflicting_evidence / insufficient_detail / reasoning_failure
   -> reasoning_policy
 ```
 
-- [ ] **Step 2: 写 eval mining 测试**
+- [x] **Step 2: 写 eval mining 测试**
 
 `policy mine --eval <yaml...>` 只消费显式 eval 文件；至少三个同 scope failure 才形成 proposal。Synthetic eval 不进入 query-run ledger。
 
-- [ ] **Step 3: 实现确定性候选**
+- [x] **Step 3: 实现确定性候选**
 
 Feedback 的 expected IDs 进入 `prefer_memory_ids`，forbidden IDs 和负反馈 memory ID 进入 `suppress_memory_ids`。Reasoning reason 编译为受控 checks，不能生成自由文本 prompt injection。
 
-- [ ] **Step 4: 验证并提交**
+- [x] **Step 4: 验证并提交**
 
 ```bash
 pnpm vitest run tests/policyMining.test.ts tests/feedback.test.ts tests/eval.test.ts
@@ -321,7 +321,7 @@ git commit -m "feat: mine memory-use policy proposals"
 - Modify: `src/cli.ts`
 - Test: `tests/policySimulation.test.ts`
 
-- [ ] **Step 1: 写 retrieval shadow 测试**
+- [x] **Step 1: 写 retrieval shadow 测试**
 
 命令：
 
@@ -340,7 +340,7 @@ Simulation 允许：
 
 它不得改变真实 query、配置或 Markdown knowledge。
 
-- [ ] **Step 2: 写 reasoning contract 测试**
+- [x] **Step 2: 写 reasoning contract 测试**
 
 Eval case 可选：
 
@@ -356,7 +356,7 @@ expected_reasoning_decision: abstain
 
 Reasoning Policy 只输出 shadow decision：`proceed | warn | abstain` 与 violation 列表。
 
-- [ ] **Step 3: 写 privacy-safe history**
+- [x] **Step 3: 写 privacy-safe history**
 
 `.memory/policies/simulations/*.json` 只保存 case ID/hash、Policy ID 和指标，不保存 task 文本。损坏 history 进入 `skipped`。
 
@@ -366,7 +366,7 @@ Reasoning Policy 只输出 shadow decision：`proceed | warn | abstain` 与 viol
 agent-knowledge policy history --limit 100
 ```
 
-- [ ] **Step 4: 验证并提交**
+- [x] **Step 4: 验证并提交**
 
 ```bash
 pnpm vitest run tests/policySimulation.test.ts tests/eval.test.ts tests/configCli.test.ts
@@ -388,7 +388,7 @@ git commit -m "feat: simulate memory-use policies in shadow"
 - Modify: `docs/research/2026-08-09-production-memory-system-evaluation.md`
 - Test: `tests/templates.test.ts`
 
-- [ ] **Step 1: 新增 maintainer Skill**
+- [x] **Step 1: 新增 maintainer Skill**
 
 Skill 固定流程：
 
@@ -399,7 +399,7 @@ policy mine -> proposal review -> policy accept -> policy simulate
 
 禁止自动 accept、自动 active、自动修改 query pipeline。
 
-- [ ] **Step 2: 写运行一段时间后的操作手册**
+- [x] **Step 2: 写运行一段时间后的操作手册**
 
 建议周期：
 
@@ -409,7 +409,7 @@ policy mine -> proposal review -> policy accept -> policy simulate
 - 每次接受后：对完整中文业务 eval 执行 `policy simulate`。
 - 至少积累 2–4 周、30 个独立 query run，且 false injection/abstention 不退化后，才评审 P3。
 
-- [ ] **Step 3: 更新完成状态与 P3/P4 backlog**
+- [x] **Step 3: 更新完成状态与 P3/P4 backlog**
 
 P3：
 
@@ -424,7 +424,7 @@ P4：
 - automation 定时聚类、生成 proposal、运行 simulation、callback。
 - Agent 永远不能自动 accept/activate。
 
-- [ ] **Step 4: 验证并提交**
+- [x] **Step 4: 验证并提交**
 
 ```bash
 pnpm vitest run tests/templates.test.ts tests/configCli.test.ts

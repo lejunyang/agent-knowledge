@@ -67,7 +67,8 @@ describe("managed integrations", () => {
       "source-distiller",
       "lifecycle-recorder",
       "agent-knowledge-guide",
-      "knowledge-automation-operator"
+      "knowledge-automation-operator",
+      "memory-use-policy-maintainer"
     ]) {
       const canonicalRoot = path.join(".trae", "skills", skillName);
       const canonicalFiles = await listRelativeFiles(canonicalRoot);
@@ -207,6 +208,33 @@ describe("managed integrations", () => {
     expect(prompt).toContain("confirmation_required");
   });
 
+  it("defines a shadow-only memory-use policy maintainer Skill", async () => {
+    const skillRoot = path.join(
+      ".trae",
+      "skills",
+      "memory-use-policy-maintainer"
+    );
+    expect(await listRelativeFiles(skillRoot)).toEqual([
+      "SKILL.md",
+      path.join("agents", "openai.yaml"),
+      path.join("references", "activation-readiness.md")
+    ]);
+    const skill = await readFile(path.join(skillRoot, "SKILL.md"), "utf8");
+    for (const required of [
+      "policy mine",
+      "policy proposals",
+      "policy accept",
+      "policy simulate",
+      "policy history",
+      "policy deprecate",
+      "不自动执行 `policy accept`",
+      "2–4 周",
+      "30 个独立真实 query run"
+    ]) {
+      expect(skill).toContain(required);
+    }
+  });
+
   it("installs TRAE hooks, agents, and skills as regular managed files", async () => {
     const targetDir = await mkdtemp(path.join(tmpdir(), "agent-knowledge-trae-target-"));
     tempDirs.push(targetDir);
@@ -250,6 +278,12 @@ describe("managed integrations", () => {
       "lifecycle-recorder",
       "SKILL.md"
     );
+    const policyMaintainerTarget = path.join(
+      targetDir,
+      "skills",
+      "memory-use-policy-maintainer",
+      "SKILL.md"
+    );
 
     expect((await lstat(readerTarget)).isFile()).toBe(true);
     expect((await lstat(writerTarget)).isFile()).toBe(true);
@@ -262,6 +296,7 @@ describe("managed integrations", () => {
     expect((await lstat(hooksTarget)).isFile()).toBe(true);
     expect((await lstat(cliHooksTarget)).isFile()).toBe(true);
     expect((await lstat(skillTarget)).isDirectory()).toBe(true);
+    expect((await lstat(policyMaintainerTarget)).isFile()).toBe(true);
     await expect(readFile(readerTarget, "utf8")).resolves.toContain(
       "hybrid-graph"
     );
@@ -796,6 +831,17 @@ describe("managed integrations", () => {
         "utf8"
       )
     ).resolves.toContain("Agent Knowledge 使用向导");
+    await expect(
+      readFile(
+        path.join(
+          targetDir,
+          "skills",
+          "memory-use-policy-maintainer",
+          "SKILL.md"
+        ),
+        "utf8"
+      )
+    ).resolves.toContain("Policy Maintainer");
     expect(await exists(path.join(targetDir, "agents"))).toBe(false);
     expect(marketplace.plugins).toEqual([
       {
@@ -832,6 +878,18 @@ describe("managed integrations", () => {
         "utf8"
       )
     ).resolves.toContain("检索是否会用记忆");
+    await expect(
+      readFile(
+        path.join(
+          pluginRoot,
+          "skills",
+          "memory-use-policy-maintainer",
+          "references",
+          "activation-readiness.md"
+        ),
+        "utf8"
+      )
+    ).resolves.toContain("P3 Runtime Enforcement");
     expect(first.conflicts).toEqual([]);
     expect(second.managed.every((item) => item.status === "unchanged")).toBe(
       true

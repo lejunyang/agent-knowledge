@@ -91,10 +91,13 @@ Canonical 内容位于 `.trae/skills`：
 - `source-distiller`
 - `lifecycle-recorder`
 - `memory-maintainer`
+- `memory-use-policy-maintainer`
 
 后台来源巡检使用 `knowledge-automation-operator`，确定性 CLI 仍负责 allowlist、限流、重试和
 notification outbox。Hindsight/memU/Mem0 使用 `agent-knowledge sidecar setup` 生成接入包，
 再用 `compare/history` 做 shadow A/B；外部 backend 不替代 Git Markdown 事实源。
+Retrieval Lesson / Reasoning Policy 使用 `memory-use-policy-maintainer`，P0-P2 仅 shadow，
+不会改变普通 query/Hook。
 
 Codex plugin 内 Skill 必须逐文件与 canonical 目录一致，包括 references 和 `agents/openai.yaml`。
 修改 Skill 后运行 `tests/templates.test.ts`，不要只复制 `SKILL.md`。

@@ -96,6 +96,8 @@ agent-knowledge notifications ack \
 - Inbox/直接材料审阅：`knowledge-organizer`。
 - 客服/需求 timeline：`lifecycle-recorder`。
 - Proposal、feedback、Skill 候选：`memory-maintainer`。
+- Retrieval Lesson / Reasoning Policy：`memory-use-policy-maintainer`；本 Operator 不自动
+  mine/accept/deprecate Policy。
 - 使用说明和健康诊断：`agent-knowledge-guide`。
 
 本 Skill 只做后台操作编排和问题汇总，不复制上述专业流程。

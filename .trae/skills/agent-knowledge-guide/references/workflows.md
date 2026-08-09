@@ -11,6 +11,7 @@
 - [经验与 Skill 改进](#经验与-skill-改进)
 - [后台自动化与通知](#后台自动化与通知)
 - [外部 Memory Sidecar](#外部-memory-sidecar)
+- [Memory Use Policy](#memory-use-policy)
 - [同步与多机](#同步与多机)
 - [Git 审计](#git-审计)
 
@@ -268,6 +269,19 @@ agent-knowledge sidecar history --limit 100
 
 支持 Hindsight、memU、Mem0。Sidecar 永远是 shadow-only，完整说明见
 `docs/guides/sidecars.md`。
+
+## Memory Use Policy
+
+```bash
+agent-knowledge feedback --query-run-id ... --usefulness not_useful --reason wrong_route
+agent-knowledge policy mine --eval /secure/eval/business.yaml
+agent-knowledge policy proposals --status pending
+agent-knowledge policy simulate --eval /secure/eval/business.yaml --output /secure/reports/policies
+agent-knowledge policy history --limit 100
+```
+
+需要实际审阅/维护时使用 `memory-use-policy-maintainer`。P0-P2 只允许 shadow/deprecated，
+普通 query/Hook 不读取 Policy。完整说明见 `docs/guides/retrieval-lessons.md`。
 
 ## Git 审计
 

@@ -33,9 +33,11 @@ describe("knowledge Git workspace", () => {
     expect(status.isGit).toBe(true);
     expect(status.remote).toBeNull();
     expect(status.trackedKnowledgeFiles).toBe(0);
+    expect(status.trackedPolicyFiles).toBe(0);
     expect(gitignore).toContain(".memory/");
     expect(gitignore).toContain(".vault/");
     expect(gitignore).not.toContain("knowledge/");
+    expect(gitignore).not.toContain("policies/");
     expect(security).toContain("Do not commit credentials");
   });
 

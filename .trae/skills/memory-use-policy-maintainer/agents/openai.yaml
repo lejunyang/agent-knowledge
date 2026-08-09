@@ -1,0 +1,4 @@
+interface:
+  display_name: "Memory Use Policy Maintainer"
+  short_description: "Mine, review, and simulate memory-use policies safely"
+  default_prompt: "Use $memory-use-policy-maintainer to mine, review, and simulate shadow Retrieval Lessons and Reasoning Policies."

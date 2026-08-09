@@ -24,7 +24,8 @@ Codex 使用两个标准资源根：
 - Standalone Skills：用户级 `~/.agents/skills`，项目级 `<repo>/.agents/skills`。
 
 Codex 当前不使用本项目的独立 Markdown Subagent 模板，因此不支持 `agents` 组件。Reader、
-writer、source distillation、maintenance 和 lifecycle 行为由可发现 Skill 加 CLI 命令完成。
+writer、source distillation、maintenance、memory-use Policy 和 lifecycle 行为由可发现 Skill
+加 CLI 命令完成。
 不要为了目录对称把 TRAE/Claude agent 文件复制到 Codex。
 
 ## 安装范围
@@ -38,7 +39,9 @@ writer、source distillation、maintenance 和 lifecycle 行为由可发现 Skil
 
 - `hooks`：安装生命周期 Hook。负责静默相关知识注入、Subagent 日志和 staging 信号。
 - `agents`：安装 `agent-knowledge-reader` / `agent-knowledge-writer` Subagent 模板。
-- `skills`：安装 `agent-knowledge-guide`、`knowledge-organizer`、`source-distiller`、`lifecycle-recorder` 和 `memory-maintainer`。
+- `skills`：安装 `agent-knowledge-guide`、`knowledge-organizer`、`source-distiller`、
+  `lifecycle-recorder`、`memory-maintainer`、`knowledge-automation-operator` 和
+  `memory-use-policy-maintainer`。
 - `plugin-bundle`：TRAE 安装 plugin 目录；Codex 安装可由 `codex plugin marketplace add` 注册的本地 marketplace。它是散装资源的替代分发方式，不应在同一宿主中重复启用。
 
 只选择实际需要的组件。例如只希望 Agent 能按需读写、不希望自动 Hook 运行时，可选择 `agents,skills` 而不选 `hooks`。
@@ -178,6 +181,7 @@ agent-knowledge integration uninstall --product codex --scope user
 
 - TRAE/Claude/Codex Hook 模板是否还调用正确命令和受支持事件。
 - `agent-knowledge-reader` 是否知道新的检索模式和反馈字段。
+- `memory-use-policy-maintainer` 是否仍使用真实 policy mine/proposal/simulate/history 流程。
 - `agent-knowledge-writer` 是否包含新的 candidate/provenance 字段。
 - 项目 Skill、TRAE plugin Skill 与 Codex plugin Skill 是否仍逐文件一致并描述真实流程。
 - 本文、主 README 和配置指南是否需要同步更新。

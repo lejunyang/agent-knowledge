@@ -11,6 +11,7 @@
 - [Integration](#integration)
 - [Automation 与通知](#automation-与通知)
 - [Sidecar A/B](#sidecar-ab)
+- [Memory Use Policy](#memory-use-policy)
 - [图谱与索引](#图谱与索引)
 - [处置优先级](#处置优先级)
 
@@ -256,6 +257,19 @@ agent-knowledge sidecar history --root /secure/agent-knowledge-data --limit 100
 优先看 false injection、abstention failure、unmapped results 和 latency。外部 recall 高但错误
 注入也高时不能替换 native pipeline。Retrieval Lesson / Reasoning Policy 的具体边界见
 `docs/guides/retrieval-lessons.md`。
+
+## Memory Use Policy
+
+```bash
+agent-knowledge policy proposals --status pending
+agent-knowledge policy list
+agent-knowledge policy history --limit 100
+agent-knowledge policy status
+```
+
+检查 proposal 是否达到三个独立证据、scope 是否为空、shadow 是否改善 false injection /
+abstention 指标，以及普通 query/Hook 是否仍未读取 Policy。Policy 退化时使用
+`policy deprecate`，不要删除 Git 文件。
 
 ## 处置优先级
 

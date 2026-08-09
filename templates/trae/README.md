@@ -223,6 +223,18 @@ Source 更新时旧 fingerprint 会拒绝 mark；content change/restored 回 pen
 系统提示词位于 `templates/automation/knowledge-automation-system-prompt.md`，常驻 wrapper 契约见
 `templates/automation/runner-contract.md`。
 
+## memory-use-policy-maintainer
+
+`memory-use-policy-maintainer` 负责：
+
+- 记录结构化 retrieval/reasoning failure。
+- 运行 `policy mine`，审阅 proposal。
+- 用户明确决定后执行 accept/reject/deprecate。
+- 用完整 eval 运行 `policy simulate/history`。
+- 检查 2–4 周、30 个独立 query-run 的 P3 readiness。
+
+P0-P2 仅 shadow；普通 query/Hook 不读取 Policy，Agent 不自动接受或激活。
+
 ## lifecycle-recorder
 
 `lifecycle-recorder` 记录客服 case 和需求 initiative：完整 conversation/tool/report payload
@@ -305,6 +317,7 @@ agent-knowledge query --retrieval graph --graph-depth 1 --debug
 - 同步审视 `templates/codex/hooks*.json`、Codex marketplace manifest 和 plugin Skills。
 - Automation 变化时同步审视 Operator Skill、系统提示词、callback envelope 和三类 service renderer。
 - Sidecar 变化时同步审视 provider presets、setup/scaffold、shadow artifacts、compare metrics 和 history。
+- Policy 变化时同步审视 query-run privacy、feedback taxonomy、Git store、proposal、simulation/history、Skill 和 P3/P4 readiness。
 - 同步审视主 README 的推荐流程和 `docs/guides/*`。
 - 若 TRAE 官方 Hook/Subagent 格式有变化，按官方文档同步模板。
 

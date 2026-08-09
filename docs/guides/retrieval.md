@@ -210,6 +210,10 @@ agent-knowledge eval-calibrate --input calibration-observations.json
 - `graphExpansion`：图新增结果、深度、关系和图分数。
 - `resultScores`：lexical、embedding、scenario、confidence、authority、relation、RRF、reranker 和 final score。
 
+真实 query 还会写 0600 `.memory/query-runs/YYYY-MM-DD.jsonl`，只保存 task hash/长度、
+domain/scenario/project scope、候选 ID、最终注入 ID 和安全分数摘要，不保存 task 原文或知识正文。
+Synthetic eval 和 `log:false` 不写 query-run ledger。
+
 评测输出 Recall@1/3/5、MRR、nDCG、false injection、abstention precision、latency 和 packet tokens。
 
 `retrieval-complete.yaml` 包含 17 条 active 脱敏知识、1 条 deprecated temporal predecessor 和 20 个正向/hard-negative/cross-language/no-answer case。普通 CI 使用 deterministic/lexical 路径；真实模型评测应先显式下载模型，再在本地或定时任务中运行。
@@ -230,3 +234,5 @@ agent-knowledge feedback \
 ```
 
 `not_useful` 反馈同样重要，可用于后续校准和维护诊断，但不会直接删除或修改 Markdown。
+若反馈用于 Retrieval Lesson / Reasoning Policy mining，应同时提供结构化 `--reason` 和尽可能
+准确的 expected/forbidden ID；完整流程见 `retrieval-lessons.md`。

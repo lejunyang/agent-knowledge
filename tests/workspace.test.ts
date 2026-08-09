@@ -31,6 +31,12 @@ describe("initKnowledgeWorkspace", () => {
     await expect(
       access(path.join(root, "events", "support"))
     ).resolves.toBeUndefined();
+    await expect(
+      access(path.join(root, "policies", "retrieval"))
+    ).resolves.toBeUndefined();
+    await expect(
+      access(path.join(root, "policies", "reasoning"))
+    ).resolves.toBeUndefined();
   });
 });
 

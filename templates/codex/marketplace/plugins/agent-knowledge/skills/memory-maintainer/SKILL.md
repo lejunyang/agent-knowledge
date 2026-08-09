@@ -163,6 +163,10 @@ agent-knowledge graph build
 - 删除了多少已消费日志。
 - 哪些内容仍未处理或需要证据。
 
+检索错误路由、forbidden injection、应 abstain 未 abstain、reasoning failure 和 Policy
+proposal 不在本 Skill 内处理，转交 `memory-use-policy-maintainer`。普通知识/Skill proposal
+仍由本 Skill 负责。
+
 ## 安全边界
 
 - 不从 staging hash/长度推断原始 prompt。

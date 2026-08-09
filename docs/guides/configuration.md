@@ -308,6 +308,10 @@ Automation、notification callback 和 sidecar 使用独立 profile/config 文�
 - Sidecar 接入包由 `agent-knowledge sidecar setup` 生成；只连已有服务时用 `sidecar init`。
 - 常驻 service renderer 只生成文件，不自动安装或启动。
 
+Memory-use Policy 同样不进入用户配置：reviewed shadow Policy 位于 workspace `policies/` 并由
+private Git 跟踪；proposal/query-run/simulation 位于 `.memory`。P0-P2 没有
+`policySet=active` 配置，普通 query/Hook 不加载 Policy。
+
 ## 同步
 
 | 配置 | 默认值 | 用途 |

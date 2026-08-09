@@ -28,3 +28,8 @@ agent-knowledge feedback \
 ```
 
 Use `not_useful` for irrelevant results. Detailed Subagent logs are local debugging evidence only; inspect them with `agent-knowledge subagents logs --agent-type agent-knowledge-reader`.
+
+For a real routing failure, add `--reason wrong_route` and the appropriate
+`--expected-memory-id` / `--forbidden-memory-id`. For a query that should have
+abstained, omit `--memory-id` and use `--reason should_abstain`. Never fabricate
+structured feedback to satisfy a Policy mining threshold.

@@ -474,15 +474,16 @@ discover -> incremental read -> prepare jobs -> agent synthesis -> commit
 | 在线飞书/Git 主动刷新并追问用户 | 已完成受控版本 | automation profile allowlist + 限流/重试 + Operator Skill + callback outbox |
 | 后台自主 Agent 常驻 | 已完成模板 | launchd/systemd/Docker renderer；固定镜像、提示词快照、环境文件和显式挂载；用户提供外部 Agent wrapper |
 | Hindsight/memU/Mem0 shadow A/B | 已完成基础设施 | 一键 setup、doctor、shadow ingest/search、native compare、定时执行和 history |
-| Retrieval Lesson / Reasoning Policy 独立 schema | 已完成产品决策 | 当前保留为 eval/feedback/proposal 审阅信号；未证明收益前不新增全局 active schema |
+| Retrieval Lesson / Reasoning Policy P0-P2 | 已完成 | query-run ledger、结构化 feedback、Git shadow Policy、proposal mining、simulation/history |
+| Retrieval Lesson / Reasoning Policy P3-P4 | Backlog | runtime enforcement 与 optimizer Agent；需 2–4 周、30 个独立 run 和完整 eval 门禁 |
 | 更完整领域 DLP | 不在当前范围 | 保留现有确定性 DLP 与 Connector extension point，不新增领域 adapter |
 
 当前真正剩余的高价值验收不是继续批量蒸馏本地验证库，也不是强行新增 policy schema，而是：
 
 1. 用用户选定的真实外部 Agent CLI、固定容器镜像和通知系统做长期运行验收。
 2. 固定 Hindsight/memU/Mem0 上游版本、模型和成本配置，并用真实业务 eval 积累 history。
-3. 先积累 Retrieval Lesson / Reasoning Policy 的重复失败证据；达到门槛后再决定是否独立
-   schema/router，不把“产品化”本身当作当前必做项。
+3. 运行 Retrieval Lesson / Reasoning Policy shadow 控制面 2–4 周，积累至少 30 个独立 query
+   run；确认安全指标不退化后再评审 P3 runtime enforcement，P4 optimizer 在 P3 稳定后启动。
 
 这些能力都不能绕过现有 Git Markdown 事实源、Vault、proposal/inbox 和人工批准边界。
 

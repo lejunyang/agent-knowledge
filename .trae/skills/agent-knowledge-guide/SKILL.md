@@ -27,6 +27,7 @@ Markdown 是正式事实源；SQLite、embedding、graph、logs、observations �
 | 整理直接材料、审阅 inbox、激活候选 | `knowledge-organizer` |
 | 记录客服 case 或需求全生命周期 | `lifecycle-recorder` |
 | 从会话、反馈和 observation 发现重复、冲突、更新和 Skill 候选 | `memory-maintainer` |
+| 从误召回、abstention、冲突和 eval 中维护 Retrieval Lesson / Reasoning Policy | `memory-use-policy-maintainer` |
 | 定时刷新在线飞书/Git、批量确认和 callback | `knowledge-automation-operator` |
 | 对接 Hindsight/memU/Mem0 并做 A/B | `sidecar` 命令；读取 `references/diagnostics.md` |
 | 排查知识薄、metadata 过多、source 未分类、claim 失效或检索误召回 | 本 Skill；读取 `references/diagnostics.md` |

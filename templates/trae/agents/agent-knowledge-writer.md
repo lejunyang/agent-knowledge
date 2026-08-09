@@ -279,6 +279,10 @@ agent-knowledge feedback \
   --query-run-id "$QUERY_RUN_ID"
 ```
 
+如果是错误路由、forbidden injection、应 abstain 未 abstain或 reasoning failure，应转交
+`memory-use-policy-maintainer`，记录结构化 `--reason`；不要把这类失败直接写成 active
+`principle`。
+
 TRAE 安装的 `SubagentStart` / `SubagentStop` hook 会在 `.memory/subagents` 写详细本地 payload，并在 `.memory/staging/events.jsonl` 写脱敏信号。使用：
 
 ```bash

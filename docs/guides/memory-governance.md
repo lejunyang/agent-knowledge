@@ -462,6 +462,11 @@ Feedback 计算规则：
 
 这意味着主 Agent 实际使用或拒绝检索结果后，应尽量记录带 `queryRunId` 的 feedback；但不要为了满足 Skill 门槛批量伪造正反馈。
 
+这套 usefulness 分数继续服务普通 knowledge/Skill maintenance。`wrong_route`、
+`forbidden_injection`、`should_abstain`、`conflicting_evidence` 等结构化 memory-use failure
+由 `memory-use-policy-maintainer` 走独立 `policy mine/proposals/simulate` 流程，不与普通
+maintenance proposal 混合。
+
 ## 记忆使用质量闭环
 
 本项目对“会不会用记忆”的治理分为五层：
@@ -471,6 +476,8 @@ Feedback 计算规则：
 3. Eval 使用 expected rank、hard-negative、forbidden 和 abstain 检查错误使用，而不只看 Recall。
 4. `eval-calibrate` 把 forbidden injection、abstention failure 和负反馈作为高优先级惩罚，只输出 dry-run 建议。
 5. Maintenance 用独立 session、可信来源、conflict 和净正反馈判断 knowledge/Skill proposal。
+6. Policy control plane 用结构化 failure reason、独立 query/eval、Git shadow Policy 和
+   simulation/history 判断“如何使用记忆”，但 P0-P2 不改变实时 query/Hook。
 
 这是一套可审计的 meta-memory 近似实现：它不会直接训练 MetaMem 模型，但会记录哪类 query
 使用了哪条知识、结果是否有用，以及哪些流程经过多次验证。任何外部 memory backend 的

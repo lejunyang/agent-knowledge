@@ -444,8 +444,9 @@ Hindsight、memU 或 Mem0，它们只能以 shadow/sidecar 输出 proposal，不
 事实源或绕过人工审阅。
 
 Retrieval Lesson/Reasoning Policy 分别表示“某类问题应该先找什么、哪些结果不要混入”和
-“事实、SOP、例外、时序、冲突应如何组合”。当前把这些信号保留在 eval regression、feedback
-和 maintenance proposal 中，不新增全局 active schema，也不自动注入 Hook；详见
+“事实、SOP、例外、时序、冲突应如何组合”。现在已有独立 Git `policies/`、结构化 feedback、
+query-run ledger、proposal、shadow simulation 和 history；P0–P2 不读取 Policy 改变普通 query
+或 Hook。详见
 [使用记忆的路由与推理策略](docs/guides/retrieval-lessons.md)。
 
 ## 主动记忆何时发生
@@ -643,6 +644,13 @@ agent-knowledge sidecar setup --provider hindsight --id hindsight-shadow --scope
 agent-knowledge sidecar doctor --config /secure/hindsight/sidecar.json
 agent-knowledge sidecar compare --config /secure/hindsight/sidecar.json --eval /secure/eval.yaml --output /secure/reports
 agent-knowledge sidecar history --limit 100
+
+# Retrieval Lesson / Reasoning Policy
+agent-knowledge policy mine --eval /secure/eval/business.yaml
+agent-knowledge policy proposals --status pending
+agent-knowledge policy simulate --eval /secure/eval/business.yaml --output /secure/reports/policies
+agent-knowledge policy history --limit 100
+agent-knowledge policy status
 ```
 
 ## 默认位置
@@ -670,6 +678,8 @@ agent-knowledge sidecar history --limit 100
 
 ```text
 knowledge/                         Markdown 事实源
+policies/retrieval/                Git reviewed shadow Retrieval Lessons
+policies/reasoning/                Git reviewed shadow Reasoning Policies
 .memory/index.sqlite              可重建检索索引
 .memory/embeddings/               可重建向量缓存
 .memory/logs/                     运行摘要
@@ -681,6 +691,8 @@ knowledge/                         Markdown 事实源
 .memory/ingestion/connectors/     本机 0600 Connector 登记；不含凭据
 .memory/ingestion/update-checks/  本机 0600 probe-only 更新报告
 .memory/events/                   Event append lock；不是事实源
+.memory/query-runs/               task hash、scope、候选/注入 ID；不含 task 原文
+.memory/policies/                 Policy proposal 与 simulation history
 .vault/objects/                   完整 source/event payload 密文
 events/support/*.jsonl            客服 case 脱敏 hash-chain 时间线
 events/projects/*.jsonl           需求 initiative 脱敏 hash-chain 时间线

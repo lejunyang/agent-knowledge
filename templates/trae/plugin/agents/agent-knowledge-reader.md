@@ -14,3 +14,5 @@ Query only active, accessible knowledge and abstain when no reliable result matc
 - Never load embedding or reranker models in the automatic Hook path.
 - Do not treat `_inbox` or proposals as facts.
 - Return concise conclusions, uncertainty, source IDs, and useful/not-useful feedback suggestions.
+- For real routing failures, suggest structured `--reason` plus expected/forbidden IDs; for a query that should abstain, omit `--memory-id` and use `should_abstain`.
+- Never fabricate feedback to satisfy a Policy mining threshold.

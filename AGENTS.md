@@ -33,6 +33,7 @@
 - `agent-knowledge automation` 按严格 profile 执行 allowlist Lark/Git 刷新、audit、maintenance 和 eval；只写 source/Vault/.memory/proposal/notification，不批准或修改 active knowledge。
 - `agent-knowledge notifications` 管理持久 outbox 和 callback delivery；callback 只发送脱敏 metadata，不发送 Vault evidence。
 - `agent-knowledge sidecar` 管理 Hindsight/memU/Mem0 shadow adapter、scaffold 和 native A/B 报告；外部结果永远不是事实源。
+- `agent-knowledge policy` 管理 Retrieval Lesson / Reasoning Policy 的 validate/import、proposal mining/review、shadow simulation/history 和 deprecate；P0-P2 不做实时 enforcement。
 - `agent-knowledge graph` 构建、查询和导出轻量知识关系图；`query --retrieval graph|hybrid-graph` 才会让图遍历参与检索。
 - V2 frontmatter 使用 `kind` + `layer`：`kind` 表达 profile/semantic/procedural/episodic/principle/skill/source，`layer` 表达 synopsis/knowledge/evidence。
 - `aliases`、`scenarios`、`tags` 是带 `weight/source` 的结构化 metadata，不替代规范 `domain`；supported claim 必须包含 source/section/hash evidence anchor。
@@ -163,6 +164,7 @@ src/core/             稳定共享契约：types、Zod schema、路径和日志
 src/cli/              CLI 交互向导和命令辅助模块
 src/storage/          Markdown 事实源、workspace、source manifest/review、SQLite 索引和 catalog
 src/retrieval/        CJK 召回、query、scoring、embedding、reranker、graph retrieval、context packet、eval 和 feedback
+src/policy/           query-run evidence、Git shadow Policy、proposal mining、simulation 和 history；不做实时 enforcement
 src/memory/           候选治理、inbox 写入、主动整理、observation、maintenance proposal 和审阅动作
 src/graph/            可重建知识关系图的类型、构建、查询、导出和 HTML 可视化
 src/integration/      产品安装、模板兼容入口和 Git project registry
@@ -249,6 +251,12 @@ src/cli.ts            命令行入口和各模块编排
 - `capture-material --replace-source` 只能刷新同 ID、active、documented 的 source 原始证据；不得覆盖 semantic/procedural/profile/episodic，精炼知识更新必须使用新知识和 `supersedes`。
 - Batch reranker 默认只在显式 `query --rerank` 或 reranked eval 中启用；Hook 热路径不得加载 cross-encoder。默认 pipeline 是融合 top 30 -> batch rerank -> threshold -> top 8。
 - Calibration 只能输出 dry-run 参数建议，不得自动改用户配置；目标函数必须优先惩罚 forbidden injection、abstention failure 和 not_useful feedback。
+- Query-run ledger 只保存 task hash/长度、scope、候选/注入 ID 和可选 Vault handle，禁止保存 task 原文、知识正文或结果文本；synthetic eval 和 `log:false` 不得写 ledger。
+- Retrieval Lesson / Reasoning Policy 事实源固定在 `policies/retrieval/*.yaml` 与 `policies/reasoning/*.yaml`；P0-P2 只允许 shadow/deprecated，普通 query、Hook 和 Context Packet 不得读取 Policy。
+- Policy mining 只使用结构化 feedback reason/expected/forbidden 和显式 eval failure，不读取自由文本 note、不调用模型、不在无 scope 时生成全局 Policy。
+- Policy proposal 只写 `.memory/policies/proposals`；只有用户显式 `policy accept` 才写 Git shadow Policy，且拒绝覆盖同 ID。退化 Policy 使用 `policy deprecate`，不删除历史。
+- Policy simulation 只在内存中编译临时 QueryPlan/ReasoningContract，报告/history 不保存 task 原文，也不得修改 query、Hook、配置或知识。
+- P3 active enforcement 与 P4 optimizer Agent 当前是 backlog；至少 shadow 运行 2–4 周、30 个独立真实 query run、完整中文 eval 无安全退化后才评审。
 - 共享同步默认不包含 `private` 或高于 `internal` 的知识；当前实现会同步允许范围内的正式 `kind: source` Markdown，且不提供客户端加密，因此不能把它当作完整会话/附件 Evidence Vault。修改同步范围或加密策略时必须更新威胁模型和测试。
 - 定时同步使用前台 `agent-knowledge sync watch` 循环；不要在安装或配置命令中静默创建 cron、launchd 或 systemd 任务。需要后台常驻时由用户显式交给系统进程管理器托管。
 - Automation service renderer 只生成 launchd/systemd/Docker 文件和 install/uninstall 命令，不得自动调用 `launchctl`、`systemctl` 或 `docker compose up`；runner 必须是用户提供的绝对 wrapper 路径。
@@ -383,7 +391,7 @@ agent-knowledge write-candidate \
 如果使用 graph 浏览或 graph retrieval，也重新运行 `agent-knowledge graph build`。
 
 使用 `agent-knowledge integration install --product trae|trae-cn|claude-code|codex --scope user|project` 安装产品接入。安装器不使用 symlink；hooks 结构化 merge 且只管理 `agent-knowledge hook` handler，agents/skills/plugin bundle 由本地 manifest 记录所有权。
-`agent-knowledge-guide`、`knowledge-automation-operator`、`knowledge-organizer`、`source-distiller`、`lifecycle-recorder` 和 `memory-maintainer` Skills 位于项目 `.trae/skills/`，这是本仓库自身的开发/测试资源，不代表已安装到用户产品目录。它们分别提供教程与诊断路由、后台巡检与批量确认、整理直接材料/inbox、蒸馏 versioned source、记录客服/需求事件、维护 observation/proposal。
+`agent-knowledge-guide`、`knowledge-automation-operator`、`memory-use-policy-maintainer`、`knowledge-organizer`、`source-distiller`、`lifecycle-recorder` 和 `memory-maintainer` Skills 位于项目 `.trae/skills/`，这是本仓库自身的开发/测试资源，不代表已安装到用户产品目录。它们分别提供教程与诊断路由、后台巡检与批量确认、memory-use Policy 维护、整理直接材料/inbox、蒸馏 versioned source、记录客服/需求事件、维护 observation/proposal。
 
 Hook 主动记忆边界：
 
