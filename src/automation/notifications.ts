@@ -19,6 +19,7 @@ import { redactEvidenceText } from "../ingestion/redaction.js";
 import { resolveWorkspacePath } from "../core/paths.js";
 import {
   CallbackConfigSchema,
+  NotificationInputSchema,
   NotificationSchema,
   type CallbackConfig,
   type CallbackConfigInput,
@@ -124,9 +125,16 @@ export async function listNotifications(
 /** 写入去重通知；同 ID 的 pending/delivered 记录不会重复创建。 */
 export async function enqueueNotification(
   rootDir: string,
-  input: NotificationInput,
+  rawInput: NotificationInput,
   options: { now?: Date } = {}
 ): Promise<NotificationHandle> {
+  const input = NotificationInputSchema.parse(rawInput);
+  const serialized = JSON.stringify(input);
+  if (
+    redactEvidenceText(serialized, "secrets-only").text !== serialized
+  ) {
+    throw new Error("Notification input contains secret-like content");
+  }
   const id = notificationId(input.type, input.dedupeKey);
   const existing = await readNotification(rootDir, id);
   if (existing) {

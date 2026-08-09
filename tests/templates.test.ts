@@ -66,7 +66,8 @@ describe("managed integrations", () => {
       "memory-maintainer",
       "source-distiller",
       "lifecycle-recorder",
-      "agent-knowledge-guide"
+      "agent-knowledge-guide",
+      "knowledge-automation-operator"
     ]) {
       const canonicalRoot = path.join(".trae", "skills", skillName);
       const canonicalFiles = await listRelativeFiles(canonicalRoot);
@@ -166,6 +167,44 @@ describe("managed integrations", () => {
     ]) {
       expect(guide).toContain(requiredTopic);
     }
+  });
+
+  it("defines a bounded background operator Skill and reusable system prompt", async () => {
+    const skillRoot = path.join(
+      ".trae",
+      "skills",
+      "knowledge-automation-operator"
+    );
+    expect(await listRelativeFiles(skillRoot)).toEqual([
+      "SKILL.md",
+      path.join("agents", "openai.yaml"),
+      path.join("references", "profile-schema.md"),
+      path.join("references", "question-policy.md")
+    ]);
+    const skill = await readFile(path.join(skillRoot, "SKILL.md"), "utf8");
+    const prompt = await readFile(
+      path.join(
+        "templates",
+        "automation",
+        "knowledge-automation-system-prompt.md"
+      ),
+      "utf8"
+    );
+    for (const required of [
+      "automation validate",
+      "automation inspect",
+      "automation run",
+      "notifications list",
+      "一次汇总",
+      "不修改 active knowledge",
+      "maxQuestions",
+      "callback"
+    ]) {
+      expect(skill).toContain(required);
+      expect(prompt).toContain(required);
+    }
+    expect(prompt).toContain("FINAL_REPORT_JSON");
+    expect(prompt).toContain("confirmation_required");
   });
 
   it("installs TRAE hooks, agents, and skills as regular managed files", async () => {

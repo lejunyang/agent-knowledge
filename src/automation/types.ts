@@ -196,11 +196,15 @@ export const NotificationSchema = z
 
 export type Notification = z.output<typeof NotificationSchema>;
 
-export type NotificationInput = {
-  type: z.output<typeof NotificationTypeSchema>;
-  severity: "info" | "warning" | "error";
-  title: string;
-  summary: string;
-  dedupeKey: string;
-  details: Record<string, unknown>;
-};
+export const NotificationInputSchema = z
+  .object({
+    type: NotificationTypeSchema,
+    severity: z.enum(["info", "warning", "error"]),
+    title: z.string().min(1).max(200),
+    summary: z.string().min(1).max(2_000),
+    dedupeKey: z.string().min(1).max(300),
+    details: z.record(JsonValueSchema)
+  })
+  .strict();
+
+export type NotificationInput = z.output<typeof NotificationInputSchema>;

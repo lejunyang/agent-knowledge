@@ -117,4 +117,21 @@ describe("automation notification outbox", () => {
     await ackNotification(root, queued.id);
     expect((await listNotifications(root))[0]?.status).toBe("acked");
   });
+
+  it("rejects secret-like notification details before writing the outbox", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "ak-notification-secret-"));
+    tempDirs.push(root);
+
+    await expect(
+      enqueueNotification(root, {
+        type: "confirmation_required",
+        severity: "warning",
+        title: "需要确认",
+        summary: "发现敏感配置。",
+        dedupeKey: "secret-input",
+        details: { token: "sk-abcdefghijklmnopqrstuvwxyz" }
+      })
+    ).rejects.toThrow("secret-like");
+    expect(await listNotifications(root)).toEqual([]);
+  });
 });

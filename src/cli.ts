@@ -58,6 +58,7 @@ import {
   getEventTimeline,
   initKnowledgeWorkspace,
   inspectAutomation,
+  enqueueNotification,
   listEventStreams,
   listConnectorRegistrations,
   listAutomationJobs,
@@ -2993,6 +2994,32 @@ notifications
         options.status
           ? items.filter((item) => item.status === options.status)
           : items,
+        null,
+        2
+      )
+    );
+  });
+
+notifications
+  .command("enqueue")
+  .description(
+    t(
+      "从 JSON 文件写入一个去重通知",
+      "Enqueue one deduplicated notification from a JSON file"
+    )
+  )
+  .requiredOption(
+    "--input <file>",
+    t("通知 JSON 文件", "notification JSON file")
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { input: string; root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await enqueueNotification(
+          resolveCliRoot(options.root),
+          JSON.parse(await readFile(options.input, "utf8"))
+        ),
         null,
         2
       )

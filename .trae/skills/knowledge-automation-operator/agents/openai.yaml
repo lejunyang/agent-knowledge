@@ -1,0 +1,4 @@
+interface:
+  display_name: "Knowledge Automation Operator"
+  short_description: "Run bounded knowledge refresh and notification workflows"
+  default_prompt: "Operate the configured Agent Knowledge automation profile, batch confirmation questions, and emit a safe final report."
