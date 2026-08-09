@@ -108,6 +108,8 @@ function makeRanked(score: number): RankedMemory[] {
       sourceAuthorityScore: 0.75,
       relationScore: 0,
       rrfScore: score,
+      queryCoverageScore: 1,
+      matchedTechnicalTerms: 2,
       finalScore: score
     }
   ];

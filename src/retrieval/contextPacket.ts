@@ -5,6 +5,7 @@
  * 它需要的是按用途分区的上下文：稳定规则、相关事实、流程、案例、风险和来源。
  */
 import type { ContextPacket, ContextPacketItem, MemoryQueryRequest, RankedMemory } from "../core/types.js";
+import { aliasValues } from "../core/knowledgeText.js";
 
 type BuildContextPacketInput = {
   request: MemoryQueryRequest;
@@ -13,6 +14,49 @@ type BuildContextPacketInput = {
 
 const MIN_DIRECT_SCORE = 0.35;
 const MIN_RELATIVE_DIRECT_SCORE = 0.65;
+const MIN_DIRECT_QUERY_COVERAGE = 0.35;
+
+/** 完整 alias 是人工维护的强证据，允许越过长查询覆盖门槛。 */
+function hasExactAliasMatch(
+  memory: RankedMemory,
+  task: string
+): boolean {
+  const normalizedTask = task.toLowerCase();
+  return aliasValues(memory.document.frontmatter).some((alias) =>
+    normalizedTask.includes(alias.trim().toLowerCase())
+  );
+}
+
+/**
+ * 无 domain/scenario 的长查询需要覆盖足够任务语义。
+ *
+ * 三个以上英文技术词只命中一个时通常是 `Vue`、`OAuth` 等通用词碰撞；即使 BM25 在小语料中
+ * 把它排第一，也不应注入。候选仍保留在 query debug，方便人工诊断。
+ */
+function hasSufficientQueryCoverage(
+  memory: RankedMemory,
+  request: MemoryQueryRequest
+): boolean {
+  if (
+    memory.relationScore > 0 ||
+    request.domains.length > 0 ||
+    request.scenarios.length > 0 ||
+    hasExactAliasMatch(memory, request.task)
+  ) {
+    return true;
+  }
+  const coverage = memory.queryCoverageScore;
+  const technicalTerms = request.task
+    .toLowerCase()
+    .replace(/\p{Script=Han}+/gu, " ")
+    .split(/[^\p{L}\p{N}_/-]+/u)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2);
+  const technicalCoverageOk =
+    technicalTerms.length < 3 ||
+    memory.matchedTechnicalTerms >= 2;
+  return coverage >= MIN_DIRECT_QUERY_COVERAGE && technicalCoverageOk;
+}
 
 /**
  * 过滤只因偶然词项进入候选池的直接长尾。
@@ -20,7 +64,14 @@ const MIN_RELATIVE_DIRECT_SCORE = 0.65;
  * 明确关系扩展代表人类声明的依赖，不受相对门槛影响；普通 direct candidate 必须同时达到绝对
  * 分数和首条分数比例，避免 token 预算宽裕时把低相关知识塞满 packet。
  */
-function relevantForPacket(memory: RankedMemory, topScore: number): boolean {
+function relevantForPacket(
+  memory: RankedMemory,
+  topScore: number,
+  request: MemoryQueryRequest
+): boolean {
+  if (!hasSufficientQueryCoverage(memory, request)) {
+    return false;
+  }
   if (memory.relationScore > 0) {
     return memory.finalScore >= MIN_DIRECT_SCORE;
   }
@@ -170,7 +221,7 @@ export function buildContextPacket(input: BuildContextPacketInput): ContextPacke
 
   const topScore = input.ranked[0]?.finalScore ?? 0;
   for (const ranked of input.ranked.filter((memory) =>
-    relevantForPacket(memory, topScore)
+    relevantForPacket(memory, topScore, input.request)
   )) {
     const type = ranked.document.frontmatter.kind;
     const item = toItem(ranked);

@@ -161,6 +161,8 @@ export async function queryMemoriesGraphWithDebug(
           sourceAuthorityScore: memory.sourceAuthorityScore,
           relationScore: memory.relationScore,
           rrfScore: memory.rrfScore,
+          queryCoverageScore: memory.queryCoverageScore,
+          matchedTechnicalTerms: memory.matchedTechnicalTerms,
           ...(baseScores.get(id)?.rerankerScore === undefined
             ? {}
             : { rerankerScore: baseScores.get(id)?.rerankerScore }),

@@ -121,5 +121,7 @@ export type RankedMemory = {
   sourceAuthorityScore: number;
   relationScore: number;
   rrfScore: number;
+  queryCoverageScore: number;
+  matchedTechnicalTerms: number;
   finalScore: number;
 };

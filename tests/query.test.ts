@@ -8,6 +8,7 @@ import { captureMaterial } from "./helpers/candidate.js";
 import { queryMemories, queryMemoriesWithDebug } from "../src/retrieval/query.js";
 import { weightedMetadataScore } from "../src/retrieval/scoring.js";
 import { getLogFilePath } from "../src/core/logging.js";
+import { MemoryQueryRequestSchema } from "../src/core/schema.js";
 import type { MemoryQueryRequest } from "../src/core/types.js";
 import type { EmbeddingScorer, MemoryReranker } from "../src/retrieval/scoring.js";
 import { DeterministicBatchReranker } from "../src/retrieval/reranker.js";
@@ -747,6 +748,61 @@ describe("queryMemories", () => {
     expect(ranked.map((item) => item.document.frontmatter.id)).toContain(
       "k_20260705_business_account_authorization"
     );
+  });
+
+  it("rejects candidates that match only a small generic fraction of a longer query", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-query-coverage-")
+    );
+    tempDirs.push(root);
+    await captureMaterial(
+      root,
+      [
+        {
+          id: "k_query_coverage_vue_platform",
+          title: "Vue 平台配置说明",
+          kind: "semantic",
+          layer: "knowledge",
+          domain: "platform/frontend",
+          related_domains: [],
+          scenarios: [
+            {
+              id: "platform-development",
+              role: "primary",
+              weight: 1
+            }
+          ],
+          tags: [],
+          confidence: 0.95,
+          source_authority: "documented",
+          synopsis:
+            "平台使用 Vue 开发，并包含路由、构建和运行时配置。",
+          aliases: [],
+          claims: [],
+          evidence: ["test:query-coverage"],
+          project_keys: ["local/test/query-coverage"]
+        }
+      ],
+      { target: "active", rebuild: true }
+    );
+
+    const request = MemoryQueryRequestSchema.parse({
+      task: "Vue SFC ESLint 迁移应该怎么配置",
+      agentRole: "main",
+      projectKeys: ["local/test/query-coverage"]
+    });
+    const { ranked, debug } = queryMemoriesWithDebug(root, request);
+    const packet = buildContextPacket({ request, ranked });
+
+    expect(ranked.map((item) => item.document.frontmatter.id)).toContain(
+      "k_query_coverage_vue_platform"
+    );
+    expect(debug.resultScores[0]).toMatchObject({
+      id: "k_query_coverage_vue_platform",
+      matchedTechnicalTerms: 1
+    });
+    expect(packet.claims).toEqual([]);
+    expect(packet.procedures).toEqual([]);
   });
 });
 

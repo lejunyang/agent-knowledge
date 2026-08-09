@@ -17,7 +17,13 @@ import {
   searchableTagValues
 } from "../core/knowledgeText.js";
 
-export type ScoreFeatures = Omit<RankedMemory, "document" | "finalScore">;
+export type ScoreFeatures = Omit<
+  RankedMemory,
+  | "document"
+  | "finalScore"
+  | "queryCoverageScore"
+  | "matchedTechnicalTerms"
+>;
 
 export type EmbeddingScoreInput = {
   request: MemoryQueryRequest;

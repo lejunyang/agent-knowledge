@@ -110,6 +110,8 @@ export type QueryDebugInfo = {
     sourceAuthorityScore: number;
     relationScore: number;
     rrfScore: number;
+    queryCoverageScore: number;
+    matchedTechnicalTerms: number;
     rerankerScore?: number;
     finalScore: number;
   }>;
@@ -526,6 +528,69 @@ function hasSufficientLexicalEvidence(
   return new Set(matchedTerms).size >= 2;
 }
 
+/** 提取查询中英文、数字和技术标识词；中文覆盖单独由 CJK 2-gram 衡量。 */
+function technicalQueryTerms(task: string): string[] {
+  return [
+    ...new Set(
+      task
+        .toLowerCase()
+        .replace(/\p{Script=Han}+/gu, " ")
+        .split(/[^\p{L}\p{N}_/-]+/u)
+        .map((token) => token.trim())
+        .filter((token) => token.length >= 2)
+    )
+  ];
+}
+
+/** 计算单条知识对完整任务的词项覆盖，供最终注入而非候选召回门控。 */
+function queryCoverageEvidence(
+  document: KnowledgeDocument,
+  task: string
+): { queryCoverageScore: number; matchedTechnicalTerms: number } {
+  const haystack = [
+    document.frontmatter.title,
+    ...aliasValues(document.frontmatter),
+    document.frontmatter.domain,
+    ...document.frontmatter.related_domains,
+    ...document.frontmatter.scenarios.map((scenario) => scenario.id),
+    ...document.frontmatter.tags
+      .filter((tag) => tag.retrieval)
+      .map((tag) => tag.value),
+    document.frontmatter.synopsis,
+    document.body
+  ]
+    .join("\n")
+    .toLowerCase();
+  const technicalTerms = technicalQueryTerms(task);
+  const cjkTerms = cjkNgrams(task).filter(
+    (token) => /^[\p{Script=Han}]{2}$/u.test(token)
+  );
+  const matchedTechnicalTerms = technicalTerms.filter((term) =>
+    haystack.includes(term)
+  ).length;
+  const matchedCjkTerms = cjkTerms.filter((term) =>
+    haystack.includes(term)
+  ).length;
+  const technicalCoverage =
+    technicalTerms.length === 0
+      ? 1
+      : matchedTechnicalTerms / technicalTerms.length;
+  const cjkCoverage =
+    cjkTerms.length === 0 ? 1 : matchedCjkTerms / cjkTerms.length;
+  const activeChannels = [
+    technicalTerms.length > 0 ? technicalCoverage : null,
+    cjkTerms.length > 0 ? cjkCoverage : null
+  ].filter((value): value is number => value !== null);
+  return {
+    queryCoverageScore:
+      activeChannels.length === 0
+        ? 1
+        : activeChannels.reduce((sum, value) => sum + value, 0) /
+          activeChannels.length,
+    matchedTechnicalTerms
+  };
+}
+
 /**
  * 生成默认重排器所需的分项特征。
  *
@@ -568,6 +633,7 @@ function scoreRow(
     rrfScore
   };
   const finalScore = Math.max(0, Math.min(1, reranker.rerank({ request, document, features })));
+  const coverage = queryCoverageEvidence(document, request.task);
 
   return {
     lexicalScore,
@@ -578,6 +644,7 @@ function scoreRow(
     sourceAuthorityScore,
     relationScore,
     rrfScore,
+    ...coverage,
     finalScore
   };
 }
@@ -689,7 +756,9 @@ function selectCandidateRows(rootDir: string, request: MemoryQueryRequest): Cand
          WHERE memory_fts MATCH ?`
       )
       .all(query) as MemoryRow[];
-    const ftsRows = rawFtsRows.filter((row) => hasSufficientLexicalEvidence(row, request, taskTokens));
+    const ftsRows = rawFtsRows.filter((row) =>
+      hasSufficientLexicalEvidence(row, request, taskTokens)
+    );
 
     if (ftsRows.length > 0) {
       // FTS5 不保证未写 ORDER BY 时的返回顺序，必须显式按 BM25 升序生成 lexical rank。
@@ -929,6 +998,8 @@ function rankSelectedRows(
       sourceAuthorityScore: item.sourceAuthorityScore,
       relationScore: item.relationScore,
       rrfScore: item.rrfScore,
+      queryCoverageScore: item.queryCoverageScore,
+      matchedTechnicalTerms: item.matchedTechnicalTerms,
       finalScore: item.finalScore
     }))
   };
