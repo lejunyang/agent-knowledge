@@ -49,6 +49,7 @@ describe("sidecar scaffold and comparison", () => {
     const config = JSON.parse(
       await readFile(path.join(root, "sidecar.json"), "utf8")
     ) as Record<string, unknown>;
+    const compose = await readFile(path.join(root, "compose.yaml"), "utf8");
 
     expect(config).toMatchObject({
       id: "business-hindsight",
@@ -56,6 +57,7 @@ describe("sidecar scaffold and comparison", () => {
       baseUrl: "http://127.0.0.1:9999",
       mode: "shadow"
     });
+    expect(compose).toContain('"9999:8888"');
     expect(result.nextCommands.join("\n")).toContain("sidecar doctor");
   });
 

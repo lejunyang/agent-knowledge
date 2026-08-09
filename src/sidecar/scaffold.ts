@@ -84,7 +84,11 @@ MEMU_SCOPE=${JSON.stringify(config.scope)}
     };
   }
 
-  const port = 8888;
+  const containerPort = 8888;
+  const configuredUrl = new URL(config.baseUrl);
+  const hostPort =
+    configuredUrl.port ||
+    (configuredUrl.protocol === "https:" ? "443" : "80");
   const serviceName =
     provider === "hindsight" ? "hindsight" : "mem0";
   const image =
@@ -98,7 +102,7 @@ MEMU_SCOPE=${JSON.stringify(config.scope)}
     image: "${image}"
     restart: unless-stopped
     ports:
-      - "${port}:${port}"
+      - "${hostPort}:${containerPort}"
     env_file:
       - .env
     volumes:
