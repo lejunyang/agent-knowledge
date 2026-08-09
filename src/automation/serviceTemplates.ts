@@ -4,7 +4,7 @@
  * 具体 Agent CLI 的参数由用户提供的 runner wrapper 决定；本项目只传 profile、系统提示词、
  * workspace 和通知投递命令，避免绑定某一个宿主或把凭据写入模板。
  */
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { z } from "zod";
@@ -12,7 +12,25 @@ import { z } from "zod";
 const AbsolutePathSchema = z
   .string()
   .min(1)
-  .refine((value) => path.isAbsolute(value), "expected an absolute path");
+  .refine((value) => path.isAbsolute(value), "expected an absolute path")
+  .refine(
+    (value) => !/[\0\r\n]/.test(value),
+    "absolute path must not contain NUL or line breaks"
+  );
+
+const PinnedContainerImageSchema = z
+  .string()
+  .min(1)
+  .regex(
+    /^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/,
+    "container image contains unsupported characters"
+  )
+  .refine(
+    (value) =>
+      /@sha256:[a-f0-9]{64}$/.test(value) ||
+      (/:[A-Za-z0-9_.-]+$/.test(value) && !value.endsWith(":latest")),
+    "expected a pinned container image tag or sha256 digest"
+  );
 
 export const AutomationServiceOptionsSchema = z
   .object({
@@ -24,9 +42,29 @@ export const AutomationServiceOptionsSchema = z
     outputDir: AbsolutePathSchema,
     workspacePath: AbsolutePathSchema.optional(),
     systemPromptPath: AbsolutePathSchema.optional(),
-    environmentFilePath: AbsolutePathSchema.optional()
+    environmentFilePath: AbsolutePathSchema.optional(),
+    containerImage: PinnedContainerImageSchema.optional(),
+    containerReadOnlyMountPaths: z.array(AbsolutePathSchema).default([]),
+    containerReadWriteMountPaths: z.array(AbsolutePathSchema).default([])
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.manager === "docker" && !value.workspacePath) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["workspacePath"],
+        message: "Docker automation service requires workspacePath"
+      });
+    }
+    if (value.manager === "docker" && !value.containerImage) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["containerImage"],
+        message:
+          "Docker automation service requires a pinned containerImage"
+      });
+    }
+  });
 
 export type AutomationServiceOptions = z.input<
   typeof AutomationServiceOptionsSchema
@@ -55,9 +93,26 @@ function systemdValue(value: string): string {
   return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
+/** POSIX shell 单引号转义，用于返回给用户显式执行的 install/uninstall 命令。 */
+function shellValue(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
 /** YAML 双引号值最小转义。 */
 function yamlValue(value: string): string {
   return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
+/** Compose 使用长格式 bind mount，避免路径中的冒号或空格破坏 short syntax。 */
+function composeBindMount(
+  source: string,
+  target: string,
+  readOnly: boolean
+): string {
+  return `      - type: bind
+        source: ${yamlValue(source)}
+        target: ${yamlValue(target)}
+${readOnly ? "        read_only: true\n" : ""}`;
 }
 
 /** 默认系统提示词相对已安装模块定位，避免从其他工作目录调用时生成失效路径。 */
@@ -83,7 +138,7 @@ function runnerEnvironment(options: {
     AGENT_KNOWLEDGE_AUTOMATION_PROFILE: options.profilePath,
     AGENT_KNOWLEDGE_AUTOMATION_SYSTEM_PROMPT: options.systemPromptPath,
     AGENT_KNOWLEDGE_NOTIFICATION_COMMAND:
-      `agent-knowledge notifications deliver --profile ${options.profilePath}`,
+      `agent-knowledge notifications deliver --profile ${shellValue(options.profilePath)}`,
     AGENT_KNOWLEDGE_INTERVAL_MINUTES: String(options.intervalMinutes),
     ...(options.workspacePath
       ? { AGENT_KNOWLEDGE_ROOT: options.workspacePath }
@@ -174,7 +229,7 @@ ${environmentXml}
     files: [target],
     installCommands: [
       `mkdir -p "$HOME/Library/LaunchAgents"`,
-      `cp ${JSON.stringify(target)} "$HOME/Library/LaunchAgents/${label}.plist"`,
+      `cp ${shellValue(target)} "$HOME/Library/LaunchAgents/${label}.plist"`,
       `launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/${label}.plist"`
     ],
     uninstallCommands: [
@@ -209,7 +264,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-${options.environmentFilePath ? `EnvironmentFile=${options.environmentFilePath}\n` : ""}ExecStart=${options.runnerPath}
+${options.environmentFilePath ? `EnvironmentFile=${systemdValue(options.environmentFilePath)}\n` : ""}ExecStart=${systemdValue(options.runnerPath)}
 ${environmentLines}
 
 [Install]
@@ -237,7 +292,7 @@ WantedBy=timers.target
     files: [servicePath, timerPath],
     installCommands: [
       `mkdir -p "$HOME/.config/systemd/user"`,
-      `cp ${JSON.stringify(servicePath)} ${JSON.stringify(timerPath)} "$HOME/.config/systemd/user/"`,
+      `cp ${shellValue(servicePath)} ${shellValue(timerPath)} "$HOME/.config/systemd/user/"`,
       "systemctl --user daemon-reload",
       `systemctl --user enable --now ${unit}.timer`
     ],
@@ -254,49 +309,87 @@ async function renderDocker(
   options: z.output<typeof AutomationServiceOptionsSchema>,
   promptPath: string
 ): Promise<AutomationServiceResult> {
-  if (!options.workspacePath) {
-    throw new Error("Docker automation service requires workspacePath");
-  }
+  // schema 已在任何文件写入前保证 Docker 的 workspace 和 pinned image 都存在。
+  const workspacePath = options.workspacePath!;
+  const containerImage = options.containerImage!;
   const composePath = path.join(options.outputDir, "compose.yaml");
-  const dockerfilePath = path.join(options.outputDir, "Dockerfile");
   const entrypointPath = path.join(options.outputDir, "entrypoint.sh");
+  const managedMounts = new Set([
+    options.profilePath,
+    promptPath,
+    options.runnerPath,
+    workspacePath
+  ]);
+  const readWriteMounts = new Set(
+    options.containerReadWriteMountPaths.filter(
+      (mountPath) => !managedMounts.has(mountPath)
+    )
+  );
+  const additionalMounts = [
+    ...[...new Set(options.containerReadOnlyMountPaths)]
+      .filter(
+        (mountPath) =>
+          !managedMounts.has(mountPath) && !readWriteMounts.has(mountPath)
+      )
+      .map((mountPath) => composeBindMount(mountPath, mountPath, true)),
+    ...[...readWriteMounts].map((mountPath) =>
+      composeBindMount(mountPath, mountPath, false)
+    )
+  ].join("\n");
   await writeServiceFile(
     composePath,
     `services:
   knowledge-automation:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${yamlValue(containerImage)}
     restart: unless-stopped
+    stop_grace_period: 30s
 ${options.environmentFilePath ? `    env_file:\n      - ${yamlValue(options.environmentFilePath)}\n` : ""}    environment:
-      AGENT_KNOWLEDGE_AUTOMATION_PROFILE: "/config/profile.json"
-      AGENT_KNOWLEDGE_AUTOMATION_SYSTEM_PROMPT: "/config/system-prompt.md"
-      AGENT_KNOWLEDGE_NOTIFICATION_COMMAND: "agent-knowledge notifications deliver --profile /config/profile.json"
+      AGENT_KNOWLEDGE_AUTOMATION_PROFILE: ${yamlValue(options.profilePath)}
+      AGENT_KNOWLEDGE_AUTOMATION_SYSTEM_PROMPT: ${yamlValue(promptPath)}
+      AGENT_KNOWLEDGE_NOTIFICATION_COMMAND: ${yamlValue(`agent-knowledge notifications deliver --profile ${shellValue(options.profilePath)}`)}
       AGENT_KNOWLEDGE_INTERVAL_MINUTES: ${yamlValue(String(options.intervalMinutes))}
-      AGENT_KNOWLEDGE_ROOT: "/data/agent-knowledge"
+      AGENT_KNOWLEDGE_ROOT: ${yamlValue(workspacePath)}
     volumes:
-      - ${yamlValue(`${options.profilePath}:/config/profile.json:ro`)}
-      - ${yamlValue(`${promptPath}:/config/system-prompt.md:ro`)}
-      - ${yamlValue(`${options.runnerPath}:/runner/external-agent:ro`)}
-      - ${yamlValue(`${options.workspacePath}:/data/agent-knowledge`)}
-`
-  );
-  await writeServiceFile(
-    dockerfilePath,
-    `FROM node:22-bookworm-slim
-WORKDIR /app
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod 0755 /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
+${composeBindMount(options.profilePath, options.profilePath, true)}${composeBindMount(promptPath, promptPath, true)}${composeBindMount(options.runnerPath, options.runnerPath, true)}${composeBindMount(workspacePath, workspacePath, false)}${composeBindMount(entrypointPath, "/automation/entrypoint.sh", true)}${additionalMounts ? `${additionalMounts}\n` : ""}    entrypoint:
+      - "/bin/sh"
+      - "/automation/entrypoint.sh"
 `
   );
   await writeServiceFile(
     entrypointPath,
     `#!/bin/sh
-set -eu
+set -u
+child_pid=""
+stop() {
+  if [ -n "$child_pid" ]; then
+    kill -TERM "$child_pid" 2>/dev/null || true
+  fi
+  exit 0
+}
+trap stop TERM INT
+
+case "$AGENT_KNOWLEDGE_INTERVAL_MINUTES" in
+  ""|0|*[!0-9]*) echo "AGENT_KNOWLEDGE_INTERVAL_MINUTES must be a positive integer" >&2; exit 64 ;;
+esac
+
 while true; do
-  /runner/external-agent
-  sleep "$((AGENT_KNOWLEDGE_INTERVAL_MINUTES * 60))"
+  started_at="$(date +%s)"
+  ${shellValue(options.runnerPath)} &
+  child_pid="$!"
+  if wait "$child_pid"; then
+    status=0
+  else
+    status="$?"
+    echo "Agent Knowledge automation runner exited with status $status" >&2
+  fi
+  child_pid=""
+  finished_at="$(date +%s)"
+  delay="$((AGENT_KNOWLEDGE_INTERVAL_MINUTES * 60 - finished_at + started_at))"
+  if [ "$delay" -lt 1 ]; then delay=1; fi
+  sleep "$delay" &
+  child_pid="$!"
+  wait "$child_pid" || true
+  child_pid=""
 done
 `
   );
@@ -304,12 +397,12 @@ done
   return {
     manager: "docker",
     label: options.label,
-    files: [composePath, dockerfilePath, entrypointPath],
+    files: [composePath, entrypointPath],
     installCommands: [
-      `docker compose -f ${JSON.stringify(composePath)} up -d --build`
+      `docker compose -f ${shellValue(composePath)} up -d`
     ],
     uninstallCommands: [
-      `docker compose -f ${JSON.stringify(composePath)} down`
+      `docker compose -f ${shellValue(composePath)} down`
     ]
   };
 }
@@ -319,15 +412,23 @@ export async function renderAutomationService(
   rawOptions: AutomationServiceOptions
 ): Promise<AutomationServiceResult> {
   const options = AutomationServiceOptionsSchema.parse(rawOptions);
-  const promptPath =
+  const promptSourcePath =
     options.systemPromptPath ?? defaultSystemPromptPath();
   await mkdir(options.outputDir, { recursive: true, mode: 0o700 });
-  switch (options.manager) {
-    case "launchd":
-      return renderLaunchd(options, promptPath);
-    case "systemd":
-      return renderSystemd(options, promptPath);
-    case "docker":
-      return renderDocker(options, promptPath);
-  }
+  // 生成目录保存不可变提示词快照，避免 package 更新或临时安装路径让常驻服务失效。
+  const promptPath = await writeServiceFile(
+    path.join(options.outputDir, "system-prompt.md"),
+    await readFile(promptSourcePath, "utf8")
+  );
+  const result = await (async (): Promise<AutomationServiceResult> => {
+    switch (options.manager) {
+      case "launchd":
+        return renderLaunchd(options, promptPath);
+      case "systemd":
+        return renderSystemd(options, promptPath);
+      case "docker":
+        return renderDocker(options, promptPath);
+    }
+  })();
+  return { ...result, files: [...result.files, promptPath] };
 }

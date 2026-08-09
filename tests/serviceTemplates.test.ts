@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { load } from "js-yaml";
 import { afterEach, describe, expect, it } from "vitest";
 import { renderAutomationService } from "../src/automation/index.js";
 
@@ -31,7 +32,7 @@ describe("background service templates", () => {
     expect(plist).toContain("<integer>1800</integer>");
     expect(plist).toContain("/opt/agent-runners/run-knowledge-agent");
     expect(plist).toContain("/secure/agent-knowledge/profile.json");
-    expect(plist).toContain("knowledge-automation-system-prompt.md");
+    expect(plist).toContain(path.join(output, "system-prompt.md"));
     expect(plist).toContain("notifications deliver");
     expect(plist).not.toMatch(/token|password|secret/i);
     expect((await stat(result.files[0]!)).mode & 0o777).toBe(0o600);
@@ -73,16 +74,21 @@ describe("background service templates", () => {
         outputDir: output
       });
       const plist = await readFile(result.files[0]!, "utf8");
+      const promptSnapshot = path.join(output, "system-prompt.md");
       const repositoryRoot = path.resolve(
         path.dirname(fileURLToPath(import.meta.url)),
         ".."
       );
-      expect(plist).toContain(
-        path.join(
+      expect(plist).toContain(promptSnapshot);
+      expect(await readFile(promptSnapshot, "utf8")).toBe(
+        await readFile(
+          path.join(
           repositoryRoot,
           "templates",
           "automation",
           "knowledge-automation-system-prompt.md"
+          ),
+          "utf8"
         )
       );
       expect(plist).not.toContain(
@@ -111,7 +117,7 @@ describe("background service templates", () => {
       environmentFilePath: "/secure/agent-knowledge/automation.env"
     });
 
-    expect(result.files).toHaveLength(2);
+    expect(result.files).toHaveLength(3);
     const service = await readFile(
       result.files.find((file) => file.endsWith(".service"))!,
       "utf8"
@@ -121,12 +127,14 @@ describe("background service templates", () => {
       "utf8"
     );
     expect(service).toContain("Type=oneshot");
-    expect(service).toContain("ExecStart=/opt/agent-runners/run-knowledge-agent");
+    expect(service).toContain(
+      'ExecStart="/opt/agent-runners/run-knowledge-agent"'
+    );
     expect(service).toContain(
       "AGENT_KNOWLEDGE_AUTOMATION_PROFILE=/secure/agent-knowledge/profile.json"
     );
     expect(service).toContain(
-      "EnvironmentFile=/secure/agent-knowledge/automation.env"
+      'EnvironmentFile="/secure/agent-knowledge/automation.env"'
     );
     expect(timer).toContain("OnUnitActiveSec=15min");
     expect(timer).toContain("Persistent=true");
@@ -143,7 +151,14 @@ describe("background service templates", () => {
       intervalMinutes: 60,
       outputDir: output,
       workspacePath: "/srv/agent-knowledge-data",
-      environmentFilePath: "/secure/agent-knowledge/automation.env"
+      environmentFilePath: "/secure/agent-knowledge/automation.env",
+      containerImage: "registry.example.com/agent-knowledge:v1.2.3",
+      containerReadOnlyMountPaths: ["/secure/eval", "/secure/sidecars"],
+      containerReadWriteMountPaths: [
+        "/projects/business",
+        "/secure/exports",
+        "/secure/reports"
+      ]
     });
 
     const compose = await readFile(
@@ -152,16 +167,83 @@ describe("background service templates", () => {
     );
     expect(compose).toContain("restart: unless-stopped");
     expect(compose).toContain(
-      "/secure/agent-knowledge/profile.json:/config/profile.json:ro"
+      'image: "registry.example.com/agent-knowledge:v1.2.3"'
     );
     expect(compose).toContain(
-      "/srv/agent-knowledge-data:/data/agent-knowledge"
+      'source: "/secure/agent-knowledge/profile.json"'
     );
+    expect(compose).toContain(
+      'target: "/secure/agent-knowledge/profile.json"'
+    );
+    expect(compose).toContain(
+      'source: "/srv/agent-knowledge-data"'
+    );
+    expect(compose).toContain('target: "/srv/agent-knowledge-data"');
+    expect(compose).toContain('source: "/projects/business"');
+    expect(compose).toContain('target: "/projects/business"');
     expect(compose).toContain("AGENT_KNOWLEDGE_INTERVAL_MINUTES: \"60\"");
     expect(compose).toContain(
       "/secure/agent-knowledge/automation.env"
     );
     expect(compose).not.toContain("Bearer ");
+    expect(compose).not.toContain("node:22");
+    const parsedCompose = load(compose) as {
+      services: {
+        "knowledge-automation": {
+          image: string;
+          volumes: Array<{
+            type: string;
+            source: string;
+            target: string;
+            read_only?: boolean;
+          }>;
+        };
+      };
+    };
+    expect(parsedCompose.services["knowledge-automation"].image).toBe(
+      "registry.example.com/agent-knowledge:v1.2.3"
+    );
+    expect(parsedCompose.services["knowledge-automation"].volumes).toContainEqual({
+      type: "bind",
+      source: "/projects/business",
+      target: "/projects/business"
+    });
+    expect(parsedCompose.services["knowledge-automation"].volumes).toContainEqual({
+      type: "bind",
+      source: "/secure/eval",
+      target: "/secure/eval",
+      read_only: true
+    });
+    const entrypoint = await readFile(
+      result.files.find((file) => file.endsWith("entrypoint.sh"))!,
+      "utf8"
+    );
+    expect(entrypoint).toContain(
+      "'/opt/agent-runners/run-knowledge-agent' &"
+    );
+    expect(entrypoint).toContain("trap stop TERM INT");
+  });
+
+  it("rejects Docker without a pinned runtime image before writing files", async () => {
+    const output = path.join(
+      await mkdtemp(path.join(tmpdir(), "ak-docker-invalid-")),
+      "generated"
+    );
+    tempDirs.push(path.dirname(output));
+
+    await expect(
+      renderAutomationService({
+        manager: "docker",
+        label: "business-refresh",
+        profilePath: "/secure/agent-knowledge/profile.json",
+        runnerPath: "/opt/agent-runners/run-knowledge-agent",
+        intervalMinutes: 60,
+        outputDir: output,
+        workspacePath: "/srv/agent-knowledge-data",
+        containerImage: "registry.example.com/agent-knowledge:latest"
+      })
+    ).rejects.toThrow(/pinned container image/);
+    await expect(stat(output)).rejects.toThrow();
   });
 
   it("rejects relative runner/profile paths and unsafe labels", async () => {

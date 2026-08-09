@@ -3073,6 +3073,27 @@ automationService
       "optional absolute credentials/runtime environment file"
     )
   )
+  .option(
+    "--container-image <image>",
+    t(
+      "Docker 必需：已安装 agent-knowledge 和外部 Agent CLI 的固定版本镜像",
+      "required for Docker: pinned image containing agent-knowledge and the external Agent CLI"
+    )
+  )
+  .option(
+    "--container-readonly-mount <path...>",
+    t(
+      "Docker 额外只读同路径挂载，如 eval 和 sidecar config 目录",
+      "extra read-only same-path Docker mounts, such as eval and sidecar config directories"
+    )
+  )
+  .option(
+    "--container-readwrite-mount <path...>",
+    t(
+      "Docker 额外可写同路径挂载，如需 fetch 的 Git repo、Lark export 和 report 目录",
+      "extra writable same-path Docker mounts for Git fetch, Lark exports, and reports"
+    )
+  )
   .addHelpText(
     "after",
     t(
@@ -3095,6 +3116,9 @@ See templates/automation/runner-contract.md for the wrapper contract.`
       workspace?: string;
       systemPrompt?: string;
       environmentFile?: string;
+      containerImage?: string;
+      containerReadonlyMount?: string[];
+      containerReadwriteMount?: string[];
     }) => {
       if (
         options.manager !== "launchd" &&
@@ -3114,7 +3138,11 @@ See templates/automation/runner-contract.md for the wrapper contract.`
             outputDir: options.output,
             workspacePath: options.workspace,
             systemPromptPath: options.systemPrompt,
-            environmentFilePath: options.environmentFile
+            environmentFilePath: options.environmentFile,
+            containerImage: options.containerImage,
+            containerReadOnlyMountPaths: options.containerReadonlyMount ?? [],
+            containerReadWriteMountPaths:
+              options.containerReadwriteMount ?? []
           }),
           null,
           2
