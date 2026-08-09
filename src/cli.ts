@@ -167,25 +167,47 @@ import {
   TerminalModelPrompter
 } from "./cli/model.js";
 
-/** 从启动参数读取 `--name=value` 或 `--name value`，供 Commander 初始化前解析全局配置。 */
-function readArgValue(name: string): string | undefined {
-  const direct = process.argv.find((argument) => argument.startsWith(`${name}=`));
+/**
+ * 只从首个子命令之前读取 `--name=value` 或 `--name value`。
+ *
+ * sidecar 也有业务 `--config`；限制全局选项位置可避免把 sidecar.json 当成用户配置，
+ * 并与 Commander positional options 的解析语义保持一致。
+ */
+function readGlobalArgValue(name: string): string | undefined {
+  const argumentsBeforeCommand: string[] = [];
+  for (let index = 2; index < process.argv.length; index += 1) {
+    const argument = process.argv[index]!;
+    if (!argument.startsWith("-")) {
+      break;
+    }
+    argumentsBeforeCommand.push(argument);
+    if (
+      (argument === "--config" || argument === "--locale") &&
+      process.argv[index + 1] !== undefined
+    ) {
+      argumentsBeforeCommand.push(process.argv[index + 1]!);
+      index += 1;
+    }
+  }
+  const direct = argumentsBeforeCommand.find((argument) =>
+    argument.startsWith(`${name}=`)
+  );
   if (direct) {
     return direct.slice(name.length + 1);
   }
-  const index = process.argv.indexOf(name);
-  return index >= 0 ? process.argv[index + 1] : undefined;
+  const index = argumentsBeforeCommand.indexOf(name);
+  return index >= 0 ? argumentsBeforeCommand[index + 1] : undefined;
 }
 
 const startupConfigPath = path.resolve(
-  readArgValue("--config") ?? getDefaultUserConfigPath()
+  readGlobalArgValue("--config") ?? getDefaultUserConfigPath()
 );
 const startupEffectiveConfig = loadEffectiveConfig({
   userConfigPath: startupConfigPath
 });
 const startupConfig = startupEffectiveConfig.config;
 const locale: SupportedLocale = resolveLocale({
-  explicit: readArgValue("--locale"),
+  explicit: readGlobalArgValue("--locale"),
   configured: startupConfig.locale
 });
 const t = (chinese: string, english: string): string => translate(locale, chinese, english);
@@ -196,6 +218,7 @@ program
   .name("agent-knowledge")
   .description(t("本地、可读、可审计的 Agent 知识工具", "Local human-readable memory toolkit for agents"))
   .version("0.1.0")
+  .enablePositionalOptions()
   .option("--config <file>", t("用户配置文件；默认 ~/.config/agent-knowledge/config.json", "user config file; defaults to ~/.config/agent-knowledge/config.json"))
   .option("--locale <locale>", t("界面语言：auto、zh-CN 或 en", "UI language: auto, zh-CN, or en"))
   .option("--json", t("对支持的命令输出机器可读 JSON", "emit machine-readable JSON for commands that support human output"), false);
@@ -212,7 +235,8 @@ program.addHelpText(
   查询知识      agent-knowledge query --task "当前问题"
   质量检查      agent-knowledge knowledge audit
 
-提示：完整流程和安全边界见 README.md；所有命令都支持 --help。`,
+提示：完整流程和安全边界见 README.md；所有命令都支持 --help。
+全局 --config/--locale/--json 必须放在子命令之前；sidecar 的 --config 放在 sidecar 子命令之后。`,
     `
 Common workflows:
   First-time setup   agent-knowledge configure
@@ -222,7 +246,8 @@ Common workflows:
   Query knowledge   agent-knowledge query --task "current question"
   Quality audit     agent-knowledge knowledge audit
 
-Tip: see README.md for complete workflows and safety boundaries; every command supports --help.`
+Tip: see README.md for complete workflows and safety boundaries; every command supports --help.
+Place global --config/--locale/--json before the subcommand; place sidecar --config after the sidecar subcommand.`
   )
 );
 

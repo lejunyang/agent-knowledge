@@ -80,6 +80,62 @@ describe("CLI user configuration", () => {
     expect(printedConfig.integration.product).toBe("codex");
   });
 
+  it("keeps global user config separate from sidecar config options", async () => {
+    const temp = await mkdtemp(path.join(tmpdir(), "agent-knowledge-sidecar-config-cli-"));
+    tempDirs.push(temp);
+    const userConfigPath = path.join(temp, "user.json");
+    const root = path.join(temp, "knowledge");
+    const sidecarConfigPath = path.join(temp, "sidecar.json");
+    writeUserConfig(
+      userConfigPath,
+      resolveUserConfig({ knowledgeRoot: root })
+    );
+    await writeFile(
+      sidecarConfigPath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          id: "sidecar-smoke",
+          provider: "hindsight",
+          mode: "shadow",
+          baseUrl: "http://127.0.0.1:9",
+          scope: "smoke",
+          endpoints: {
+            health: "/health",
+            ingest: "/memories",
+            search: "/search"
+          },
+          timeoutMs: 100,
+          retry: {
+            maxAttempts: 1,
+            baseDelayMs: 1,
+            maxDelayMs: 1
+          },
+          polling: { intervalMs: 1, maxAttempts: 1 },
+          metadata: {}
+        },
+        null,
+        2
+      )}\n`
+    );
+
+    const output = JSON.parse(
+      await runCli([
+        "--config",
+        userConfigPath,
+        "sidecar",
+        "doctor",
+        "--config",
+        sidecarConfigPath
+      ])
+    ) as { sidecarId: string; healthy: boolean };
+
+    expect(output).toMatchObject({
+      sidecarId: "sidecar-smoke",
+      healthy: false
+    });
+  });
+
   it("loads project shared and local config above the selected user config", async () => {
     const temp = await mkdtemp(path.join(tmpdir(), "agent-knowledge-project-config-cli-"));
     tempDirs.push(temp);
@@ -223,6 +279,7 @@ describe("CLI user configuration", () => {
     const sidecarHistory = await runCli(["sidecar", "history", "--help"]);
 
     expect(top).toContain("把单个候选 JSON 安全写入");
+    expect(top).toContain("全局 --config/--locale/--json 必须放在子命令之前");
     expect(config).toContain("显示用户配置文件路径");
     expect(config).toContain("显示分层合并后的生效配置");
     expect(sync).toContain("显式 WebDAV 参数");
