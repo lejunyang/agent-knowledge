@@ -194,6 +194,21 @@ Source 更新时旧 fingerprint 会拒绝 mark；content change/restored 回 pen
 保留 current receipt。只读/CI 探测使用 `source check --fail-on-updates`；Skill 不自动批准 inbox，
 也不静默 fetch/pull 或爬取在线飞书。
 
+## agent-knowledge-guide
+
+安装 skills 组件后，`agent-knowledge-guide` 是教程和健康检查入口：
+
+- 解释 L1 synopsis / L2 knowledge / L3 Evidence Vault 分层。
+- 把首次启用、查询、文档导入、客服、需求、maintenance、同步和 Git 路由到正确流程。
+- 使用 `knowledge audit`、source update health、query debug/eval/feedback、maintenance、
+  Hook/Subagent status 和 `integration doctor` 发现问题。
+- 解释 MetaMem 风格的“会不会用记忆”闭环，但不训练外部模型，也不自动改 active knowledge。
+- 不自动批准 inbox、接受 proposal、安装 Skill、启动 watch 或在线爬取。
+
+详细命令位于 Skill 的 `references/workflows.md`，诊断矩阵位于
+`references/diagnostics.md`。Canonical Skill、TRAE plugin bundle 和 Codex plugin bundle
+通过逐文件测试保持一致。
+
 ## lifecycle-recorder
 
 `lifecycle-recorder` 记录客服 case 和需求 initiative：完整 conversation/tool/report payload
@@ -273,6 +288,7 @@ agent-knowledge query --retrieval graph --graph-depth 1 --debug
 - 同步审视 `templates/claude-code/agents/*.md`。
 - 同步审视项目 `.trae/skills/*/SKILL.md`。
 - 同步审视 `templates/trae/plugin/agents/*.md` 与 `templates/trae/plugin/skills/*/SKILL.md`。
+- 同步审视 `templates/codex/hooks*.json`、Codex marketplace manifest 和 plugin Skills。
 - 同步审视主 README 的推荐流程和 `docs/guides/*`。
 - 若 TRAE 官方 Hook/Subagent 格式有变化，按官方文档同步模板。
 

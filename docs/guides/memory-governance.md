@@ -130,6 +130,26 @@ export/mark 与 Connector ingestion 使用同一把本地锁，确保 fingerprin
 之间不会插入并发摄入。锁只保护本机 workspace；多设备通过 private Git 同步 manifest 时仍需
 依赖 Git 冲突审阅，不能最后写入获胜。
 
+### Source 蒸馏质量门禁
+
+真实批量飞书重建表明，只执行“读原文 -> 写 candidate”仍会重新产生短正文和 metadata
+膨胀。正式蒸馏必须同时完成：
+
+1. `source show` 固定 fingerprint、review token 和目标 section。
+2. `source export` 只写 workspace 外 `0600` 临时文件。
+3. 验证导出内容 hash、确定性 DLP 和引用 section 的 text hash。
+4. 按业务主题拆分；一份长文可产生多条知识，也可以不产生知识。
+5. L1 synopsis 只负责路由；L2 必须有背景、范围、步骤/因果、例外、失败策略和验证方式。
+6. alias/scenario/tag 只保留有来源和检索价值的少量项，不能补偿正文不足。
+7. supported claim 使用 current section/hash；未阅读正文不得根据 heading 猜结论。
+8. `knowledge audit` 无知识级 finding，且新增真实 eval/hard-negative 不破坏既有边界后，
+   才能 `source mark --status refined`。
+9. 删除临时 evidence，并在 Git 中只提交知识和 manifest receipt。
+
+如果文档明确废弃、严格重复、一次性通知或意义不明，分别使用
+`obsolete`、`duplicate`、`no_long_term_value` 或 `blocked`，不要为了提高 source coverage
+强制制造 active knowledge。
+
 Source manifest v5 review receipt 保存 `processed_at`、`processed_content_hash` 和
 `refined_knowledge_ids`。metadata-only 更新不要求重蒸馏；content change/restored 清空 receipt
 并回 pending。missing source 先进入 missing+pending，人工审查历史 Vault evidence 与受影响
@@ -303,12 +323,16 @@ agent-knowledge event status
 
 ## Hook、详细日志与 staging
 
-TRAE/Claude Hook 的职责分开：
+TRAE、Claude Code 和 Codex Hook 的职责分开：
 
 - `UserPromptSubmit`：查询知识；高相关才注入，无命中/低分完全静默。
 - `SubagentStart` / `SubagentStop`：保存本地原始调试 payload，并写脱敏 staging 信号。
 - `Stop` / `SessionEnd`：只写脱敏 lifecycle staging。
 - Hook 本身不调用 LLM 总结，不写 candidate，不激活知识。
+
+Codex 当前只有 `SessionStart`、`UserPromptSubmit`、`SubagentStop` 和 `Stop` 模板项；没有
+`SubagentStart` / `SessionEnd` 时不能伪造完整配对。可用的 `SubagentStop` 仍可进入
+maintenance extraction，详细配对指标则按宿主实际事件解释。
 
 详细 Subagent 日志：
 
@@ -363,6 +387,9 @@ agent-knowledge maintenance status
 `watch` 的 input 来自 Hook 自动写入的详细 Subagent 日志，不是另一个人工脚本。它不会自动成为系统服务；持续机器人应交给 systemd、launchd、容器或其他进程管理器。
 
 也可以直接要求 AI 使用 `memory-maintainer` Skill 完成状态检查、run、proposal 汇总和日志清理；用户负责 accept/reject、精确 ID approve 和 Skill 安装决策。
+
+如果用户不知道该运行哪条命令，先使用 `agent-knowledge-guide`：它会把首次启用、查询、source、
+客服/需求、maintenance、integration 和质量诊断路由到对应 Skill，并默认只执行只读检查。
 
 Worker 使用 watermark 防止重复消费，使用 lock 防止并发 worker 同时生成提案，每次按 limit 有界处理。它生成：
 
@@ -434,6 +461,20 @@ Feedback 计算规则：
 - 外部 observation 已显式携带 `usefulFeedback` 时保留该值，不用本地日志覆盖。
 
 这意味着主 Agent 实际使用或拒绝检索结果后，应尽量记录带 `queryRunId` 的 feedback；但不要为了满足 Skill 门槛批量伪造正反馈。
+
+## 记忆使用质量闭环
+
+本项目对“会不会用记忆”的治理分为五层：
+
+1. `query --debug` 保留候选和最终 packet 的区别，输出 scorer、coverage 与 `queryRunId`。
+2. 主 Agent 对实际使用或拒绝的结果记录 useful/not_useful/neutral feedback。
+3. Eval 使用 expected rank、hard-negative、forbidden 和 abstain 检查错误使用，而不只看 Recall。
+4. `eval-calibrate` 把 forbidden injection、abstention failure 和负反馈作为高优先级惩罚，只输出 dry-run 建议。
+5. Maintenance 用独立 session、可信来源、conflict 和净正反馈判断 knowledge/Skill proposal。
+
+这是一套可审计的 meta-memory 近似实现：它不会直接训练 MetaMem 模型，但会记录哪类 query
+使用了哪条知识、结果是否有用，以及哪些流程经过多次验证。任何外部 memory backend 的
+reflect/self-evolve 输出也只能进入 observation/proposal，不能直接修改 active Markdown。
 
 ## 已消费日志清理
 

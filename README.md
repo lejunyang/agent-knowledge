@@ -9,6 +9,7 @@ Agent Knowledge 是一个本地、可审计的 Agent 知识持久化工具。V2 
 - [快速开始](#快速开始)
 - [推荐使用方式](#推荐使用方式)
 - [候选知识怎么整理](#候选知识怎么整理)
+- [如何发现问题并持续改进](#如何发现问题并持续改进)
 - [主动记忆何时发生](#主动记忆何时发生)
 - [客服机器人怎么部署](#客服机器人怎么部署)
 - [知识图谱怎么使用](#知识图谱怎么使用)
@@ -16,7 +17,7 @@ Agent Knowledge 是一个本地、可审计的 Agent 知识持久化工具。V2 
 - [用户配置与全部选项](docs/guides/configuration.md)
 - [检索、Embedding、Reranker、图检索与评测](docs/guides/retrieval.md)
 - [候选治理、自动维护和 Skill 生命周期](docs/guides/memory-governance.md)
-- [TRAE、TRAE CN 与 Claude Code 接入](docs/guides/integrations.md)
+- [TRAE、TRAE CN、Claude Code 与 Codex 接入](docs/guides/integrations.md)
 - [WebDAV、S3 与定时同步](docs/guides/synchronization.md)
 - [完整文档、会话与工具轨迹的加密 Evidence Vault](docs/guides/evidence-vault.md)
 - [研究与设计](#研究与设计)
@@ -53,7 +54,7 @@ agent-knowledge config sources
 - 知识库位置。
 - `actor_type`、`capture_mode`、可见性和敏感级别。
 - embedding provider、profile 和检索模式。
-- TRAE / TRAE CN / Claude Code integration。
+- TRAE / TRAE CN / Claude Code / Codex integration。
 - WebDAV / S3 和定时同步间隔。
 - Evidence Vault 密钥所在的环境变量名；不会保存真实密钥。
 
@@ -62,6 +63,11 @@ agent-knowledge config sources
 ```bash
 agent-knowledge integration install
 ```
+
+如果不确定该走哪条流程，可以直接要求 Agent 使用 `agent-knowledge-guide` Skill。它是教程
+和诊断路由器，会说明当前任务应使用 reader、source distillation、inbox governance、
+lifecycle 或 maintenance 中的哪条流程，并优先运行只读健康检查，不会自动批准候选或启动
+后台进程。
 
 初始化并查询：
 
@@ -188,7 +194,12 @@ agent-knowledge embed-index
 agent-knowledge query --task "当前任务" --retrieval hybrid
 ```
 
-不要仅因为模型已经下载就把日常或 Hook 默认切到 hybrid。当前项目真实业务语料的 13-case 评测中，优化后的 lexical 达到 Recall@1/3/5、MRR、nDCG、abstention precision 均为 `1`，false injection 为 `0`，平均 context packet 约 570 token；同一批语料的 hybrid/reranked Recall@1 只有约 `0.56`，且 dense 通道会给无答案问题返回候选。推荐 lexical 作为自动路径，hybrid/reranker 仅用于 lexical 未命中后的人工诊断，并先用自己的 eval 校准。
+不要仅因为模型已经下载就把日常或 Hook 默认切到 hybrid。当前本地商家中心验证库的
+15-case 评测中，lexical 通过 `15/15`，Recall@1 为 `0.9643`、Recall@3/5 为 `1`、
+MRR/nDCG/abstention precision 为 `1`，false injection 为 `0`，平均 context packet 约
+668 token；同一批语料的 hybrid 通过 `14/15`，在“账号注销 vs 账号找回”上产生一次
+forbidden injection，平均 packet 约 1304 token。推荐 lexical 作为自动路径，hybrid/reranker
+仅用于 lexical 未命中后的人工诊断，并先用自己的 eval 校准。
 
 ## 推荐使用方式
 
@@ -249,6 +260,17 @@ agent-knowledge organize-inbox
 `source show -> source export -> write-candidate/capture-material --target inbox -> source mark`；
 完整 evidence 只写受控 0600 临时文件。`source mark` 必须携带 show 返回的 fingerprint，
 版本变化时在任何写入前失败。
+
+正式 source 蒸馏还应完成以下质量闭环：
+
+1. 使用同一个 fingerprint 执行 `source show` 和 `source export`，防止阅读期间版本漂移。
+2. Evidence 只导出到 workspace 外的 `0600` 私有临时文件。
+3. 检查确定性 DLP、source content hash 和目标 section hash，不根据 heading/hash 猜正文。
+4. 按主题拆成 L1 `synopsis`、L2 完整解释和 L3 Vault evidence；不能“一篇文档一条短结论”。
+5. supported claim 必须引用当前 source section/hash。
+6. 运行 `knowledge audit`，拒绝薄正文、metadata 主导和无效 claim anchor。
+7. 增加真实 query、hard-negative 和 no-answer eval，避免新增知识破坏已有检索边界。
+8. active knowledge 完成后才标记 source receipt，并删除临时 evidence。
 
 `maintenance` 会读取 `.memory/logs` 中的 usefulness feedback。同一 `memoryId + queryRunId` 的重复上报只采用最新一条，不能通过重复日志放大票数；Skill proposal 的净正反馈数量必须至少覆盖独立 session 数。如果 feedback 晚于 observation 到达，下次 `maintenance run/watch` 会重新检查已消费 observation，不需要重置 watermark。
 
@@ -388,6 +410,35 @@ obsolete/blocked。`source list --needs-review` 会列出 pending、stale 和尚
 其 claim anchor 立即失效；同路径恢复后归类 `restored` 并重新进入 pending。带 `--limit`
 的截断运行不会做删除对账，避免把未扫描部分误判为删除。
 
+## 如何发现问题并持续改进
+
+正式使用时不只检查“有没有存进去”，还要检查“是否在正确问题上使用了正确记忆”。
+`agent-knowledge-guide` 把这些机制路由成一套健康检查：
+
+| 问题 | 发现机制 | 改进路径 |
+| --- | --- | --- |
+| 正文太短、metadata 太多、claim 失效 | `knowledge audit` | 回到 evidence 补 L2、修 claim 或阻断旧知识 |
+| 文档、Git 或飞书版本变化 | `source check` / `source refresh` | content change 后重新蒸馏；metadata-only 保留 receipt |
+| 召回错误、无答案却注入、相邻主题串扰 | `query --debug`、真实 eval、`feedback` | 增加 hard-negative/forbidden/abstain case，再做 dry-run calibration |
+| 知识常被正确或错误使用 | `feedback --query-run-id` | maintenance 读取去重后的 useful/not_useful 反馈 |
+| 多次任务出现重复、更新、冲突或稳定流程 | `maintenance run/watch` | 生成 proposal、inbox 或严格门槛的 Skill 草稿 |
+| Hook/Subagent 没触发或重复触发 | `hook doctor`、`subagents status/logs` | 修宿主接入、事件配对或模板，不把日志当事实 |
+| 安装资源缺失、被改写或与外部配置冲突 | `integration doctor` | 默认 merge 重装；保留用户修改和第三方资源 |
+| 关系孤立、冲突或来源覆盖不足 | graph HTML + audit | 人工补可解释关系、处理 conflict/source 队列 |
+
+这对应 MetaMem 所强调的“会不会用记忆”：
+
+- Query debug 记录候选、注入结果、覆盖率和 scorer。
+- `queryRunId` 把实际使用结果与 useful/not_useful feedback 关联。
+- Eval 使用 hard-negative、forbidden 和 abstention 衡量错误使用，而不是只看 Recall。
+- Calibration 优先惩罚 forbidden injection、abstention failure 和负反馈，只输出建议。
+- Maintenance 结合独立 session、可信来源、冲突和反馈判断是否形成知识或 Skill。
+
+当前这些机制不会训练一个外部 meta-memory 模型，但已经形成可审计的
+“检索 -> 使用 -> 反馈 -> 评测 -> proposal -> 人工治理”闭环。未来若接入 MetaMem、
+Hindsight、memU 或 Mem0，它们只能以 shadow/sidecar 输出 proposal，不能替代 Git Markdown
+事实源或绕过人工审阅。
+
 ## 主动记忆何时发生
 
 主动记忆不是“所有对话自动写入”：
@@ -399,6 +450,11 @@ obsolete/blocked。`source list --needs-review` 会列出 pending、stale 和尚
 - `maintenance` 从已记录的 `SubagentStop` 结果自动抽取 observation，但只形成可审阅 proposal。
 
 如果希望明确保存某件事，最可靠的方式仍是直接告诉 Agent“记住这条规则”，或主动运行 `knowledge-organizer`。
+
+当前仍未提供“静默常驻、自动登录在线飞书并主动向用户提问”的后台 Agent。现有
+`source refresh` 只复用已登记的本地 Git ref、文件或离线 export；`maintenance watch`
+只消费本地日志并生成 proposal。在线爬取需要凭据、限流、通知策略、失败恢复和用户显式
+选择的进程管理器，后续实现时仍不得自动写 active knowledge。
 
 ## 客服机器人怎么部署
 
@@ -468,6 +524,8 @@ agent-knowledge query --task "当前任务" --retrieval hybrid-graph
 - `knowledge show/evidence` 也执行相同安全过滤；知道 ID 不能绕过 project 或敏感级别隔离。
 - 同步只处理正式 Markdown；冲突必须人工解决，不能静默覆盖。
 - Integration 默认结构化 merge；只有显式 overwrite 才删除目标文件或 symlink。
+- Codex standalone Hooks 写 `.codex/hooks.json`，Skills 写 `.agents/skills`；Codex 不支持独立 Markdown agents。
+- Codex `plugin-bundle` 生成本地 marketplace，需由用户显式注册和安装，不能与散装 Hooks/Skills 重复启用。
 
 ## 常用命令
 
@@ -485,6 +543,7 @@ agent-knowledge config path
 agent-knowledge integration list
 agent-knowledge integration install
 agent-knowledge integration doctor --product trae --scope user
+agent-knowledge integration install --product codex --scope user
 
 # 知识库
 agent-knowledge init
@@ -612,6 +671,7 @@ node dist/cli.js --help
 
 ## 研究与设计
 
+- [正式投入使用前审计、MetaMem/Hindsight/memU/Mem0 对比与当前完成状态](docs/research/2026-08-09-production-memory-system-evaluation.md)
 - [Hivemind、Agent Memory 与 Embedding 评测](docs/research/2026-07-18-hivemind-memory-and-embeddings-evaluation.md)
 - [Context Infrastructure 深度调研与改进建议](docs/research/2026-07-26-context-infrastructure-evaluation.md)
 - [项目知识、同步、客服投毒与主动记忆](docs/research/2026-07-19-project-memory-sync-and-poisoning.md)

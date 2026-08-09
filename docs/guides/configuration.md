@@ -245,7 +245,7 @@ agent-knowledge embedding download
 | --- | --- | --- |
 | `integration.product` | `trae` | 默认安装产品 |
 | `integration.scope` | `user` | 默认安装到用户级或当前项目 |
-| `integration.components` | `hooks,agents,skills` | 默认安装的组件 |
+| `integration.components` | 按产品 | 默认安装的组件；Codex 为 `hooks,skills`，其他产品为 `hooks,agents,skills` |
 | `integration.targetDir` | `null` | 自定义产品配置根目录；`null` 使用产品标准位置 |
 | `integration.mode` | `merge` | `merge` 保留外部配置；`overwrite` 替换目标 |
 
@@ -254,6 +254,10 @@ agent-knowledge embedding download
 - `trae`：管理 `.trae`；Hooks 同时写 `.trae/hooks.json` 和 `.trae/cli/hooks.json`。
 - `trae-cn`：管理 `.trae-cn` 和 `.trae-cn/hooks.json`。
 - `claude-code`：管理 `.claude` 和 `.claude/settings.json`。
+- `codex`：Hooks/manifest 管理 `.codex`，standalone Skills 管理 `.agents/skills`；可选 marketplace 位于 `.codex/agent-knowledge-marketplace`。
+
+用户级默认分别是 `~/.codex` 和 `~/.agents`；项目级默认分别是 `<repo>/.codex` 和
+`<repo>/.agents`。Codex 不支持本项目的 standalone `agents` 组件，显式配置会在写文件前失败。
 
 ### scope
 
@@ -264,8 +268,18 @@ agent-knowledge embedding download
 
 - `hooks`：生命周期 Hook 配置。
 - `agents`：`agent-knowledge-reader` 和 `agent-knowledge-writer` 模板。
-- `skills`：`knowledge-organizer`、`memory-maintainer` 等项目 Skill。
-- `plugin-bundle`：TRAE plugin bundle；只在产品支持时选择。
+- `skills`：`agent-knowledge-guide`、`knowledge-organizer`、`source-distiller`、`lifecycle-recorder` 和 `memory-maintainer`。
+- `plugin-bundle`：TRAE plugin bundle 或 Codex 本地 marketplace；只在产品支持时选择。
+
+Codex 的 `plugin-bundle` 只生成受管理的 marketplace 目录，不会静默修改 Codex marketplace
+配置或绕过 Hook trust。用户仍需显式执行：
+
+```bash
+codex plugin marketplace add ~/.codex/agent-knowledge-marketplace
+codex plugin add agent-knowledge@agent-knowledge-local
+```
+
+不要在同一 Codex 环境同时启用散装 `hooks,skills` 和 plugin bundle。
 
 ### mode
 

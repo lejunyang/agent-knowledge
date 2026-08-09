@@ -322,7 +322,7 @@ Letta 更像完整 Agent runtime，提供 core/archival memory、MemFS、后台 
 | 分层知识 | 类型分层，抽象层不足 | factual + meta | world/experience/mental model | resource/file/segment/skill | atomic memories + entity |
 | 主动巩固 | proposal/skill 门禁，语义弱 | 强，需训练 | 强 | Agent 自演化 | 平台能力较强 |
 | 时序更新 | 有 validity/supersedes | 强项之一 | 强 | 基础文件更新 | 新版强调 temporal |
-| 多宿主接入 | TRAE/Claude hooks/skills | 无 | SDK/MCP/wrapper | 很强 | 很强 |
+| 多宿主接入 | TRAE/TRAE CN/Claude Code/Codex Hooks、Agents、Skills | 无 | SDK/MCP/wrapper | 很强 | 很强 |
 | 文档治理 | 强 | 弱 | bank/tag | 弱 | filter/user/session |
 | 人工审阅 | 强 | 研究流程 | 可通过 UI/trace | 默认自动 | 有 Dashboard |
 | 中文业务可用性 | 有本地语料证据 | 未验证 | 未验证 | 依赖 embedding | 需单独配置 |
@@ -448,7 +448,45 @@ discover -> incremental read -> prepare jobs -> agent synthesis -> commit
 - MemoryAgentBench：accurate retrieval、test-time learning、long-range understanding、selective forgetting。
 - 自建中文业务集：必须继续作为最终门禁，不能只跑英文公开集。
 
-## 七、参考资料
+## 七、截至 2026-08-09 的实现状态
+
+本文前面的 P0-P4 是审计时建议，不再等同于当前未完成清单。主分支当前状态：
+
+| 原始要求 | 状态 | 当前证据 |
+| --- | --- | --- |
+| L1 摘要、L2 解释、L3 原文 | 已完成 | V2 synopsis/knowledge/Evidence Vault；`knowledge show/evidence` |
+| 完整原文和完整会话安全保存 | 已完成 | Connector + 加密 Vault；Git 只保存 manifest/timeline |
+| alias/tag/scenario 相关度 | 已完成 | weighted metadata + source/kind + coverage-aware scoring |
+| 可读 project key | 已完成 | 规范 Git remote；无 remote 使用 `local/...` |
+| 知识库 Git 追踪 | 已完成 | `workspace git-init/status`，独立 private Git workspace |
+| 飞书、文件、Git、transcript 接入 | 已完成 | `ingest files|git|lark-export|transcripts` |
+| 来源版本检测与快速更新 | 已完成 | Connector registry + `source check/refresh` + processing profile |
+| 文档持续蒸馏与质量门禁 | 已完成 | `source-distiller` + fingerprint/review token + `knowledge audit` |
+| 客服问题完整流程 | 已完成基础设施 | support event stream + Vault payload + maintenance proposal |
+| 需求从评审到运维/复盘 | 已完成基础设施 | initiative event stream + hash-chain timeline |
+| 会话反思与主动维护 | 已完成受控版本 | Subagent logs -> observation -> `maintenance run/watch` -> proposal |
+| “会不会用记忆”反馈 | 已完成可审计闭环 | query debug/queryRunId + feedback + eval/calibration + maintenance |
+| 自动生成 Skill 候选 | 已完成受控版本 | 至少 3 独立 session、可信来源、正反馈、无冲突；只写草稿 |
+| 教程与能力说明 Skill | 已完成 | `agent-knowledge-guide` + workflows/diagnostics references |
+| TRAE、TRAE CN、Claude Code、Codex 接入 | 已完成 | managed Hooks/Agents/Skills；Codex standalone + marketplace |
+| WebDAV/S3 多机同步 | 已完成 | 三方同步、冲突 artifact、前台 watch |
+| 在线飞书主动爬取并追问用户 | 未完成 | 当前只处理显式刷新后的 offline export，不静默联网 |
+| 后台自主 Agent 常驻 | 部分完成 | 有前台 `maintenance watch` / `sync watch`；不自动创建系统服务 |
+| Hindsight/memU/Mem0 shadow A/B | 未完成 | 已有架构与评测方向，尚未接入 sidecar |
+| Retrieval Lesson / Reasoning Policy 独立 schema | 部分完成 | 现有 principle、feedback、eval 可承载部分信号，未单独产品化 |
+| 更完整领域 DLP | 部分完成 | 有确定性 secret/PII 与 Connector normalize；姓名、地址、业务 UID 仍需领域 adapter |
+
+当前真正剩余的高价值事项不是继续批量蒸馏本地验证库，而是：
+
+1. 为在线飞书/GitHub 等来源设计用户授权、限流、重试、通知和主动提问策略。
+2. 选择显式进程管理器方案，让 watch 在用户决定后可靠常驻，而不是安装时静默启动。
+3. 用同一批中文业务、客服和生命周期 case 对 Hindsight/memU/Mem0 做 shadow A/B。
+4. 将 retrieval lesson / reasoning policy 从普通 principle 中进一步产品化，并增加对应评测。
+5. 为具体业务补领域 DLP adapter，阻断姓名、地址、业务 UID 等当前确定性规则无法完整覆盖的 PII。
+
+这些能力都不能绕过现有 Git Markdown 事实源、Vault、proposal/inbox 和人工批准边界。
+
+## 八、参考资料
 
 - MetaMem：<https://github.com/OpenBMB/MetaMem>
 - MetaMem Paper：<https://arxiv.org/abs/2602.11182>

@@ -27,7 +27,7 @@
 - `agent-knowledge knowledge audit` 检查正文密度、metadata 膨胀、source 处理状态、claim evidence 和 project registry；`knowledge show/evidence` 执行安全过滤后显式展开。
 - `agent-knowledge embed-index` 使用本地 provider 生成 embedding 缓存；`agent-knowledge suggest-aliases` 只输出 dry-run JSON 建议。
 - `agent-knowledge write-candidate` 只写候选知识到 `knowledge/_inbox/`。
-- `agent-knowledge integration` 为 TRAE、TRAE CN 和 Claude Code 安装可选 hooks/agents/skills/plugin bundle，使用普通托管文件和结构化 merge，不创建 symlink。
+- `agent-knowledge integration` 为 TRAE、TRAE CN、Claude Code 和 Codex 安装可选 hooks/agents/skills/plugin bundle，使用普通托管文件和结构化 merge，不创建 symlink。
 - `agent-knowledge sync run|watch` 通过配置的 WebDAV/S3 backend 只同步正式 Markdown，冲突不自动覆盖。
 - `agent-knowledge maintenance` 从 SubagentStop 日志抽取 observation 并生成可审阅 proposal，不直接修改 active 知识。
 - `agent-knowledge graph` 构建、查询和导出轻量知识关系图；`query --retrieval graph|hybrid-graph` 才会让图遍历参与检索。
@@ -225,6 +225,7 @@ src/cli.ts            命令行入口和各模块编排
 - Vault 删除必须物理移除密文并写 tombstone，不能只删除 source manifest 或对象引用；默认不得静默复活同 ID 对象。
 - 每个可更新 source 必须记录稳定 `source_id/external_key` 和版本信息。优先保存上游 revision、ETag、commit SHA、更新时间或 provider version ID，并始终保存抓取后的 content hash；没有上游版本信号时只能回退到重新抓取后比较 content hash。
 - Source review 必须通过 `source show/export/mark`：export 只写 knowledge workspace 之外的显式 0600 文件，mark 必须携带 current fingerprint 和 review token；reason 进入 Git 前执行 secret/PII 检查。
+- Source distillation 还必须验证导出 content hash、确定性 DLP 和引用 section hash，按 L1 synopsis / L2 详细解释 / L3 Vault evidence 拆分；knowledge audit 和真实 hard-negative/no-answer eval 通过后才能标 refined，最后删除临时 evidence。
 - Source export/mark 必须与 ingestion 复用同一 Connector lock，避免 fingerprint 校验后被并发摄入覆盖；仅靠先读后写不够。
 - `refined` receipt 必须记录 active knowledge IDs，且每个 ID 至少有一个 supported claim anchor 命中当前 source section/hash。不能仅因候选已写 inbox 就标 refined。
 - metadata-only 更新保留 review receipt；content changed/restored 清空 receipt 并回 pending；removed/missing 先回 pending，人工分析历史 Vault evidence 后再标 obsolete/blocked。
@@ -253,17 +254,19 @@ src/cli.ts            命令行入口和各模块编排
 - 任何流程变动、行为优化、默认值调整或推荐方式变化，都必须完成“流程联动审视”，不能只改实现：
   - 检查主 README 的首次、日常、周期维护、机器人和人工审阅推荐流程。
   - 检查 `docs/guides/configuration.md`、`retrieval.md`、`memory-governance.md`、`integrations.md` 和 `synchronization.md` 中受影响的说明。
-  - Hook 行为、事件、命令或注入上下文变化时，检查 TRAE、TRAE plugin、Claude Code 及 Windows Hook 模板。
+  - Hook 行为、事件、命令或注入上下文变化时，检查 TRAE、TRAE plugin、Claude Code、Codex 及 Windows Hook 模板。
   - 检查 `templates/trae/agents/*.md` 和 `templates/claude-code/agents/*.md` 的触发条件、输入输出、工具权限和命令。
   - 检查项目 `.trae/skills/*/SKILL.md`，确保 Skill 使用真实且推荐的 CLI 流程。
-  - 检查 `templates/trae/plugin/agents/*.md` 和 `templates/trae/plugin/skills/*/SKILL.md`，避免 plugin bundle 落后于散装模板。
-  - 检查 `templates/trae/README.md` 和 integration 安装/卸载/merge 测试。
+  - 检查 `templates/trae/plugin/agents/*.md`、`templates/trae/plugin/skills/**` 和 `templates/codex/marketplace/plugins/agent-knowledge/skills/**`，避免 plugin bundle 落后于 canonical `.trae/skills`。
+  - 检查 `templates/trae/README.md`、`templates/codex/README.md` 和 integration 安装/卸载/merge 测试。
   - 审视后确实无需修改某类模板时保持文件不动，并在进度或提交说明中明确“已检查、无需变化”，不要制造无意义 churn。
   - Subagent 模板必须遵循宿主要求的 Markdown + YAML frontmatter；TRAE Hook 必须保持 `version: 1` JSON 格式。
 - `UserPromptSubmit` 无命中、低于阈值或异常时默认静默；普通命中只能注入最小 Context Packet 2.0 synopsis。禁止自动展开 knowledge/evidence、恢复全量 catalog、runtime context 或无命中说明。知识目录仅在显式 catalog intent 下返回配置上限内的相关条目（默认 5）。
 - `SubagentStart` / `SubagentStop` 可记录本地完整 payload 到 `.memory/subagents/`，但不得同步、注入模型上下文或作为 active 事实；其他 Hook 继续使用脱敏 staging。
-- 修改产品安装时同时 review `templates/claude-code/`、`templates/trae/plugin/` 和 integration merge/uninstall 测试。
+- 修改产品安装时同时 review `templates/claude-code/`、`templates/trae/plugin/`、`templates/codex/` 和 integration merge/uninstall 测试。
 - `trae` 项目/用户资源根是 `.trae`，必须同时管理 `.trae/hooks.json` 和 `.trae/cli/hooks.json`；`trae-cn` 使用 `.trae-cn/hooks.json`；Claude Code 使用 `.claude/settings.json`。
+- Codex Hooks/manifest 使用 `.codex`，standalone Skills 使用 `.agents/skills`，本地 marketplace 使用 `.codex/agent-knowledge-marketplace`；Codex 不支持本项目的 standalone Markdown `agents` 组件。
+- Codex Hook 模板只使用 `SessionStart`、`UserPromptSubmit`、`SubagentStop` 和 `Stop`；不得伪造不存在的 `SubagentStart`/`SessionEnd`。Plugin bundle 必须通过真实隔离 `codex plugin marketplace add` + `codex plugin add` 冒烟验证。
 - Integration 默认使用 `merge`，只替换 Agent Knowledge 自有 Hook 并保留外部配置；只有显式 `overwrite` 时才允许删除目标文件、目录或 symlink 后写入模板。overwrite 不能删除 symlink 指向的外部源文件。
 - 不要提交 `dist/`、`.memory/`、`node_modules/` 或 `.superpowers/`。
 
@@ -365,8 +368,8 @@ agent-knowledge write-candidate \
 候选知识被人类审阅并激活后，重新运行 `agent-knowledge index`；如果使用 embedding 缓存，也重新运行 `agent-knowledge embed-index`。
 如果使用 graph 浏览或 graph retrieval，也重新运行 `agent-knowledge graph build`。
 
-使用 `agent-knowledge integration install --product trae|trae-cn|claude-code --scope user|project` 安装产品接入。安装器不使用 symlink；hooks 结构化 merge 且只管理 `agent-knowledge hook` handler，agents/skills/plugin bundle 由本地 manifest 记录所有权。
-`knowledge-organizer`、`source-distiller`、`lifecycle-recorder` 和 `memory-maintainer` Skills 位于项目 `.trae/skills/`，这是本仓库自身的开发/测试资源，不代表已安装到用户产品目录。它们分别整理直接材料/inbox、蒸馏 versioned source、记录客服/需求事件、维护 observation/proposal。
+使用 `agent-knowledge integration install --product trae|trae-cn|claude-code|codex --scope user|project` 安装产品接入。安装器不使用 symlink；hooks 结构化 merge 且只管理 `agent-knowledge hook` handler，agents/skills/plugin bundle 由本地 manifest 记录所有权。
+`agent-knowledge-guide`、`knowledge-organizer`、`source-distiller`、`lifecycle-recorder` 和 `memory-maintainer` Skills 位于项目 `.trae/skills/`，这是本仓库自身的开发/测试资源，不代表已安装到用户产品目录。它们分别提供教程与诊断路由、整理直接材料/inbox、蒸馏 versioned source、记录客服/需求事件、维护 observation/proposal。
 
 Hook 主动记忆边界：
 
