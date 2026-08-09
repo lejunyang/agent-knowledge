@@ -37,6 +37,28 @@ describe("sidecar scaffold and comparison", () => {
     }
   });
 
+  it("creates a customized one-command setup bundle", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "ak-sidecar-setup-"));
+    tempDirs.push(root);
+
+    const result = await scaffoldSidecar("hindsight", root, {
+      id: "business-hindsight",
+      scope: "merchant-center",
+      baseUrl: "http://127.0.0.1:9999"
+    });
+    const config = JSON.parse(
+      await readFile(path.join(root, "sidecar.json"), "utf8")
+    ) as Record<string, unknown>;
+
+    expect(config).toMatchObject({
+      id: "business-hindsight",
+      scope: "merchant-center",
+      baseUrl: "http://127.0.0.1:9999",
+      mode: "shadow"
+    });
+    expect(result.nextCommands.join("\n")).toContain("sidecar doctor");
+  });
+
   it("compares native and sidecar results with forbidden and abstention metrics", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "ak-sidecar-compare-"));
     tempDirs.push(root);

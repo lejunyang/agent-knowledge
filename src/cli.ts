@@ -64,6 +64,7 @@ import {
   listAutomationJobs,
   listKnowledge,
   listNotifications,
+  readSidecarComparisonHistory,
   listSources,
   logMemoryFeedback,
   markSourceReviewed,
@@ -3292,31 +3293,65 @@ sidecar
     }
   );
 
-sidecar
-  .command("scaffold")
-  .description(
-    t(
-      "生成 provider 部署/配置骨架，不自动启动",
-      "Generate provider deployment/configuration scaffolding without starting it"
-    )
-  )
+/** setup/scaffold 共享参数和安全说明；旧 scaffold 保留为兼容入口。 */
+const configureSidecarScaffold = (
+  command: Command,
+  description: { zh: string; en: string }
+): Command =>
+  command
+  .description(t(description.zh, description.en))
   .requiredOption(
     "--provider <provider>",
     t("hindsight、memu 或 mem0", "hindsight, memu, or mem0")
   )
   .requiredOption("--output <dir>", t("输出目录", "output directory"))
-  .action(async (options: { provider: string; output: string }) => {
+  .option("--id <id>", t("Sidecar 稳定 ID", "stable sidecar ID"))
+  .option("--scope <scope>", t("隔离 bank/user scope", "isolated bank/user scope"))
+  .option("--base-url <url>", t("覆盖 Sidecar base URL", "override the sidecar base URL"))
+  .addHelpText(
+    "after",
+    t(
+      `
+生成 owner-only sidecar.json 与 provider 部署/环境骨架，但不拉镜像、不启动服务、不写真实凭据。
+Hindsight/Mem0 启动前必须在 .env 固定上游 image 版本；memU 需要在安全环境注入 MEMU_API_KEY。`,
+      `
+Generates an owner-only sidecar.json and provider deployment/environment scaffolding without pulling images, starting services, or writing credentials.
+Pin the Hindsight/Mem0 image before startup; inject MEMU_API_KEY from a secure environment for memU.`
+    )
+  )
+  .action(async (options: {
+    provider: string;
+    output: string;
+    id?: string;
+    scope?: string;
+    baseUrl?: string;
+  }) => {
     console.log(
       JSON.stringify(
         await scaffoldSidecar(
           SidecarProviderSchema.parse(options.provider),
-          options.output
+          options.output,
+          {
+            id: options.id,
+            scope: options.scope,
+            baseUrl: options.baseUrl
+          }
         ),
         null,
         2
       )
     );
   });
+
+configureSidecarScaffold(sidecar.command("setup"), {
+  zh: "一条命令生成可编辑配置与 provider 接入包，不自动启动",
+  en: "Generate an editable configuration and provider setup bundle without starting it"
+});
+
+configureSidecarScaffold(sidecar.command("scaffold"), {
+  zh: "兼容入口：生成 provider 部署/配置骨架，不自动启动",
+  en: "Compatibility entrypoint for provider deployment/configuration scaffolding"
+});
 
 sidecar
   .command("doctor")
@@ -3448,6 +3483,28 @@ Unmapped text is counted separately and still affects abstention failure.`
       console.log(JSON.stringify(report, null, 2));
     }
   );
+
+sidecar
+  .command("history")
+  .description(
+    t(
+      "读取历次 native/sidecar 比较指标",
+      "Read historical native/sidecar comparison metrics"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--limit <count>", t("最多返回多少次比较", "maximum comparisons to return"), "50")
+  .action(async (options: { root?: string; limit: string }) => {
+    console.log(
+      JSON.stringify(
+        await readSidecarComparisonHistory(resolveCliRoot(options.root), {
+          limit: Number.parseInt(options.limit, 10)
+        }),
+        null,
+        2
+      )
+    );
+  });
 
 const maintenance = program
   .command("maintenance")

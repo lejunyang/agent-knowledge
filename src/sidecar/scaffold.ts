@@ -1,6 +1,7 @@
 /** Sidecar scaffold 生成部署/配置起点，不自动拉镜像、启动容器或写凭据。 */
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createSidecarPreset } from "./presets.js";
 import {
   SidecarProviderSchema,
   type SidecarProvider
@@ -12,6 +13,18 @@ export type SidecarScaffoldResult = {
   files: string[];
   nextCommands: string[];
 };
+
+/** 一键接入包允许覆盖稳定身份与 endpoint，不接受凭据原值。 */
+export type SidecarScaffoldOptions = {
+  id?: string;
+  scope?: string;
+  baseUrl?: string;
+};
+
+/** POSIX shell 单引号转义，保证带空格的生成路径可直接用于 nextCommands。 */
+function shellValue(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
 
 /** 写 owner-only 模板文件。 */
 async function writeTemplate(
@@ -28,49 +41,34 @@ async function writeTemplate(
 /** 为 Hindsight/memU/Mem0 生成一键接入骨架；上游版本和模型配置仍需用户审阅。 */
 export async function scaffoldSidecar(
   providerInput: SidecarProvider,
-  outputDir: string
+  outputDir: string,
+  options: SidecarScaffoldOptions = {}
 ): Promise<SidecarScaffoldResult> {
   const provider = SidecarProviderSchema.parse(providerInput);
   const output = path.resolve(outputDir);
+  const defaultBaseUrl =
+    provider === "memu" ? "https://api.memu.so" : "http://localhost:8888";
+  const config = createSidecarPreset(provider, {
+    id: options.id ?? `${provider}-shadow`,
+    scope: options.scope ?? "agent-knowledge-shadow",
+    baseUrl: options.baseUrl ?? defaultBaseUrl
+  });
   await mkdir(output, { recursive: true, mode: 0o700 });
   if (provider === "memu") {
     const envPath = await writeTemplate(
       path.join(output, "memu.env.example"),
       `# Copy to a secure environment file and replace values.
-MEMU_BASE_URL=https://api.memu.so
+MEMU_BASE_URL=${JSON.stringify(config.baseUrl)}
 MEMU_API_KEY=
-MEMU_SCOPE=agent-knowledge-shadow
+MEMU_SCOPE=${JSON.stringify(config.scope)}
 `
     );
     const configPath = await writeTemplate(
       path.join(output, "sidecar.json"),
       `${JSON.stringify(
         {
-          version: 1,
-          id: "memu-shadow",
-          provider: "memu",
-          mode: "shadow",
-          baseUrl: "https://api.memu.so",
-          scope: "agent-knowledge-shadow",
-          auth: {
-            tokenEnv: "MEMU_API_KEY",
-            headerName: "Authorization",
-            prefix: "Bearer "
-          },
-          endpoints: {
-            health: "/",
-            ingest: "/api/v3/memory/memorize",
-            search: "/api/v3/memory/retrieve",
-            status: "/api/v3/memory/memorize/status/{task_id}"
-          },
-          timeoutMs: 30000,
-          retry: {
-            maxAttempts: 3,
-            baseDelayMs: 1000,
-            maxDelayMs: 30000
-          },
-          polling: { intervalMs: 1000, maxAttempts: 30 },
-          metadata: { deployment: "cloud" }
+          ...config,
+          metadata: { ...config.metadata, deployment: "cloud" }
         },
         null,
         2
@@ -81,13 +79,12 @@ MEMU_SCOPE=agent-knowledge-shadow
       outputDir: output,
       files: [envPath, configPath],
       nextCommands: [
-        `agent-knowledge sidecar doctor --config ${JSON.stringify(configPath)}`
+        `agent-knowledge sidecar doctor --config ${shellValue(configPath)}`
       ]
     };
   }
 
   const port = 8888;
-  const baseUrl = new URL(`http:localhost:${port}`).toString().replace(/\/$/, "");
   const serviceName =
     provider === "hindsight" ? "hindsight" : "mem0";
   const image =
@@ -115,46 +112,13 @@ ${provider === "hindsight" ? "HINDSIGHT_IMAGE" : "MEM0_IMAGE"}=
 # Add provider-specific model/API settings here. Do not commit the real .env.
 `
   );
-  const config = provider === "hindsight"
-    ? {
-        version: 1,
-        id: "hindsight-shadow",
-        provider: "hindsight",
-        mode: "shadow",
-        baseUrl,
-        scope: "agent-knowledge-shadow",
-        endpoints: {
-          health: "/health",
-          ingest: "/v1/default/banks/{scope}/memories",
-          search: "/v1/default/banks/{scope}/memories/recall"
-        }
-      }
-    : {
-        version: 1,
-        id: "mem0-shadow",
-        provider: "mem0",
-        mode: "shadow",
-        baseUrl,
-        scope: "agent-knowledge-shadow",
-        endpoints: {
-          health: "/docs",
-          ingest: "/memories",
-          search: "/search"
-        }
-      };
   const configPath = await writeTemplate(
     path.join(output, "sidecar.json"),
     `${JSON.stringify(
       {
         ...config,
-        timeoutMs: 30000,
-        retry: {
-          maxAttempts: 3,
-          baseDelayMs: 1000,
-          maxDelayMs: 30000
-        },
-        polling: { intervalMs: 1000, maxAttempts: 30 },
         metadata: {
+          ...config.metadata,
           deployment: "docker-compose",
           upstreamVersion: "pin-before-production"
         }
@@ -168,9 +132,9 @@ ${provider === "hindsight" ? "HINDSIGHT_IMAGE" : "MEM0_IMAGE"}=
     outputDir: output,
     files: [composePath, envPath, configPath],
     nextCommands: [
-      `cp ${JSON.stringify(envPath)} ${JSON.stringify(path.join(output, ".env"))}`,
-      `docker compose -f ${JSON.stringify(composePath)} up -d`,
-      `agent-knowledge sidecar doctor --config ${JSON.stringify(configPath)}`
+      `cp ${shellValue(envPath)} ${shellValue(path.join(output, ".env"))}`,
+      `docker compose -f ${shellValue(composePath)} up -d`,
+      `agent-knowledge sidecar doctor --config ${shellValue(configPath)}`
     ]
   };
 }
