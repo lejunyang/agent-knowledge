@@ -72,6 +72,7 @@ import {
   listSources,
   logMemoryFeedback,
   markSourceReviewed,
+  minePolicyProposals,
   organizeInbox,
   planMaintenanceCleanup,
   putVaultObject,
@@ -1862,6 +1863,51 @@ policy
       )
     );
   });
+
+policy
+  .command("mine")
+  .description(
+    t(
+      "从结构化 feedback 和显式 eval failures 生成 shadow Policy proposals",
+      "Mine shadow Policy proposals from structured feedback and explicit eval failures"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--eval <file...>", t("可选 Eval YAML 文件", "optional Eval YAML files"))
+  .option(
+    "--min-evidence <count>",
+    t("最少独立 query/eval 证据；最小 3", "minimum independent query/eval evidence; minimum 3"),
+    "3"
+  )
+  .addHelpText(
+    "after",
+    t(
+      `
+只使用结构化 reason/expected/forbidden 和显式 eval failure；不读取自由文本 note，不调用模型。
+本命令只写 .memory proposal，不接受 proposal、不写 Git Policy、不修改 query/Hook。`,
+      `
+Uses only structured reasons, expected/forbidden IDs, and explicit eval failures. It never reads free-form notes or invokes a model.
+This command writes .memory proposals only; it never accepts proposals, writes Git Policies, or changes query/Hook behavior.`
+    )
+  )
+  .action(
+    async (options: {
+      root?: string;
+      eval?: string[];
+      minEvidence: string;
+    }) => {
+      console.log(
+        JSON.stringify(
+          await minePolicyProposals(resolveCliRoot(options.root), {
+            evalFiles: options.eval ?? [],
+            minIndependentEvidence: Number.parseInt(options.minEvidence, 10)
+          }),
+          null,
+          2
+        )
+      );
+    }
+  );
 
 policy
   .command("proposal-show")

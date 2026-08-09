@@ -281,6 +281,7 @@ describe("CLI user configuration", () => {
     const query = await runCli(["query", "--help"]);
     const policy = await runCli(["policy", "--help"]);
     const policyAccept = await runCli(["policy", "accept", "--help"]);
+    const policyMine = await runCli(["policy", "mine", "--help"]);
 
     expect(top).toContain("把单个候选 JSON 安全写入");
     expect(top).toContain("全局 --config/--locale/--json 必须放在子命令之前");
@@ -308,6 +309,8 @@ describe("CLI user configuration", () => {
     expect(policy).toContain("Retrieval Lesson / Reasoning Policy");
     expect(policy).toContain("proposals");
     expect(policyAccept).toContain("Git shadow Policy");
+    expect(policyMine).toContain("不读取自由文本 note");
+    expect(policyMine).toContain("不修改 query/Hook");
   });
 
   it("records query-level structured feedback without a memory ID", async () => {

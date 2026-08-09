@@ -29,6 +29,7 @@ import type { EmbeddingProvider } from "./embeddings.js";
 import type { BatchCandidateReranker } from "./reranker.js";
 
 export type EvalCase = {
+  id?: string;
   task: string;
   domains: string[];
   scenarios: string[];
@@ -101,6 +102,7 @@ export type EvalPipelineOptions =
     };
 
 const EvalCaseSchema = z.object({
+  id: z.string().min(1).optional(),
   task: z.string().min(1),
   domains: z.array(z.string()).default([]),
   scenarios: z.array(z.string()).default([]),
