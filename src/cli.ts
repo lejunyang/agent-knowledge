@@ -97,6 +97,7 @@ import {
   readMaintenanceProposals,
   readPolicy,
   readPolicyProposal,
+  recordQueryPacket,
   readKnowledgeGraph,
   resolveRetrievalModelDescriptor,
   rejectMaintenanceProposal,
@@ -4669,11 +4670,7 @@ hook
         projectKeys: detectedProject ? [detectedProject.key] : []
       });
       const { ranked, debug } = queryMemoriesWithDebug(root, request);
-      const packet = buildContextPacket({
-        request,
-        ranked,
-        queryRun: { rootDir: root, queryRunId: debug.queryRunId }
-      });
+      const packet = buildContextPacket({ request, ranked });
       const injection = decideHookInjection({
         prompt,
         ranked,
@@ -4681,6 +4678,10 @@ hook
         minScore: hookConfig.minScore,
         catalog,
         catalogMaxItems: hookConfig.catalogMaxItems
+      });
+      recordQueryPacket(root, {
+        queryRunId: debug.queryRunId,
+        injectedIds: injection.resultIds
       });
 
       appendJsonlLog(root, {

@@ -198,14 +198,14 @@ describe("hook relevance", () => {
         minScore: 0.55
       }).decision
     ).toBe("none");
-    expect(
-      decideHookInjection({
-        prompt: "lint 问题",
-        ranked: makeRanked(0.3),
-        packet: makePacket(),
-        minScore: 0.55
-      }).decision
-    ).toBe("below_threshold");
+    const below = decideHookInjection({
+      prompt: "lint 问题",
+      ranked: makeRanked(0.3),
+      packet: makePacket(),
+      minScore: 0.55
+    });
+    expect(below.decision).toBe("below_threshold");
+    expect(below.resultIds).toEqual([]);
   });
 
   it("injects only the context packet for reliable task matches", () => {
@@ -220,6 +220,7 @@ describe("hook relevance", () => {
     expect(result.additionalContext).toContain('"claims"');
     expect(result.additionalContext).not.toContain("catalog");
     expect(result.additionalContext).not.toContain("runtime");
+    expect(result.resultIds).toEqual(["k_lint"]);
   });
 
   it("returns at most five prompt-related catalog items for catalog intent", () => {

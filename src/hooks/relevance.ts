@@ -164,16 +164,23 @@ export function decideHookInjection(input: {
       decision: "below_threshold",
       additionalContext: "",
       score,
-      resultIds: input.ranked.map((item) => item.document.frontmatter.id)
+      resultIds: []
     };
   }
 
   const packetTokens = estimateContextPacketTokens(input.packet);
+  const injectedIds = [
+    ...input.packet.route,
+    ...input.packet.claims,
+    ...input.packet.procedures,
+    ...input.packet.principles,
+    ...input.packet.episodes
+  ].map((item) => item.id);
   return {
     decision: "context",
     additionalContext: JSON.stringify({ context_packet: input.packet }),
     score,
     packetTokens,
-    resultIds: input.ranked.map((item) => item.document.frontmatter.id)
+    resultIds: injectedIds
   };
 }

@@ -3,6 +3,7 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { listQueryRuns } from "../src/policy/queryRuns.js";
 
 let tempDirs: string[] = [];
 
@@ -81,5 +82,10 @@ describe("UserPromptSubmit CLI", () => {
     expect(output.hookSpecificOutput.additionalContext).toContain("context_packet");
     expect(output.hookSpecificOutput.additionalContext).not.toContain("runtimeContext");
     expect(output.hookSpecificOutput.additionalContext).not.toContain("knowledge_catalog");
+    const [run] = await listQueryRuns(root);
+    expect(run?.injectedIds).toEqual([
+      "k_20260705_frontend_lint_vue_sfc",
+      "k_20260705_lint_validation_flow"
+    ]);
   });
 });

@@ -83,6 +83,13 @@ describe("deterministic memory-use policy mining", () => {
         suppress_memory_ids: ["k_recovery"]
       }
     });
+    expect(proposal?.candidate.evidence.feedback_keys).toHaveLength(3);
+    expect(
+      proposal?.candidate.evidence.feedback_keys.every((key) =>
+        /^feedback_sha256_[a-f0-9]{64}$/.test(key)
+      )
+    ).toBe(true);
+    expect(JSON.stringify(proposal)).not.toContain("\\u0000");
   });
 
   it("does not count repeated runs or unscoped failures toward the threshold", async () => {

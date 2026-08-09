@@ -96,6 +96,13 @@ function minedPolicyId(kind: string, identity: unknown): string {
     .slice(0, 16)}`;
 }
 
+/** 把内部可能含 NUL 分隔符的 ledger key 转为 Git/YAML 友好的不可逆 evidence ref。 */
+function feedbackRef(key: string): string {
+  return `feedback_sha256_${createHash("sha256")
+    .update(key)
+    .digest("hex")}`;
+}
+
 /** 把内部 scope 转成 Policy schema 字段。 */
 function applicability(scope: PolicyScope) {
   return {
@@ -129,7 +136,9 @@ function policyFromFeedbackGroup(
   now: Date
 ): MemoryUsePolicyInput {
   const queryRunIds = unique(group.queryRuns.map((run) => run.id));
-  const feedbackKeys = unique(group.entries.map((entry) => entry.key));
+  const feedbackKeys = unique(
+    group.entries.map((entry) => feedbackRef(entry.key))
+  );
   const identity = {
     reason: group.reason,
     scope: group.scope,
