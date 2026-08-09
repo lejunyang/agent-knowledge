@@ -102,12 +102,19 @@ import {
   expandKnowledge,
   S3HttpObjectClient,
   S3SyncBackend,
+  SidecarProviderSchema,
   TransformersBatchReranker,
   stageHookEvent,
+  scaffoldSidecar,
+  searchSidecar,
   getStagingStatus,
   getIntegrationProduct,
   drainStagedEvents,
   suggestAliases,
+  compareSidecars,
+  createSidecarPreset,
+  doctorSidecar,
+  ingestSidecarItems,
   syncKnowledge,
   WebDavSyncBackend,
   doctorIntegration,
@@ -116,7 +123,9 @@ import {
   initializeKnowledgeGitWorkspace,
   initializeVault,
   listIntegrationProducts,
+  readSidecarConfig,
   uninstallIntegration,
+  writeSidecarConfig,
   vaultKeyFromEnvironment,
   writeVaultObjectToFile,
   exportSourceEvidence,
@@ -339,6 +348,43 @@ async function readHookInput(): Promise<Record<string, unknown>> {
     return {};
   }
   return JSON.parse(text) as Record<string, unknown>;
+}
+
+/** 读取 sidecar shadow ingest 的 JSON 数组或 JSONL；正文只发送到显式配置的外部后端。 */
+async function readSidecarItems(filePath: string): Promise<
+  Array<{ id: string; text: string; metadata: Record<string, unknown> }>
+> {
+  const text = await readFile(path.resolve(filePath), "utf8");
+  const raw = text.trim().startsWith("[")
+    ? (JSON.parse(text) as unknown[])
+    : text
+        .split(/\r?\n/)
+        .filter((line) => line.trim())
+        .map((line) => JSON.parse(line) as unknown);
+  return raw.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`Sidecar input item ${index} must be an object`);
+    }
+    const record = item as Record<string, unknown>;
+    if (
+      typeof record.id !== "string" ||
+      !record.id ||
+      typeof record.text !== "string" ||
+      !record.text.trim()
+    ) {
+      throw new Error(`Sidecar input item ${index} requires id and text`);
+    }
+    return {
+      id: record.id,
+      text: record.text,
+      metadata:
+        record.metadata &&
+        typeof record.metadata === "object" &&
+        !Array.isArray(record.metadata)
+          ? (record.metadata as Record<string, unknown>)
+          : {}
+    };
+  });
 }
 
 program
@@ -3169,6 +3215,202 @@ notifications
       )
     );
   });
+
+const sidecar = program
+  .command("sidecar")
+  .description(
+    t(
+      "管理 Hindsight、memU、Mem0 shadow sidecar 与对比评测",
+      "Manage Hindsight, memU, and Mem0 shadow sidecars and comparisons"
+    )
+  );
+
+sidecar
+  .command("init")
+  .description(t("生成可编辑的 sidecar 配置", "Create an editable sidecar configuration"))
+  .requiredOption(
+    "--provider <provider>",
+    t("hindsight、memu 或 mem0", "hindsight, memu, or mem0")
+  )
+  .requiredOption("--id <id>", t("Sidecar 稳定 ID", "stable sidecar ID"))
+  .requiredOption("--base-url <url>", t("Sidecar base URL", "Sidecar base URL"))
+  .requiredOption("--scope <scope>", t("隔离 bank/user scope", "isolated bank/user scope"))
+  .requiredOption("--output <file>", t("输出配置 JSON", "output configuration JSON"))
+  .action(
+    async (options: {
+      provider: string;
+      id: string;
+      baseUrl: string;
+      scope: string;
+      output: string;
+    }) => {
+      const provider = SidecarProviderSchema.parse(options.provider);
+      const config = createSidecarPreset(provider, {
+        id: options.id,
+        baseUrl: options.baseUrl,
+        scope: options.scope
+      });
+      const output = await writeSidecarConfig(options.output, config);
+      console.log(JSON.stringify({ output, config }, null, 2));
+    }
+  );
+
+sidecar
+  .command("scaffold")
+  .description(
+    t(
+      "生成 provider 部署/配置骨架，不自动启动",
+      "Generate provider deployment/configuration scaffolding without starting it"
+    )
+  )
+  .requiredOption(
+    "--provider <provider>",
+    t("hindsight、memu 或 mem0", "hindsight, memu, or mem0")
+  )
+  .requiredOption("--output <dir>", t("输出目录", "output directory"))
+  .action(async (options: { provider: string; output: string }) => {
+    console.log(
+      JSON.stringify(
+        await scaffoldSidecar(
+          SidecarProviderSchema.parse(options.provider),
+          options.output
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+sidecar
+  .command("doctor")
+  .description(t("探测 sidecar HTTP 能力", "Probe sidecar HTTP capabilities"))
+  .requiredOption("--config <file>", t("Sidecar 配置", "sidecar configuration"))
+  .action(async (options: { config: string }) => {
+    console.log(
+      JSON.stringify(
+        await doctorSidecar(await readSidecarConfig(options.config)),
+        null,
+        2
+      )
+    );
+  });
+
+sidecar
+  .command("shadow-ingest")
+  .description(
+    t(
+      "把显式 JSON/JSONL 输入发送到 shadow sidecar",
+      "Send explicit JSON/JSONL input to a shadow sidecar"
+    )
+  )
+  .requiredOption("--config <file>", t("Sidecar 配置", "sidecar configuration"))
+  .requiredOption("--input <file>", t("包含 id/text/metadata 的 JSON 或 JSONL", "JSON or JSONL with id/text/metadata"))
+  .option("--root <dir>", t("保存 sidecar run 的 workspace", "workspace for sidecar run artifacts"))
+  .action(async (options: { config: string; input: string; root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await ingestSidecarItems(
+          await readSidecarConfig(options.config),
+          await readSidecarItems(options.input),
+          { rootDir: resolveCliRoot(options.root) }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+sidecar
+  .command("search")
+  .description(t("执行单次 shadow sidecar 查询", "Run one shadow sidecar query"))
+  .requiredOption("--config <file>", t("Sidecar 配置", "sidecar configuration"))
+  .requiredOption("--query <text>", t("查询文本", "query text"))
+  .option("--root <dir>", t("保存 sidecar run 的 workspace", "workspace for sidecar run artifacts"))
+  .action(async (options: { config: string; query: string; root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await searchSidecar(
+          await readSidecarConfig(options.config),
+          options.query,
+          { rootDir: resolveCliRoot(options.root) }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+sidecar
+  .command("compare")
+  .description(
+    t(
+      "用同一 eval 对比 native lexical 与多个 sidecar",
+      "Compare native lexical retrieval and multiple sidecars on one eval suite"
+    )
+  )
+  .requiredOption("--config <file...>", t("一个或多个 sidecar 配置", "one or more sidecar configurations"))
+  .requiredOption("--eval <file>", t("Eval YAML", "Eval YAML"))
+  .requiredOption("--output <dir>", t("JSON/Markdown 报告目录", "JSON/Markdown report directory"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .addHelpText(
+    "after",
+    t(
+      `
+Sidecar 始终是 shadow-only。只有外部结果显式携带 native_memory_id 才参与 expected/forbidden ID 指标；
+未映射文本单独统计，仍会影响 abstention failure。`,
+      `
+Sidecars are always shadow-only. External results participate in expected/forbidden ID metrics only when they explicitly carry native_memory_id.
+Unmapped text is counted separately and still affects abstention failure.`
+    )
+  )
+  .action(
+    async (options: {
+      config: string[];
+      eval: string;
+      output: string;
+      root?: string;
+    }) => {
+      const root = resolveCliRoot(options.root);
+      const suite = await loadEvalSuite(options.eval);
+      const configs = await Promise.all(
+        options.config.map((file) => readSidecarConfig(file))
+      );
+      const report = await compareSidecars({
+        rootDir: root,
+        cases: suite.cases,
+        configs,
+        outputDir: options.output,
+        nativeSearch: async (task, evalCase) => {
+          const started = performance.now();
+          const request = MemoryQueryRequestSchema.parse({
+            task,
+            agentRole: "main",
+            domains: evalCase.domains,
+            scenarios: evalCase.scenarios,
+            projectKeys: evalCase.project_keys ?? [],
+            maxTokens: evalCase.max_tokens ?? 4500,
+            now: evalCase.now ?? new Date().toISOString().slice(0, 10),
+            visibilityScopes: resolveVisibilityScopes(),
+            sensitivityClearance: resolveSensitivityClearance()
+          });
+          const { ranked } = queryMemoriesWithDebug(root, request, {
+            log: false
+          });
+          const packet = buildContextPacket({ request, ranked });
+          return {
+            ids: [
+              ...packet.claims,
+              ...packet.procedures,
+              ...packet.principles,
+              ...packet.episodes
+            ].map((item) => item.id),
+            latencyMs: performance.now() - started
+          };
+        }
+      });
+      console.log(JSON.stringify(report, null, 2));
+    }
+  );
 
 const maintenance = program
   .command("maintenance")

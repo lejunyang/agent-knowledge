@@ -217,6 +217,8 @@ describe("CLI user configuration", () => {
     const integration = await runCli(["integration", "--help"]);
     const automation = await runCli(["automation", "--help"]);
     const notifications = await runCli(["notifications", "--help"]);
+    const sidecar = await runCli(["sidecar", "--help"]);
+    const sidecarCompare = await runCli(["sidecar", "compare", "--help"]);
 
     expect(top).toContain("把单个候选 JSON 安全写入");
     expect(config).toContain("显示用户配置文件路径");
@@ -231,6 +233,9 @@ describe("CLI user configuration", () => {
     expect(integration).toContain("检查产品接入是否完整");
     expect(automation).toContain("运行有界来源刷新");
     expect(notifications).toContain("后台通知 outbox");
+    expect(sidecar).toContain("Hindsight、memU、Mem0");
+    expect(sidecarCompare).toContain("native_memory_id");
+    expect(sidecarCompare).toContain("abstention failure");
   });
 
   it("documents graph retrieval modes and traversal controls in query help", async () => {

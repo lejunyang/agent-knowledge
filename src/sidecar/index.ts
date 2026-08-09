@@ -4,3 +4,5 @@ export * from "./presets.js";
 export * from "./config.js";
 export * from "./store.js";
 export * from "./httpAdapter.js";
+export * from "./scaffold.js";
+export * from "./compare.js";
