@@ -68,3 +68,4 @@ export * from "./graph/query.js";
 export * from "./graph/export.js";
 export * from "./graph/html.js";
 export * from "./graph/view.js";
+export * from "./automation/index.js";
