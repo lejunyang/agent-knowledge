@@ -5,3 +5,4 @@ export * from "./store.js";
 export * from "./proposals.js";
 export * from "./mining.js";
 export * from "./simulation.js";
+export * from "./status.js";

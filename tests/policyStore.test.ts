@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  deprecatePolicy,
   MemoryUsePolicySchema,
   initializePolicyWorkspace,
   listPolicies,
@@ -159,5 +160,28 @@ status: active
       "utf8"
     );
     await expect(validatePolicyFile(invalidPath)).rejects.toThrow();
+  });
+
+  it("explicitly deprecates a shadow policy without deleting Git history", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "ak-policy-deprecate-"));
+    tempDirs.push(root);
+    await writePolicy(root, retrievalPolicy);
+
+    const result = await deprecatePolicy(root, retrievalPolicy.id, {
+      date: "2026-08-10"
+    });
+
+    expect(result).toMatchObject({
+      id: retrievalPolicy.id,
+      status: "deprecated",
+      updated_at: "2026-08-10"
+    });
+    await expect(readPolicy(root, retrievalPolicy.id)).resolves.toMatchObject({
+      status: "deprecated",
+      updated_at: "2026-08-10"
+    });
+    await expect(
+      deprecatePolicy(root, retrievalPolicy.id, { date: "2026-08-11" })
+    ).rejects.toThrow(/shadow/);
   });
 });

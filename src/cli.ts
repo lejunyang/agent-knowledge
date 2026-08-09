@@ -37,6 +37,7 @@ import {
   createConfiguredSyncBackend,
   checkConnectorSourceUpdates,
   decideHookInjection,
+  deprecatePolicy,
   deliverNotifications,
   downloadRetrievalModel,
   extractMaintenanceObservations,
@@ -48,6 +49,7 @@ import {
   LarkExportConnector,
   getRetrievalModelStatus,
   getObservationStatus,
+  getPolicyStatus,
   getSubagentLogStatus,
   installAcceptedSkillProposal,
   embedKnowledgeIndex,
@@ -1847,6 +1849,26 @@ policy
   });
 
 policy
+  .command("deprecate")
+  .description(
+    t(
+      "显式把 shadow Policy 标为 deprecated，保留 Git 文件",
+      "Explicitly deprecate a shadow Policy while preserving its Git file"
+    )
+  )
+  .argument("<policy-id>", t("Policy ID", "Policy ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (policyId: string, options: { root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await deprecatePolicy(resolveCliRoot(options.root), policyId),
+        null,
+        2
+      )
+    );
+  });
+
+policy
   .command("proposals")
   .description(
     t("列出 `.memory` Policy proposals", "List `.memory` Policy proposals")
@@ -1989,6 +2011,36 @@ policy
           ...history,
           entries: history.entries.slice(0, limit)
         },
+        null,
+        2
+      )
+    );
+  });
+
+policy
+  .command("status")
+  .description(
+    t(
+      "汇总不含 task 原文的 Policy shadow 成熟度",
+      "Summarize Policy shadow maturity without task text"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .addHelpText(
+    "after",
+    t(
+      `
+p3EvidenceReady 只表示 scoped completed query run >= 30 且存在 shadow Policy；
+仍需人工确认运行 2–4 周及 false injection/abstention 指标未退化。`,
+      `
+p3EvidenceReady only means there are at least 30 scoped completed query runs and at least one shadow Policy.
+You must still verify a 2-4 week observation period and no false-injection/abstention regression.`
+    )
+  )
+  .action(async (options: { root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await getPolicyStatus(resolveCliRoot(options.root)),
         null,
         2
       )

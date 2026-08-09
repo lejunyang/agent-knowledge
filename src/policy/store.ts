@@ -10,6 +10,7 @@ import {
   mkdir,
   readFile,
   readdir,
+  rename,
   writeFile
 } from "node:fs/promises";
 import path from "node:path";
@@ -154,4 +155,37 @@ export async function listPolicies(rootDir: string): Promise<MemoryUsePolicy[]> 
     (left, right) =>
       right.priority - left.priority || left.id.localeCompare(right.id)
   );
+}
+
+/** 显式把 shadow Policy 标为 deprecated；保留同一 Git 文件和审计历史。 */
+export async function deprecatePolicy(
+  rootDir: string,
+  id: string,
+  options: { date?: string } = {}
+): Promise<MemoryUsePolicy> {
+  const current = await readPolicy(rootDir, id);
+  if (!current) {
+    throw new Error(`Policy not found: ${id}`);
+  }
+  if (current.status !== "shadow") {
+    throw new Error(`Only shadow Policies can be deprecated: ${id}`);
+  }
+  const updated = MemoryUsePolicySchema.parse({
+    ...current,
+    status: "deprecated",
+    updated_at: options.date ?? new Date().toISOString().slice(0, 10)
+  });
+  const target = getPolicyPath(rootDir, updated);
+  const temporary = `${target}.tmp-${process.pid}`;
+  await writeFile(
+    temporary,
+    yaml.dump(updated, { noRefs: true, lineWidth: 100 }),
+    {
+      encoding: "utf8",
+      mode: 0o600
+    }
+  );
+  await rename(temporary, target);
+  await chmod(target, 0o600);
+  return updated;
 }
