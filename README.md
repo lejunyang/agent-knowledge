@@ -72,6 +72,23 @@ agent-knowledge query --task "审查 Vue SFC lint 迁移方案"
 agent-knowledge knowledge audit
 ```
 
+最简文档流程：
+
+```bash
+# 首次登记并摄入
+agent-knowledge ingest files \
+  --connector-id business-docs \
+  --base-dir /secure/exports/business-docs \
+  --pattern '**/*.md' \
+  --project-key github.com/example/business
+
+# 以后每天只需要这一条；无变化时不会读取 Vault key
+agent-knowledge source refresh
+
+# 查看需要蒸馏或重新审阅的来源
+agent-knowledge source list --needs-review
+```
+
 把本地正式文档或完整 Agent 会话增量摄入加密 Vault：
 
 ```bash
@@ -104,6 +121,9 @@ agent-knowledge ingest lark-export \
 
 # 只检查已登记的本地/离线版本信号，不读取正文、不需要 Vault key
 agent-knowledge source check --root ~/agent-knowledge-data
+
+# 日常增量：检查 -> 按需摄入 -> 复查，不再重复填写来源目录/glob/project key
+agent-knowledge source refresh --root ~/agent-knowledge-data
 ```
 
 `ingest` 只输出 job、manifest 和 Vault handle，不输出正文。`files` 默认遮蔽内置规则可识别的
@@ -141,6 +161,10 @@ Connector ID 绑定 roots 与 project keys；移动同一快照目录不改变 i
 fetch/normalize，也不修改 Vault、manifest、checkpoint 或审阅 receipt。它明确声明
 `networkAccess: none`：Git 只检查登记的本地 ref，飞书只检查登记的离线 export。要判断线上
 变化，先显式更新本地 ref 或刷新飞书 export，再运行检查；不会静默 fetch/pull/爬取。
+
+`source refresh` 是推荐的日常入口：它从本机登记恢复完整 Connector scope，先 check，只对
+有确定更新或 `update_unknown` 的 Connector 执行 ingestion，再重新 check。无变化时不会读取
+Vault key；`--force` 可强制摄入，`--connector-id` 可限制来源，`--limit` 可做小批次验证。
 
 项目作用域使用规范化 Git remote，例如 `github.com/lejunyang/agent-knowledge`。普通 query 会自动发现当前仓库 remote；跨项目诊断使用：
 
@@ -212,7 +236,7 @@ case 或完整 initiative 后，再由 maintenance/writer 提炼 Diagnostic Path
 推荐的每周维护：
 
 ```bash
-agent-knowledge source check
+agent-knowledge source refresh
 agent-knowledge source list --needs-review
 agent-knowledge maintenance run
 agent-knowledge maintenance list --status pending
@@ -221,7 +245,7 @@ agent-knowledge organize-inbox
 ```
 
 已经 ingest 的文档不会自动变成长期知识。使用 `source-distiller` Skill 先执行
-`source check -> 必要时重新 ingest`，再逐条执行
+`source refresh`，再逐条执行
 `source show -> source export -> write-candidate/capture-material --target inbox -> source mark`；
 完整 evidence 只写受控 0600 临时文件。`source mark` 必须携带 show 返回的 fingerprint，
 版本变化时在任何写入前失败。
@@ -326,7 +350,7 @@ agent-knowledge ingest lark-export \
   --export-dir /secure/exports/lark-business \
   --project-key github.com/example/business
 
-agent-knowledge source check --connector-id lark-business
+agent-knowledge source refresh --connector-id lark-business
 agent-knowledge source list --needs-review
 ```
 
@@ -494,6 +518,8 @@ agent-knowledge knowledge evidence <claim-id>
 # Source 审阅与蒸馏
 agent-knowledge source check
 agent-knowledge source check --connector-id <connector-id> --fail-on-updates
+agent-knowledge source refresh
+agent-knowledge source refresh --connector-id <connector-id>
 agent-knowledge source list --needs-review
 agent-knowledge source show <source-id>
 agent-knowledge source export <source-id> --fingerprint <sha256> --output /secure/tmp/evidence

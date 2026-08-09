@@ -79,8 +79,9 @@ Git 摄入只读 committed blob，不包含 dirty/untracked 内容，也不自�
 飞书知识库先完成离线递归导出，再用 `ingest lark-export`；不把完整 XML 写入 source Markdown。
 有 failures 时成功文档可先摄入，但必须报告 unresolved inventory，不能宣称完整覆盖。
 
-摄入完成后委派 `source-distiller`，由它执行 `source list/show/export/mark`；manifest 不含正文
-preview，不要只根据 heading/hash 生成结论，也不要在 active knowledge/claim anchor 尚未形成时标 refined。
+首次摄入后，日常先运行 `source refresh` 复用登记执行增量检查/摄入，再委派
+`source-distiller` 执行 `source list/show/export/mark`；manifest 不含正文 preview，不要只根据
+heading/hash 生成结论，也不要在 active knowledge/claim anchor 尚未形成时标 refined。
 
 旧流程中已存在的 source Markdown 才使用：
 

@@ -22,6 +22,7 @@
 - `knowledge/source-manifests/*.json` 是严格 `schema_version: 5` 的 Git 可跟踪 evidence 导航，保存稳定 source 身份、上游/本地版本、availability、section heading/hash/range、review receipt、脱敏与处理 profile、project keys 和 Vault handle，不保存正文 preview 或完整原文；旧 manifest 不迁移，应从原始 evidence 重建。
 - `agent-knowledge ingest files|transcripts` 通过统一 Connector core 执行 probe、抓取、规范化、脱敏、Vault、manifest、job 和 checkpoint；failed 不推进 checkpoint。
 - `agent-knowledge source check` 从本机登记恢复 Connector，只执行本地/离线 inventory/discover/probe，不抓正文、不需要 Vault key、不写 manifest/Vault/checkpoint。
+- `agent-knowledge source refresh` 是日常增量入口：从登记恢复完整 scope，执行 check -> conditional ingestion -> recheck；无变化时不读取 Vault key。
 - `agent-knowledge query` 输出主 agent 可注入的 Context Packet 2.0，默认只含 synopsis 与 evidence handles；`--debug` 附带 scorer/reranker 和分项分数。
 - `agent-knowledge knowledge audit` 检查正文密度、metadata 膨胀、source 处理状态、claim evidence 和 project registry；`knowledge show/evidence` 执行安全过滤后显式展开。
 - `agent-knowledge embed-index` 使用本地 provider 生成 embedding 缓存；`agent-knowledge suggest-aliases` 只输出 dry-run JSON 建议。
@@ -110,6 +111,7 @@ node dist/cli.js ingest transcripts --root /tmp/agent-knowledge-data --connector
 node dist/cli.js ingest git --root /tmp/agent-knowledge-data --connector-id smoke-repo --repository /tmp/source-repo --pathspec README.md docs
 node dist/cli.js ingest lark-export --root /tmp/agent-knowledge-data --connector-id smoke-lark --export-dir /tmp/lark-export --project-key github.com/example/business
 node dist/cli.js source check --root /tmp/agent-knowledge-data
+node dist/cli.js source refresh --root /tmp/agent-knowledge-data
 node dist/cli.js source list --root /tmp/agent-knowledge-data --needs-review
 node dist/cli.js source show src_example --root /tmp/agent-knowledge-data
 node dist/cli.js event status --root /tmp/agent-knowledge-data
@@ -227,6 +229,7 @@ src/cli.ts            命令行入口和各模块编排
 - `refined` receipt 必须记录 active knowledge IDs，且每个 ID 至少有一个 supported claim anchor 命中当前 source section/hash。不能仅因候选已写 inbox 就标 refined。
 - metadata-only 更新保留 review receipt；content changed/restored 清空 receipt 并回 pending；removed/missing 先回 pending，人工分析历史 Vault evidence 后再标 obsolete/blocked。
 - `source check` 必须是 probe-only：只调用 inventory/discover/probe，禁止调用 fetch/normalize、写 Vault/manifest/checkpoint 或要求 Vault key。检查显式 `networkAccess: none`；Git 只看登记的本地 ref，飞书只看 offline export，远端刷新必须由用户或受控自动化显式执行。
+- `source refresh` 必须复用严格登记输入，不能要求用户重复填写或自行推断 project key/glob/pathspec/redaction policy；默认仅对确定更新或 update_unknown 执行 ingestion，`--force` 才允许无变化强制摄入。它同样不得自动 fetch Git 或访问在线飞书。
 - 更新报告必须绑定当前 Connector registration snapshot。重新登记/摄入后旧报告为 stale，不能继续贡献 `sourceUpdatesAvailable/sourceUpdatesUnknown`。报告只保存在 0600 `.memory`，不得同步。
 - Connector 更新检查应先做轻量 probe：共同版本信号未变且 processing profile 未变时为 unchanged；`path_hash` 变化可标 content_changed，只有 revision/ETag/mtime 等变化但无内容 identity 时必须标 update_unknown，不能虚构确定性。显式 ingestion 抓取后，上游 metadata 或处理 profile 变化但 content hash 不变不得触发重蒸馏并应保留 source 已分类状态；content hash 变化才重新切 section、失效受影响 claim 并生成更新 proposal。
 - 同一 workspace/Connector 禁止并发摄入；lock 归活进程时失败，死 PID 锁可恢复。每次尝试使用独立 job ID，failed 不推进 checkpoint，不能覆盖上次失败或成功的审计记录。

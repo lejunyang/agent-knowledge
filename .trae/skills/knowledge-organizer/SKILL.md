@@ -86,7 +86,7 @@ agent-knowledge organize-inbox --approve "$MEMORY_ID" --apply
 11. 用户明确提供/指定拉取的正式文档可使用 `source_authority: "documented"`、`actor_type: "owner"`、`capture_mode: "direct_material"`；confidence 至少 `0.8` 时可按用户要求直接 active。后台自动发现或客户转述不能使用这条放行路径。
 12. `kind: source` / `layer: evidence` 的原始证据必须先删除临时下载 URL，并遮蔽账号、验证码、密码、token、用户标识和其他个人信息；不应把“内部测试账号表”复制进长期知识。
 13. 完整本地文档或会话优先使用 `agent-knowledge ingest files|transcripts`，由 Connector 统一执行版本 probe、脱敏、Vault、source manifest、job 和 checkpoint；不要把完整正文先转换成 source Markdown。
-14. Connector 摄入完成后，委派 `source-distiller` 使用 `source list/show/export/mark` 提炼；manifest 只含 heading/hash/range，不要据此猜结论，也不要直接把 source 标 refined。
+14. Connector 首次摄入后，日常使用 `source refresh` 复用登记执行增量检查/摄入，再委派 `source-distiller` 使用 `source list/show/export/mark` 提炼；manifest 只含 heading/hash/range，不要据此猜结论，也不要直接把 source 标 refined。
 15. 同一外部文档更新或脱敏规则升级时，Connector 会用 upstream/content/processing profile 识别更新。`capture-material --replace-source` 只兼容已有受治理 source Markdown，不能覆盖 semantic/procedural/profile/episodic；精炼知识变化必须新增版本并使用 `supersedes`。
 16. V2 KnowledgeDocument 不读取或迁移旧 Markdown；遇到旧知识时回到原始 evidence 重新拆分。`synopsis` 只用于路由，`explanation` 必须保存背景、条件、例外、步骤、失败策略和验证。
 
@@ -190,7 +190,8 @@ agent-knowledge ingest lark-export \
 agent-knowledge source list --needs-review
 ```
 
-再调用 `source-distiller`；完整 evidence 只通过 `source export` 写 0600 临时文件。
+后续先运行 `agent-knowledge source refresh`，再调用 `source-distiller`；完整 evidence 只通过
+`source export` 写 0600 临时文件。
 
 刷新旧流程中已导入且稳定映射到同一外部文档的 source Markdown：
 

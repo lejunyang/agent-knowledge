@@ -129,6 +129,8 @@ Connector 每次 source 尝试写入：
 agent-knowledge source check
 agent-knowledge source check --connector-id business-repository
 agent-knowledge source check --fail-on-updates
+agent-knowledge source refresh
+agent-knowledge source refresh --connector-id business-repository
 ```
 
 检查只调用 inventory/discover/probe，绝不调用 `fetch/normalize`，也不更新 manifest、Vault、
@@ -143,6 +145,10 @@ checkpoint 或 review receipt。报告明确 `networkAccess: none`：
 `update_unknown`，不能在未抓取正文前宣称内容已改变。`metadata_only` 表示内容身份稳定但
 commit/revision/time 有变化。摄入会刷新登记快照，使旧 update report 变 stale；重新检查后
 才算 current，避免已经处理的变化继续告警。
+
+日常推荐 `source refresh`。它先运行同一套 probe-only check，只在确定更新、待抓取确认或
+显式 `--force` 时读取 Vault key 并执行 ingestion，随后再次 check。该命令复用登记中的完整
+scope，因此不需要重复输入 base dir、glob、project key、pathspec 或 redaction policy。
 
 当前版本保存在 source manifest，历史版本由 private Git 的 manifest 变更记录追踪。`.memory`
 登记和更新报告只负责本机执行状态，不替代 Git 历史，也不应复制到共享远端。

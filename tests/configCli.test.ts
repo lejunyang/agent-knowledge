@@ -162,8 +162,57 @@ describe("CLI user configuration", () => {
 
     expect(chinese).toContain("本地、可读、可审计的 Agent 知识工具");
     expect(chinese).toContain("交互式配置");
+    expect(chinese).toContain("常用流程");
+    expect(chinese).toContain("source refresh");
     expect(english).toContain("Local human-readable memory toolkit for agents");
     expect(english).toContain("Interactively configure");
+    expect(english).toContain("Common workflows");
+    expect(english).toContain("source refresh");
+  });
+
+  it("documents examples, lifecycle enums, and safety boundaries in command help", async () => {
+    const source = await runCli(["source", "--help"]);
+    const refresh = await runCli(["source", "refresh", "--help"]);
+    const eventAppend = await runCli(["event", "append", "--help"]);
+    const sourceMark = await runCli(["source", "mark", "--help"]);
+    const ingestGit = await runCli(["ingest", "git", "--help"]);
+
+    expect(source).toContain("推荐日常流程");
+    expect(source).toContain("source refresh");
+    expect(refresh).toContain("检查 → 按需摄入 → 复查");
+    expect(refresh).toContain("--force");
+    expect(refresh).toContain("不会自动 fetch Git 远端");
+    expect(eventAppend).toContain("support 阶段");
+    expect(eventAppend).toContain("initiative 阶段");
+    expect(eventAppend).toContain("root_cause");
+    expect(eventAppend).toContain("retrospective");
+    expect(sourceMark).toContain("refined 需要 active knowledge");
+    expect(sourceMark).toContain("duplicate 需要 --duplicate-of");
+    expect(ingestGit).toContain("只读取本地 committed blob");
+    expect(ingestGit).toContain("不会执行 fetch/pull");
+  });
+
+  it("describes user-facing management commands in parent help", async () => {
+    const top = await runCli(["--help"]);
+    const config = await runCli(["config", "--help"]);
+    const sync = await runCli(["sync", "--help"]);
+    const staging = await runCli(["staging", "--help"]);
+    const subagents = await runCli(["subagents", "--help"]);
+    const maintenance = await runCli(["maintenance", "--help"]);
+    const graph = await runCli(["graph", "--help"]);
+    const integration = await runCli(["integration", "--help"]);
+
+    expect(top).toContain("把单个候选 JSON 安全写入");
+    expect(config).toContain("显示用户配置文件路径");
+    expect(config).toContain("显示分层合并后的生效配置");
+    expect(sync).toContain("显式 WebDAV 参数");
+    expect(sync).toContain("显式 S3 参数");
+    expect(staging).toContain("汇总待消费 staging 事件");
+    expect(subagents).toContain("读取本地详细 Subagent 调试日志");
+    expect(maintenance).toContain("接受 proposal 并写入知识或 Skill inbox");
+    expect(graph).toContain("有限深度子图");
+    expect(integration).toContain("结构化安装 hooks");
+    expect(integration).toContain("检查产品接入是否完整");
   });
 
   it("documents graph retrieval modes and traversal controls in query help", async () => {
@@ -972,6 +1021,108 @@ describe("CLI user configuration", () => {
 
     expect(refreshed.jobs[0]?.classification).toBe("content_changed");
     expect(current.reports[0]?.summary.unchanged).toBe(1);
+  });
+
+  it("refreshes registered sources without repeating connector scope arguments", async () => {
+    const temp = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-source-refresh-cli-")
+    );
+    tempDirs.push(temp);
+    const root = path.join(temp, "workspace");
+    const sourceDir = path.join(temp, "business-docs");
+    const sourceFile = path.join(sourceDir, "guide.md");
+    const environment = {
+      AGENT_KNOWLEDGE_VAULT_KEY: Buffer.alloc(32, 27).toString("base64")
+    };
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(sourceFile, "# Guide\n\nVersion one.\n", "utf8");
+    await runCli(
+      [
+        "ingest",
+        "files",
+        "--root",
+        root,
+        "--connector-id",
+        "daily-business-docs",
+        "--base-dir",
+        sourceDir,
+        "--pattern",
+        "**/*.md",
+        "--project-key",
+        "github.com/example/business"
+      ],
+      environment
+    );
+    await writeFile(
+      sourceFile,
+      "# Guide\n\nVersion two with a daily update.\n",
+      "utf8"
+    );
+
+    const refreshed = JSON.parse(
+      await runCli(
+        [
+          "source",
+          "refresh",
+          "--root",
+          root,
+          "--connector-id",
+          "daily-business-docs"
+        ],
+        environment
+      )
+    ) as {
+      summary: {
+        connectors: number;
+        refreshed: number;
+        unchanged: number;
+        errors: number;
+      };
+      results: Array<{
+        connectorId: string;
+        action: string;
+        ingestion?: { classifications: Record<string, number> };
+        after?: { summary: { unchanged: number } };
+      }>;
+    };
+
+    expect(refreshed.summary).toEqual({
+      connectors: 1,
+      refreshed: 1,
+      unchanged: 0,
+      errors: 0
+    });
+    expect(refreshed.results[0]).toMatchObject({
+      connectorId: "daily-business-docs",
+      action: "refreshed",
+      ingestion: {
+        classifications: { content_changed: 1 }
+      },
+      after: {
+        summary: { unchanged: 1 }
+      }
+    });
+
+    const skipped = JSON.parse(
+      await runCli(
+        [
+          "source",
+          "refresh",
+          "--root",
+          root,
+          "--connector-id",
+          "daily-business-docs"
+        ]
+      )
+    ) as {
+      summary: { refreshed: number; unchanged: number };
+      results: Array<{ action: string }>;
+    };
+    expect(skipped.summary).toMatchObject({
+      refreshed: 0,
+      unchanged: 1
+    });
+    expect(skipped.results[0]?.action).toBe("unchanged");
   });
 
   it("records support and initiative event timelines with encrypted payloads", async () => {

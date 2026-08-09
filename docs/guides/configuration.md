@@ -115,6 +115,9 @@ agent-knowledge ingest git \
 
 agent-knowledge source check \
   --root ~/agent-knowledge-data
+
+agent-knowledge source refresh \
+  --root ~/agent-knowledge-data
 ```
 
 - `connector-id` 必须稳定且不含个人信息；更改它会创建新的 checkpoint/source identity。
@@ -134,6 +137,8 @@ agent-knowledge source check \
 - 完整 `ingest git` 运行会做 source 删除对账；传 `--limit` 的截断运行不会标记删除。
 - `source check` 不读取正文、不需要 Vault key，也不修改 Vault/manifest/checkpoint。Git 只检查
   登记的本地 ref，飞书只检查离线 export；远端更新必须先由用户或受控自动化显式 fetch/刷新。
+- `source refresh` 从登记恢复原 scope，执行 check -> conditional ingestion -> recheck；只在
+  需要摄入时读取 Vault key。可用 `--connector-id` 限定来源，`--force` 强制摄入。
 - `--fail-on-updates` 在确定更新、待抓取确认或检查错误时以状态码 2 退出，适合外部 scheduler。
 - 当前命令都是前台单次运行，不创建 cron、launchd 或 systemd；周期运行交给用户显式的进程管理器。
 

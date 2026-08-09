@@ -8,7 +8,7 @@ description: 审阅 versioned source manifest 与 Evidence Vault，把 pending/s
 完整流程：
 
 ```bash
-agent-knowledge source check
+agent-knowledge source refresh
 agent-knowledge source list --needs-review
 agent-knowledge source show "$SOURCE_ID"
 agent-knowledge source export "$SOURCE_ID" \
@@ -16,13 +16,14 @@ agent-knowledge source export "$SOURCE_ID" \
   --output "$PRIVATE_TEMP/source-evidence"
 ```
 
-- `source check` 仅检查已登记的本地/离线 probe，不读取正文或写 Vault/manifest。
+- `source refresh` 复用登记执行 check -> conditional ingestion -> recheck，无需重填 scope；
+  无变化时不读取 Vault key。只读审计使用 `source check`。
 - Git 只代表登记的本地 ref；要检查远端先显式 fetch。飞书只代表 offline export；要检查
   在线变化先显式刷新 export。Skill 不静默联网。
 - `metadata_only` 重新 ingest 更新版本；`content_changed/new/removed/restored` 重新 ingest
   后再蒸馏；`update_unknown` 必须 ingest 比较 content hash 后才能下结论。
 - 重新 ingest 必须保留原 project key、glob/pathspec 和 redaction policy；登记表拒绝 scope
-  漂移。摄入后旧报告会 stale，需再次 `source check`。
+  漂移。`--force` 才允许无变化强制摄入。
 - 完整 evidence 只写 knowledge workspace 之外的显式 0600 临时文件，不打印、不复制进聊天/Git/Markdown。
 - export 与 mark 必须使用 `source show.expectedFingerprint`；版本变化时重新开始。
 - mark 还必须使用 `source show.reviewToken`；其他 reviewer 改变 receipt 后重新 show。
@@ -43,5 +44,5 @@ agent-knowledge source mark "$SOURCE_ID" \
 ```
 
 其余结果显式标为 `duplicate`、`obsolete`、`no_long_term_value` 或 `blocked`，reason 不得含
-secret/PII。完成后删除临时 evidence，并再次运行 `source list --needs-review` 与
-`source check`、`knowledge audit`。
+secret/PII。完成后删除临时 evidence，并再次运行 `source refresh`、
+`source list --needs-review` 与 `knowledge audit`。

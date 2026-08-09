@@ -65,7 +65,7 @@ agent-knowledge write-candidate --input candidate.json
 周期维护前建议先运行确定性质量审计：
 
 ```bash
-agent-knowledge source check
+agent-knowledge source refresh
 agent-knowledge knowledge audit
 agent-knowledge knowledge audit --fail-on warning
 ```
@@ -91,7 +91,7 @@ Source 层还报告五个正式使用覆盖率：
 Connector 只负责把证据安全摄入，不会自动把文档结论写成 active knowledge。查看审阅队列：
 
 ```bash
-agent-knowledge source check
+agent-knowledge source refresh
 agent-knowledge source list --needs-review
 agent-knowledge source show "$SOURCE_ID"
 ```
@@ -173,11 +173,13 @@ Source manifest 同时保存：
 
 1. `ingest` 自动保存 0600 本地 Connector 登记；scope 变化或 project key 降级必须使用新 ID。
 2. `source check` 只读取廉价 upstream probe，不读取正文或写 Vault/manifest。
-3. 与上次共同版本信号相同且 processing profile 未变：标记 unchanged。
-4. `path_hash` 变化可标 content_changed；revision/ETag/mtime 变化但无内容 identity 时标
+3. 日常 `source refresh` 复用登记，执行 check -> conditional ingestion -> recheck；无变化时
+   不读取 Vault key，也无需重复填写 Connector scope。
+4. 与上次共同版本信号相同且 processing profile 未变：标记 unchanged。
+5. `path_hash` 变化可标 content_changed；revision/ETag/mtime 变化但无内容 identity 时标
    update_unknown，不能直接断言正文已变化。
-5. 显式重新 ingest、脱敏并比较 content hash；相同则 metadata-only，不同才重新生成 section。
-6. 引用已变化 section 的 claim 进入待验证状态，再生成知识更新 proposal。
+6. refresh 显式重新 ingest、脱敏并比较 content hash；相同则 metadata-only，不同才重新生成 section。
+7. 引用已变化 section 的 claim 进入待验证状态，再生成知识更新 proposal。
 
 检查不联网。飞书使用 offline export 中的 revision/更新时间；要判断线上版本先显式刷新 export。
 Git/GitHub 使用本地 ref 的 blob/commit SHA；要判断远端先显式 fetch。没有上游版本信息时必须
@@ -229,7 +231,7 @@ agent-knowledge ingest lark-export \
   --export-dir /secure/exports/lark-business \
   --project-key github.com/example/business
 
-agent-knowledge source check --connector-id lark-business
+agent-knowledge source refresh --connector-id lark-business
 agent-knowledge source list --needs-review
 ```
 

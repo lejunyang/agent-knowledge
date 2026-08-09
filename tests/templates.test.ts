@@ -122,6 +122,9 @@ describe("managed integrations", () => {
       "source check"
     );
     await expect(readFile(distillerTarget, "utf8")).resolves.toContain(
+      "source refresh"
+    );
+    await expect(readFile(distillerTarget, "utf8")).resolves.toContain(
       "offline export"
     );
     await expect(readFile(distillerTarget, "utf8")).resolves.toContain(
@@ -137,6 +140,7 @@ describe("managed integrations", () => {
       path.join(skillTarget, "SKILL.md"),
       "utf8"
     );
+    expect(organizer).toContain("source refresh");
     expect(organizer).toContain("垂直领域确认门禁");
     expect(organizer).toContain("意义不明");
     expect(organizer).toContain("疑似错误");

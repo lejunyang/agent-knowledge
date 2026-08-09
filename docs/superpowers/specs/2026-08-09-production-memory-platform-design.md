@@ -667,7 +667,11 @@ source inventory
 ### 2. 每日文档增量
 
 ```text
-connector cursor
+source refresh
+  -> restore registered connector scope
+  -> probe-only check
+  -> conditional ingestion
+  -> recheck
   -> detect added/changed/deleted sections
   -> map affected claims
   -> classify append/update/conflict/deprecate
@@ -677,6 +681,8 @@ connector cursor
 ```
 
 不重新总结整库，也不按文档更新时间直接覆盖知识。
+`source check` 保留为只读/CI 检测入口；普通用户不需要每天重复输入 base dir、glob、
+project key、pathspec 或 redaction policy。
 
 ### 3. 客服学习
 

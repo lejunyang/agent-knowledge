@@ -28,6 +28,7 @@ import {
   calibrateRetrieval,
   catalogKnowledge,
   captureMaterial,
+  connectorRegistrationInput,
   createEmbeddingProvider,
   createConnectorFromRegistration,
   createTranscriptConnector,
@@ -80,6 +81,7 @@ import {
   resolveRetrievalModelDescriptor,
   rejectMaintenanceProposal,
   readMaintenanceObservations,
+  readConnectorRegistration,
   showMaintenanceProposal,
   showLifecycleEvent,
   showSource,
@@ -174,6 +176,32 @@ program
   .option("--config <file>", t("用户配置文件；默认 ~/.config/agent-knowledge/config.json", "user config file; defaults to ~/.config/agent-knowledge/config.json"))
   .option("--locale <locale>", t("界面语言：auto、zh-CN 或 en", "UI language: auto, zh-CN, or en"))
   .option("--json", t("对支持的命令输出机器可读 JSON", "emit machine-readable JSON for commands that support human output"), false);
+
+program.addHelpText(
+  "after",
+  t(
+    `
+常用流程：
+  首次配置      agent-knowledge configure
+  导入文档      agent-knowledge ingest files --connector-id docs --base-dir ./docs --pattern '**/*.md'
+  日常增量      agent-knowledge source refresh
+  审阅来源      agent-knowledge source list --needs-review
+  查询知识      agent-knowledge query --task "当前问题"
+  质量检查      agent-knowledge knowledge audit
+
+提示：完整流程和安全边界见 README.md；所有命令都支持 --help。`,
+    `
+Common workflows:
+  First-time setup   agent-knowledge configure
+  Ingest documents  agent-knowledge ingest files --connector-id docs --base-dir ./docs --pattern '**/*.md'
+  Daily refresh     agent-knowledge source refresh
+  Review sources    agent-knowledge source list --needs-review
+  Query knowledge   agent-knowledge query --task "current question"
+  Quality audit     agent-knowledge knowledge audit
+
+Tip: see README.md for complete workflows and safety boundaries; every command supports --help.`
+  )
+);
 
 /** 返回进程启动时冻结的配置路径，避免运行中环境变化造成同一命令读取不同文件。 */
 function resolveConfigPath(): string {
@@ -362,25 +390,34 @@ const configCommand = program
   .command("config")
   .description(t("查看当前生效配置", "Inspect the active configuration"));
 
-configCommand.command("path").action(() => {
-  console.log(resolveConfigPath());
-});
+configCommand
+  .command("path")
+  .description(t("显示用户配置文件路径", "Show the user configuration file path"))
+  .action(() => {
+    console.log(resolveConfigPath());
+  });
 
-configCommand.command("show").action(() => {
-  console.log(JSON.stringify(userConfig(), null, 2));
-});
+configCommand
+  .command("show")
+  .description(t("显示分层合并后的生效配置", "Show the merged effective configuration"))
+  .action(() => {
+    console.log(JSON.stringify(userConfig(), null, 2));
+  });
 
-configCommand.command("sources").action(() => {
-  console.log(
-    JSON.stringify(
-      loadEffectiveConfig({
-        userConfigPath: resolveConfigPath()
-      }).sources,
-      null,
-      2
-    )
-  );
-});
+configCommand
+  .command("sources")
+  .description(t("显示用户、项目共享和项目 local 配置来源", "Show user, shared-project, and project-local configuration sources"))
+  .action(() => {
+    console.log(
+      JSON.stringify(
+        loadEffectiveConfig({
+          userConfigPath: resolveConfigPath()
+        }).sources,
+        null,
+        2
+      )
+    );
+  });
 
 const embeddingCommand = program
   .command("embedding")
@@ -745,6 +782,61 @@ async function runRegisteredConnectorIngestion(
   };
 }
 
+/** 为登记类型生成可审计 Vault actor，不把本地路径或 source identity 写入访问日志。 */
+function refreshVaultActor(
+  kind: ConnectorRegistrationInput["kind"]
+): string {
+  return `source-refresh-${kind}`;
+}
+
+/** 把 refresh 的 ingestion 结果压缩为人和脚本都易读的计数，不重复输出数百条 job。 */
+function summarizeRefreshIngestion(
+  result: Awaited<ReturnType<typeof runConnectorIngestion>>
+): {
+  connectorId: string;
+  inventory: typeof result.inventory;
+  discovered: number;
+  completed: number;
+  skipped: number;
+  failed: number;
+  unresolvedFailures: number;
+  classifications: Record<string, number>;
+} {
+  const classifications: Record<string, number> = {};
+  for (const job of result.jobs) {
+    const classification = job.classification ?? job.status;
+    classifications[classification] =
+      (classifications[classification] ?? 0) + 1;
+  }
+  return {
+    connectorId: result.connectorId,
+    inventory: result.inventory,
+    discovered: result.discovered,
+    completed: result.completed,
+    skipped: result.skipped,
+    failed: result.failed,
+    unresolvedFailures: result.unresolvedFailures,
+    classifications
+  };
+}
+
+/** refresh 默认只返回检查摘要；逐 source 状态由 `source check` 单独提供。 */
+function summarizeRefreshCheck(
+  report: Awaited<ReturnType<typeof checkConnectorSourceUpdates>>
+): {
+  checkedAt: string;
+  freshnessBoundary: typeof report.freshnessBoundary;
+  inventory: typeof report.inventory;
+  summary: typeof report.summary;
+} {
+  return {
+    checkedAt: report.checkedAt,
+    freshnessBoundary: report.freshnessBoundary,
+    inventory: report.inventory,
+    summary: report.summary
+  };
+}
+
 ingest
   .command("files")
   .description(
@@ -784,6 +876,23 @@ ingest
     "secrets-only"
   )
   .option("--limit <count>", t("本次最多处理 source 数", "maximum sources in this run"))
+  .addHelpText(
+    "after",
+    t(
+      `
+示例：
+  agent-knowledge ingest files --connector-id business-docs --base-dir /secure/docs --pattern '**/*.md' --project-key github.com/example/business
+
+边界：只读取 base-dir 内的 UTF-8 普通文件，不跟随 symlink。含个人信息时使用 --redaction secrets-and-pii。
+首次摄入后，日常可用 agent-knowledge source refresh --connector-id business-docs。`,
+      `
+Examples:
+  agent-knowledge ingest files --connector-id business-docs --base-dir /secure/docs --pattern '**/*.md' --project-key github.com/example/business
+
+Boundary: reads UTF-8 regular files under base-dir only and does not follow symlinks. Use --redaction secrets-and-pii for personal data.
+After first ingestion, use agent-knowledge source refresh --connector-id business-docs for daily updates.`
+    )
+  )
   .action(async (options: {
     connectorId: string;
     baseDir: string;
@@ -894,6 +1003,21 @@ ingest
     []
   )
   .option("--limit <count>", t("本次最多处理 source 数", "maximum sources in this run"))
+  .addHelpText(
+    "after",
+    t(
+      `
+示例：
+  agent-knowledge ingest transcripts --connector-id trae-sessions --base-dir /secure/sessions --project-key github.com/example/business
+
+边界：强制执行 secrets-and-pii 脱敏；完整会话只进入加密 Vault，不进入普通查询。`,
+      `
+Example:
+  agent-knowledge ingest transcripts --connector-id trae-sessions --base-dir /secure/sessions --project-key github.com/example/business
+
+Boundary: secrets-and-pii redaction is mandatory; complete sessions go to encrypted Vault and never enter ordinary queries.`
+    )
+  )
   .action(async (options: {
     connectorId: string;
     baseDir: string;
@@ -977,6 +1101,25 @@ ingest
     "secrets-only"
   )
   .option("--limit <count>", t("本次最多处理 source 数", "maximum sources in this run"))
+  .addHelpText(
+    "after",
+    t(
+      `
+示例：
+  agent-knowledge ingest git --connector-id business-repository --repository /projects/business --pathspec README.md docs
+  agent-knowledge ingest git --connector-id business-repository --repository /projects/business --ref origin/main --pathspec docs
+
+边界：只读取本地 committed blob（来自 Git object database），不读取 dirty/untracked 内容，也不会执行 fetch/pull。
+首次摄入后，日常可用 agent-knowledge source refresh --connector-id business-repository。`,
+      `
+Examples:
+  agent-knowledge ingest git --connector-id business-repository --repository /projects/business --pathspec README.md docs
+  agent-knowledge ingest git --connector-id business-repository --repository /projects/business --ref origin/main --pathspec docs
+
+Boundary: reads local committed blobs from the Git object database only; it ignores dirty/untracked content and never runs fetch/pull.
+After first ingestion, use agent-knowledge source refresh --connector-id business-repository for daily updates.`
+    )
+  )
   .action(async (options: {
     connectorId: string;
     repository: string;
@@ -1059,6 +1202,21 @@ ingest
   )
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--limit <count>", t("本次最多处理 source 数；带 limit 时不做删除对账", "maximum sources; disables removal reconciliation when set"))
+  .addHelpText(
+    "after",
+    t(
+      `
+示例：
+  agent-knowledge ingest lark-export --connector-id lark-business --export-dir /secure/exports/lark --project-key github.com/example/business
+
+边界：只读取 offline export，不访问在线飞书。要识别在线更新，先显式刷新 export，再运行 source refresh。`,
+      `
+Example:
+  agent-knowledge ingest lark-export --connector-id lark-business --export-dir /secure/exports/lark --project-key github.com/example/business
+
+Boundary: reads the offline export only and never accesses online Lark. Refresh the export explicitly before source refresh to detect online changes.`
+    )
+  )
   .action(async (options: {
     connectorId: string;
     exportDir: string;
@@ -1622,6 +1780,28 @@ const source = program
     )
   );
 
+source.addHelpText(
+  "after",
+  t(
+    `
+推荐日常流程：
+  1. agent-knowledge source refresh
+  2. agent-knowledge source list --needs-review
+  3. agent-knowledge source show <source-id>
+  4. 使用 source-distiller 审阅并标记结果
+
+边界：source check/refresh 都不会自动 fetch Git 远端或刷新在线飞书；应先显式更新本地 ref 或 offline export。`,
+    `
+Recommended daily workflow:
+  1. agent-knowledge source refresh
+  2. agent-knowledge source list --needs-review
+  3. agent-knowledge source show <source-id>
+  4. Review and mark results with source-distiller
+
+Boundary: source check/refresh never fetch Git remotes or refresh online Lark automatically; update the local ref or offline export explicitly first.`
+  )
+);
+
 source
   .command("list")
   .description(
@@ -1682,6 +1862,186 @@ source
   });
 
 source
+  .command("refresh")
+  .description(
+    t(
+      "按登记执行检查 → 按需摄入 → 复查，无需重复填写 Connector scope",
+      "Run check -> conditional ingestion -> recheck from registrations without repeating Connector scope"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option(
+    "--connector-id <id...>",
+    t("只刷新指定的已登记 Connector", "refresh only selected registered Connectors")
+  )
+  .option(
+    "--force",
+    t(
+      "即使 probe 未发现变化也强制运行 ingestion",
+      "run ingestion even when probes report no change"
+    ),
+    false
+  )
+  .option(
+    "--limit <count>",
+    t(
+      "每个 Connector 本次最多处理的 source 数；会禁用完整 inventory 删除对账",
+      "maximum sources per Connector; disables complete-inventory removal reconciliation"
+    )
+  )
+  .option(
+    "--fail-on-error",
+    t("任一 Connector 失败时以状态码 2 退出", "exit with status 2 when any Connector fails"),
+    false
+  )
+  .addHelpText(
+    "after",
+    t(
+      `
+示例：
+  agent-knowledge source refresh
+  agent-knowledge source refresh --connector-id lark-business business-repository
+  agent-knowledge source refresh --connector-id business-docs --force
+
+流程：检查 → 按需摄入 → 复查。无变化时不会读取 Vault key。
+安全边界：不会自动 fetch Git 远端，也不会刷新在线飞书；请先显式更新本地 ref 或 offline export。
+输出按 Connector 汇总；逐 source 详情使用 source check。`,
+      `
+Examples:
+  agent-knowledge source refresh
+  agent-knowledge source refresh --connector-id lark-business business-repository
+  agent-knowledge source refresh --connector-id business-docs --force
+
+Flow: check -> conditional ingestion -> recheck. The Vault key is not read when nothing changed.
+Safety boundary: this never fetches Git remotes or refreshes online Lark; explicitly update the local ref or offline export first.
+Output is summarized by Connector; use source check for per-source details.`
+    )
+  )
+  .action(async (options: {
+    root?: string;
+    connectorId?: string[];
+    force: boolean;
+    limit?: string;
+    failOnError: boolean;
+  }) => {
+    const root = resolveCliRoot(options.root);
+    const registrations = await listConnectorRegistrations(root);
+    const requested = new Set(options.connectorId ?? []);
+    const selected =
+      requested.size === 0
+        ? registrations
+        : registrations.filter((registration) =>
+            requested.has(registration.connectorId)
+          );
+    const missing = [...requested].filter(
+      (connectorId) =>
+        !registrations.some(
+          (registration) => registration.connectorId === connectorId
+        )
+    );
+    const limit =
+      options.limit === undefined
+        ? undefined
+        : parseIngestionLimit(options.limit);
+    const results: Array<Record<string, unknown>> = missing.map(
+      (connectorId) => ({
+        connectorId,
+        action: "error",
+        error: "connector_not_registered"
+      })
+    );
+
+    for (const registration of selected) {
+      try {
+        const connector = createConnectorFromRegistration(registration);
+        const before = await checkConnectorSourceUpdates(
+          root,
+          connector,
+          registration
+        );
+        const needsRefresh =
+          options.force ||
+          before.summary.updatesAvailable > 0 ||
+          before.summary.verificationRequired > 0;
+        if (!needsRefresh) {
+          results.push({
+            connectorId: registration.connectorId,
+            action: "unchanged",
+            check: summarizeRefreshCheck(before)
+          });
+          continue;
+        }
+        const ingestion = await runRegisteredConnectorIngestion(
+          root,
+          connector,
+          connectorRegistrationInput(registration),
+          {
+            vault: {
+              key: configuredVaultKey(),
+              actor: refreshVaultActor(registration.kind)
+            },
+            redactionPolicy: registration.redactionPolicy,
+            ...(limit === undefined ? {} : { limit })
+          }
+        );
+        const currentRegistration = await readConnectorRegistration(
+          root,
+          registration.connectorId
+        );
+        if (!currentRegistration) {
+          throw new Error(
+            `Connector registration disappeared after refresh: ${registration.connectorId}`
+          );
+        }
+        const after = await checkConnectorSourceUpdates(
+          root,
+          connector,
+          currentRegistration
+        );
+        results.push({
+          connectorId: registration.connectorId,
+          action: "refreshed",
+          before: summarizeRefreshCheck(before),
+          ingestion: summarizeRefreshIngestion(ingestion),
+          after: summarizeRefreshCheck(after)
+        });
+      } catch (error) {
+        results.push({
+          connectorId: registration.connectorId,
+          action: "error",
+          error: redactIngestionError(
+            error,
+            registration.redactionPolicy
+          )
+        });
+      }
+    }
+
+    const summary = {
+      connectors: selected.length,
+      refreshed: results.filter((result) => result.action === "refreshed")
+        .length,
+      unchanged: results.filter((result) => result.action === "unchanged")
+        .length,
+      errors: results.filter((result) => result.action === "error").length
+    };
+    console.log(
+      JSON.stringify(
+        {
+          networkAccess: "none",
+          summary,
+          results
+        },
+        null,
+        2
+      )
+    );
+    if (options.failOnError && summary.errors > 0) {
+      process.exitCode = 2;
+    }
+  });
+
+source
   .command("check")
   .description(
     t(
@@ -1701,6 +2061,25 @@ source
       "exit with status 2 when updates, required verification, or check errors exist"
     ),
     false
+  )
+  .addHelpText(
+    "after",
+    t(
+      `
+示例：
+  agent-knowledge source check
+  agent-knowledge source check --connector-id lark-business
+  agent-knowledge source check --fail-on-updates
+
+只检查本地 ref/offline export；若要自动执行必要的摄入和复查，请使用 source refresh。`,
+      `
+Examples:
+  agent-knowledge source check
+  agent-knowledge source check --connector-id lark-business
+  agent-knowledge source check --fail-on-updates
+
+Checks local refs/offline exports only; use source refresh to run required ingestion and recheck automatically.`
+    )
   )
   .action(async (options: {
     root?: string;
@@ -1876,6 +2255,27 @@ source
     t("duplicate 时必填的规范 source ID", "canonical source ID required for duplicate")
   )
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .addHelpText(
+    "after",
+    t(
+      `
+状态要求：
+  - refined 需要 active knowledge，且 current claim anchor 指向该 source
+  - duplicate 需要 --duplicate-of <source-id>
+  - obsolete、blocked、no_long_term_value 需要不含敏感原值的 --reason
+
+示例：
+  agent-knowledge source mark src_example --fingerprint <sha256> --review-token <token> --status refined --knowledge-id k_example`,
+      `
+Status requirements:
+  - refined requires active knowledge with a current claim anchor to this source
+  - duplicate requires --duplicate-of <source-id>
+  - obsolete, blocked, and no_long_term_value require --reason without sensitive raw values
+
+Example:
+  agent-knowledge source mark src_example --fingerprint <sha256> --review-token <token> --status refined --knowledge-id k_example`
+    )
+  )
   .action(async (
     sourceId: string,
     options: {
@@ -1935,6 +2335,43 @@ event
   .option("--parent-event-id <id>", t("同 stream 中的父事件 ID", "parent event ID in the same stream"))
   .option("--idempotency-key <key>", t("上游稳定事件 key，用于安全重试", "stable upstream event key for safe retries"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .addHelpText(
+    "after",
+    t(
+      `
+support 阶段：
+  intake, triage, query, hypothesis, root_cause, action,
+  verification, escalation, closure, recurrence
+
+initiative 阶段：
+  discovery, review, design, development, testing, release,
+  operations, incident, retrospective, cancelled
+
+示例：
+  agent-knowledge event append --stream-type support --stream-id case_ticket_123 \
+    --stage intake --event-type customer_question --summary "客户反馈登录失败" \
+    --payload /secure/tmp/message.json --content-type application/json \
+    --idempotency-key message_987
+
+安全边界：完整 payload 只从文件读取，经脱敏后进入 Vault；Git timeline 只保存脱敏摘要。`,
+      `
+Support stages:
+  intake, triage, query, hypothesis, root_cause, action,
+  verification, escalation, closure, recurrence
+
+Initiative stages:
+  discovery, review, design, development, testing, release,
+  operations, incident, retrospective, cancelled
+
+Example:
+  agent-knowledge event append --stream-type support --stream-id case_ticket_123 \
+    --stage intake --event-type customer_question --summary "customer reports login failure" \
+    --payload /secure/tmp/message.json --content-type application/json \
+    --idempotency-key message_987
+
+Safety boundary: complete payloads are read from files only, redacted, and stored in Vault; the Git timeline keeps redacted summaries only.`
+    )
+  )
   .action(async (options: {
     streamType: string;
     streamId: string;
@@ -2096,6 +2533,7 @@ event
 
 program
   .command("write-candidate")
+  .description(t("把单个候选 JSON 安全写入 knowledge/_inbox", "Safely write one candidate JSON into knowledge/_inbox"))
   .requiredOption("--input <file>", t("候选 JSON 文件", "candidate JSON file"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { input: string; root?: string }) => {
@@ -2243,6 +2681,7 @@ sync
 
 sync
   .command("webdav")
+  .description(t("使用显式 WebDAV 参数执行一次 Markdown 同步", "Run one Markdown sync with explicit WebDAV options"))
   .requiredOption("--url <url>", t("WebDAV 集合 URL", "WebDAV collection URL"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--username <username>", t("WebDAV 用户名", "WebDAV username"))
@@ -2278,6 +2717,7 @@ sync
 
 sync
   .command("s3")
+  .description(t("使用显式 S3 参数执行一次 Markdown 同步", "Run one Markdown sync with explicit S3 options"))
   .requiredOption("--bucket <bucket>", t("S3 bucket", "S3 bucket"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--region <region>", t("AWS region", "AWS region"), "us-east-1")
@@ -2338,6 +2778,7 @@ const staging = program.commands.find((command) => command.name() === "staging")
 
 staging
   .command("status")
+  .description(t("汇总待消费 staging 事件，不输出原始正文", "Summarize pending staging events without raw content"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { root?: string }) => {
     console.log(JSON.stringify(await getStagingStatus(resolveCliRoot(options.root)), null, 2));
@@ -2345,6 +2786,7 @@ staging
 
 staging
   .command("drain")
+  .description(t("消费有界 staging 事件供显式维护流程使用", "Drain bounded staging events for explicit maintenance workflows"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--limit <count>", t("最大消费事件数", "maximum events to consume"), "100")
   .action(async (options: { root?: string; limit: string }) => {
@@ -2365,6 +2807,7 @@ const subagents = program
 
 subagents
   .command("status")
+  .description(t("汇总本地 Subagent 日志状态", "Summarize local Subagent log status"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { root?: string }) => {
     console.log(
@@ -2374,6 +2817,7 @@ subagents
 
 subagents
   .command("logs")
+  .description(t("读取本地详细 Subagent 调试日志", "Read local detailed Subagent debug logs"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--agent-type <type>", t("按 Subagent 类型过滤", "filter by Subagent type"))
   .option("--event <event>", t("subagent_start 或 subagent_stop", "subagent_start or subagent_stop"))
@@ -2424,6 +2868,7 @@ maintenance
 
 maintenance
   .command("status")
+  .description(t("汇总 observation 和 maintenance watermark 状态", "Summarize observation and maintenance watermark status"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { root?: string }) => {
     console.log(
@@ -2478,6 +2923,7 @@ maintenance
 
 maintenance
   .command("show")
+  .description(t("显示单个 maintenance proposal", "Show one maintenance proposal"))
   .argument("<proposal-id>", t("Proposal ID", "Proposal ID"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (proposalId: string, options: { root?: string }) => {
@@ -2492,6 +2938,7 @@ maintenance
 
 maintenance
   .command("accept")
+  .description(t("接受 proposal 并写入知识或 Skill inbox", "Accept a proposal into the knowledge or Skill inbox"))
   .argument("<proposal-id>", t("Proposal ID", "Proposal ID"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--skill-target <target>", t("Skill 目标：project 或 user；不传则进入 inbox", "Skill target: project or user; omit for inbox"))
@@ -2565,6 +3012,7 @@ maintenance
 
 maintenance
   .command("reject")
+  .description(t("拒绝 proposal 并记录原因", "Reject a proposal and record the reason"))
   .argument("<proposal-id>", t("Proposal ID", "Proposal ID"))
   .requiredOption("--reason <reason>", t("拒绝原因", "rejection reason"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
@@ -2648,6 +3096,7 @@ const project = program.commands.find((command) => command.name() === "project")
 
 project
   .command("detect")
+  .description(t("探测并登记当前目录的规范 project key", "Detect and register the canonical project key for a directory"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--cwd <dir>", t("要检查的目录", "directory to inspect"), process.cwd())
   .option(
@@ -2672,6 +3121,7 @@ const graph = program
 
 graph
   .command("build")
+  .description(t("从当前知识和 proposal 重建关系图", "Rebuild the relationship graph from current knowledge and proposals"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .action(async (options: { root?: string }) => {
     const built = await buildKnowledgeGraph(resolveCliRoot(options.root));
@@ -2690,6 +3140,7 @@ graph
 
 graph
   .command("query")
+  .description(t("按文本或节点 ID 查询有限深度子图", "Query a bounded-depth subgraph by text or node ID"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
   .option("--text <text>", t("节点文本搜索", "node text search"))
   .option("--id <id>", t("节点或知识 ID", "node or knowledge ID"))
@@ -2713,6 +3164,7 @@ graph
 
 graph
   .command("export")
+  .description(t("把当前关系图导出为 JSON、Mermaid 或离线 HTML", "Export the graph as JSON, Mermaid, or offline HTML"))
   .requiredOption("--format <format>", t("json、mermaid 或 html", "json, mermaid, or html"))
   .requiredOption("--output <file>", t("输出文件", "output file"))
   .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
@@ -2758,6 +3210,7 @@ integration
 
 integration
   .command("install")
+  .description(t("结构化安装 hooks、agents、skills 或 plugin bundle", "Structurally install hooks, agents, skills, or a plugin bundle"))
   .option("--product <product>", t("trae、trae-cn 或 claude-code", "trae, trae-cn, or claude-code"))
   .option("--scope <scope>", t("user 或 project", "user or project"))
   .option("--components <components>", t("逗号分隔的 hooks,agents,skills,plugin-bundle", "comma-separated hooks,agents,skills,plugin-bundle"))
@@ -2851,6 +3304,7 @@ integration
 
 integration
   .command("uninstall")
+  .description(t("只卸载 Agent Knowledge 管理的产品资源", "Uninstall only product resources managed by Agent Knowledge"))
   .requiredOption("--product <product>", t("trae、trae-cn 或 claude-code", "trae, trae-cn, or claude-code"))
   .option("--scope <scope>", t("user 或 project", "user or project"), "user")
   .option("--target-dir <dir>", t("覆盖产品配置根目录", "override product config root"))
@@ -2880,6 +3334,7 @@ integration
 
 integration
   .command("doctor")
+  .description(t("检查产品接入是否完整且未发生冲突", "Check whether product integration is complete and conflict-free"))
   .requiredOption("--product <product>", t("trae、trae-cn 或 claude-code", "trae, trae-cn, or claude-code"))
   .option("--scope <scope>", t("user 或 project", "user or project"), "user")
   .option("--target-dir <dir>", t("覆盖产品配置根目录", "override product config root"))

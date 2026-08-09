@@ -8,8 +8,7 @@ description: "审阅 Agent Knowledge 的 versioned source manifest 和 Evidence 
 本 Skill 处理已经通过 Connector 摄入的 source，不负责爬取或绕过 Vault：
 
 ```text
-source check（仅本地/离线 probe）
-  -> 有变化时显式刷新 snapshot 并重新 ingest
+source refresh（check -> 按需 ingest -> recheck）
   -> source list/show
   -> source export 到受控临时文件
   -> 语义拆分与领域确认
@@ -29,19 +28,24 @@ source check（仅本地/离线 probe）
 
 ## 1. 检查来源版本
 
-先检查已登记 Connector：
+日常直接刷新已登记 Connector：
 
 ```bash
-agent-knowledge source check
+agent-knowledge source refresh
 ```
 
-或只检查当前来源：
+或只刷新当前来源：
 
 ```bash
-agent-knowledge source check --connector-id "$CONNECTOR_ID"
+agent-knowledge source refresh --connector-id "$CONNECTOR_ID"
 ```
 
-`source check` 不需要 Vault key，不读取正文，也不写 Vault、manifest 或 checkpoint。状态解释：
+`source refresh` 先运行 probe-only check，只在有确定更新、`update_unknown` 或显式 `--force`
+时执行 ingestion，然后重新 check。它复用登记中的 base dir/glob/project key/pathspec/redaction
+policy，不需要手工重填。无变化时不读取 Vault key。
+
+只想审计、不想摄入时使用 `source check`；它不需要 Vault key，不读取正文，也不写
+Vault、manifest 或 checkpoint。状态解释：
 
 - `unchanged`：当前本地/离线 probe 与 manifest 一致。
 - `metadata_only`：正文身份未变，但 commit/revision/time 等 metadata 变化；重新 ingest 更新版本即可。
@@ -57,10 +61,8 @@ agent-knowledge source check --connector-id "$CONNECTOR_ID"
 - 飞书只检查登记的 offline export。先显式运行 `fetch-lark-corpus.mjs --refresh-existing`
   更新导出，再执行 `source check`；旧 export 不能代表在线文档最新版本。
 
-报告有更新或 `verificationRequired > 0` 时，用原 Connector scope 重新执行对应
-`ingest files|transcripts|git|lark-export`。不得漏掉原 `project-key`、pathspec、glob 或
-redaction policy；登记表会拒绝同 ID 的 scope 降级/漂移。摄入后再次 `source check`，
-确认报告回到 current/unchanged。
+登记表会拒绝同 ID 的 scope 降级/漂移。需要小批验证时使用 `source refresh --limit <n>`；
+需要无变化强制重跑处理规则时使用 `--force`。
 
 ## 2. 查看队列
 
@@ -237,6 +239,7 @@ duplicate target 必须是 available 的规范 source，不能再指向另一个
 
 ```bash
 agent-knowledge source check
+agent-knowledge source refresh
 agent-knowledge source list --needs-review
 agent-knowledge knowledge audit --fail-on warning
 ```

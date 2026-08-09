@@ -150,6 +150,48 @@ export type RegisterConnectorResult = {
   created: boolean;
 };
 
+/**
+ * 把持久化登记投影回可重放的严格输入。
+ *
+ * generation、时间和 scope fingerprint 只属于本地登记快照，不能传回 strict input schema；
+ * refresh 等调用方必须通过此函数复用原 scope，避免手工重组时漏掉 project key 或 pathspec。
+ */
+export function connectorRegistrationInput(
+  rawRegistration: ConnectorRegistration
+): ConnectorRegistrationInput {
+  const registration = ConnectorRegistrationSchema.parse(rawRegistration);
+  switch (registration.kind) {
+    case "files":
+      return ConnectorRegistrationInputSchema.parse({
+        kind: registration.kind,
+        connectorId: registration.connectorId,
+        redactionPolicy: registration.redactionPolicy,
+        options: registration.options
+      });
+    case "transcripts":
+      return ConnectorRegistrationInputSchema.parse({
+        kind: registration.kind,
+        connectorId: registration.connectorId,
+        redactionPolicy: registration.redactionPolicy,
+        options: registration.options
+      });
+    case "git":
+      return ConnectorRegistrationInputSchema.parse({
+        kind: registration.kind,
+        connectorId: registration.connectorId,
+        redactionPolicy: registration.redactionPolicy,
+        options: registration.options
+      });
+    case "lark-export":
+      return ConnectorRegistrationInputSchema.parse({
+        kind: registration.kind,
+        connectorId: registration.connectorId,
+        redactionPolicy: registration.redactionPolicy,
+        options: registration.options
+      });
+  }
+}
+
 /** 用稳定 hash 生成登记文件名，避免 Connector ID 中的冒号影响跨平台路径。 */
 function registrationFileName(connectorId: string): string {
   const parsed = ConnectorIdSchema.parse(connectorId);

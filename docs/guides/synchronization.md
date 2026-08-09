@@ -13,7 +13,8 @@ Vault 的 backup/restore。
 
 `.memory/ingestion/connectors` 保存本机绝对 source 路径和非凭据 scope，
 `.memory/ingestion/update-checks` 保存最近一次本地/离线 probe 报告；两者都不得进入 Git、
-WebDAV/S3 或跨设备覆盖。多设备各自登记本地路径并运行 `source check`。可审计的 source 当前
+WebDAV/S3 或跨设备覆盖。多设备各自登记本地路径；只读审计运行 `source check`，日常更新
+运行 `source refresh`。可审计的 source 当前
 版本和历史变更由 `knowledge/source-manifests/*.json` 及 private Git history 承担；完整 evidence
 由 Vault backup/restore 承担。
 
