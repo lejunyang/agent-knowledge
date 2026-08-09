@@ -10,11 +10,13 @@ import type { GraphEdgeType, KnowledgeGraph } from "../graph/types.js";
 import type { MemoryQueryRequest, RankedMemory } from "../core/types.js";
 import {
   loadAccessibleMemoriesByIds,
+  recordFinalQueryResult,
   queryMemoriesHybridWithDebug,
   queryMemoriesWithDebug,
   type QueryMemoriesDebugResult
 } from "./query.js";
 import type { EmbeddingProvider } from "./embeddings.js";
+import { MemoryQueryRequestSchema } from "../core/schema.js";
 
 export type GraphExpansion = {
   memoryId: string;
@@ -89,9 +91,10 @@ export async function queryMemoriesGraphWithDebug(
     decay?: number;
     embeddingProvider?: EmbeddingProvider;
     embeddingTopK?: number;
+    log?: boolean;
   }
 ): Promise<QueryMemoriesDebugResult> {
-  const request = rawRequest as MemoryQueryRequest;
+  const request = MemoryQueryRequestSchema.parse(rawRequest);
   const base =
     options.baseMode === "hybrid"
       ? await queryMemoriesHybridWithDebug(rootDir, rawRequest, {
@@ -100,9 +103,10 @@ export async function queryMemoriesGraphWithDebug(
             (() => {
               throw new Error("hybrid-graph requires an embedding provider");
             })(),
-          embeddingTopK: options.embeddingTopK
+          embeddingTopK: options.embeddingTopK,
+          log: false
         })
-      : queryMemoriesWithDebug(rootDir, rawRequest);
+      : queryMemoriesWithDebug(rootDir, rawRequest, { log: false });
   let graph: KnowledgeGraph;
   try {
     graph = readKnowledgeGraph(rootDir);
@@ -141,7 +145,7 @@ export async function queryMemoriesGraphWithDebug(
   const baseScores = new Map(
     base.debug.resultScores.map((score) => [score.id, score])
   );
-  return {
+  const result: QueryMemoriesDebugResult = {
     ranked,
     debug: {
       ...base.debug,
@@ -180,6 +184,8 @@ export async function queryMemoriesGraphWithDebug(
       })
     }
   };
+  recordFinalQueryResult(rootDir, request, result, options.log !== false);
+  return result;
 }
 
 /** 消除浮点噪声，使 debug 输出和确定性测试稳定。 */

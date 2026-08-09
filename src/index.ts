@@ -70,3 +70,4 @@ export * from "./graph/html.js";
 export * from "./graph/view.js";
 export * from "./automation/index.js";
 export * from "./sidecar/index.js";
+export * from "./policy/index.js";

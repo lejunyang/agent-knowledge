@@ -1636,15 +1636,19 @@ program
         decay: graphDecay,
         embeddingProvider:
           retrievalMode === "hybrid-graph" ? embeddingProvider : undefined,
-        embeddingTopK
+        embeddingTopK,
+        log: !options.rerank
       });
     } else if (retrievalMode === "hybrid") {
       baseResult = await queryMemoriesHybridWithDebug(root, request, {
         embeddingProvider,
-        embeddingTopK
+        embeddingTopK,
+        log: !options.rerank
       });
     } else {
-      baseResult = queryMemoriesWithDebug(root, request);
+      baseResult = queryMemoriesWithDebug(root, request, {
+        log: !options.rerank
+      });
     }
     const { ranked, debug } = options.rerank
       ? await queryMemoriesRerankedWithDebug(root, request, {
@@ -1663,7 +1667,11 @@ program
           rerankerWeight: configuredEmbeddings.rerankerModelWeight
         })
       : baseResult;
-    const packet = buildContextPacket({ request, ranked });
+    const packet = buildContextPacket({
+      request,
+      ranked,
+      queryRun: { rootDir: root, queryRunId: debug.queryRunId }
+    });
     console.log(JSON.stringify(options.debug ? { packet, debug } : packet, null, 2));
   });
 
@@ -4270,7 +4278,11 @@ hook
         projectKeys: detectedProject ? [detectedProject.key] : []
       });
       const { ranked, debug } = queryMemoriesWithDebug(root, request);
-      const packet = buildContextPacket({ request, ranked });
+      const packet = buildContextPacket({
+        request,
+        ranked,
+        queryRun: { rootDir: root, queryRunId: debug.queryRunId }
+      });
       const injection = decideHookInjection({
         prompt,
         ranked,

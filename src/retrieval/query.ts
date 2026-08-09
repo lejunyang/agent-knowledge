@@ -35,6 +35,7 @@ import {
   type BatchCandidateReranker
 } from "./reranker.js";
 import { aliasValues } from "../core/knowledgeText.js";
+import { recordQueryRetrieval } from "../policy/queryRuns.js";
 
 const require = createRequire(import.meta.url);
 // 与 indexer 保持一致，使用 Node 内置 sqlite 读取 FTS5 索引。
@@ -142,6 +143,50 @@ export type QueryBatchRerankOptions = QueryScoringOptions & {
   baseWeight?: number;
   rerankerWeight?: number;
 };
+
+/**
+ * 统一记录最终 query pipeline，避免 lexical/hybrid/graph/rerank 内部阶段重复计为独立 run。
+ *
+ * 普通运行日志只保留 scope 和结果 ID；完整 debug 由调用方显式 `--debug` 查看，不持久化 token
+ * 与 FTS query，防止业务术语或 prompt 片段长期残留在 `.memory/logs`。
+ */
+export function recordFinalQueryResult(
+  rootDir: string,
+  request: MemoryQueryRequest,
+  result: QueryMemoriesDebugResult,
+  enabled = true
+): void {
+  if (!enabled) {
+    return;
+  }
+  recordQueryRetrieval(rootDir, {
+    queryRunId: result.debug.queryRunId,
+    task: request.task,
+    domains: request.domains,
+    scenarios: request.scenarios,
+    projectKeys: request.projectKeys,
+    retrievalMode: result.debug.retrievalMode,
+    candidateIds: result.debug.resultIds,
+    resultScores: result.debug.resultScores.map((score) => ({
+      id: score.id,
+      finalScore: score.finalScore,
+      queryCoverageScore: score.queryCoverageScore
+    }))
+  });
+  appendJsonlLog(rootDir, {
+    event: "query",
+    queryRunId: result.debug.queryRunId,
+    taskLength: request.task.length,
+    domains: request.domains,
+    scenarios: request.scenarios,
+    projectKeys: request.projectKeys,
+    debug: {
+      queryRunId: result.debug.queryRunId,
+      retrievalMode: result.debug.retrievalMode,
+      resultIds: result.debug.resultIds
+    }
+  });
+}
 
 // 只有这些关系允许自动扩展。冲突和替代关系只应进入 warnings，不能当作普通上下文注入。
 const RELATION_EXPANSION = new Set(["depends_on", "refines", "supports", "often_used_with"]);
@@ -1021,16 +1066,7 @@ export function queryMemoriesWithDebug(
   const selection = selectCandidateRows(rootDir, request);
   const result = rankSelectedRows(rootDir, request, selection, scoringOptions);
 
-  if (scoringOptions.log !== false) {
-    appendJsonlLog(rootDir, {
-      event: "query",
-      queryRunId: result.debug.queryRunId,
-      taskLength: request.task.length,
-      domains: request.domains,
-      scenarios: request.scenarios,
-      debug: result.debug
-    });
-  }
+  recordFinalQueryResult(rootDir, request, result, scoringOptions.log !== false);
 
   return result;
 }
@@ -1073,16 +1109,7 @@ export async function queryMemoriesHybridWithDebug(
   };
   const result = rankSelectedRows(rootDir, request, selection, options);
 
-  if (options.log !== false) {
-    appendJsonlLog(rootDir, {
-      event: "query",
-      queryRunId: result.debug.queryRunId,
-      taskLength: request.task.length,
-      domains: request.domains,
-      scenarios: request.scenarios,
-      debug: result.debug
-    });
-  }
+  recordFinalQueryResult(rootDir, request, result, options.log !== false);
 
   return result;
 }
@@ -1146,7 +1173,9 @@ export async function queryMemoriesRerankedWithDebug(
   options: QueryBatchRerankOptions
 ): Promise<QueryMemoriesDebugResult> {
   const request = MemoryQueryRequestSchema.parse(rawRequest);
-  const base = options.baseResult ?? queryMemoriesWithDebug(rootDir, request, options);
+  const base =
+    options.baseResult ??
+    queryMemoriesWithDebug(rootDir, request, { ...options, log: false });
   const candidateLimit = options.candidateLimit ?? 30;
   const resultLimit = options.resultLimit ?? 8;
   const minScore = options.minScore ?? 0.55;
@@ -1183,7 +1212,7 @@ export async function queryMemoriesRerankedWithDebug(
     })
     .filter((memory): memory is RankedMemory => memory !== null);
   const scoresById = new Map(base.debug.resultScores.map((item) => [item.id, item]));
-  return {
+  const result: QueryMemoriesDebugResult = {
     ranked,
     debug: {
       ...base.debug,
@@ -1206,4 +1235,6 @@ export async function queryMemoriesRerankedWithDebug(
       })
     }
   };
+  recordFinalQueryResult(rootDir, request, result, options.log !== false);
+  return result;
 }

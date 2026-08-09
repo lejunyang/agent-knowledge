@@ -6,10 +6,15 @@
  */
 import type { ContextPacket, ContextPacketItem, MemoryQueryRequest, RankedMemory } from "../core/types.js";
 import { aliasValues } from "../core/knowledgeText.js";
+import { recordQueryPacket } from "../policy/queryRuns.js";
 
 type BuildContextPacketInput = {
   request: MemoryQueryRequest;
   ranked: RankedMemory[];
+  queryRun?: {
+    rootDir: string;
+    queryRunId: string;
+  };
 };
 
 const MIN_DIRECT_SCORE = 0.35;
@@ -300,6 +305,18 @@ export function buildContextPacket(input: BuildContextPacketInput): ContextPacke
   }
   if (estimateContextPacketTokens(packet) > input.request.maxTokens) {
     throw new Error(`maxTokens=${input.request.maxTokens} is too small for the context packet envelope`);
+  }
+  if (input.queryRun) {
+    recordQueryPacket(input.queryRun.rootDir, {
+      queryRunId: input.queryRun.queryRunId,
+      injectedIds: [
+        ...packet.route,
+        ...packet.claims,
+        ...packet.procedures,
+        ...packet.principles,
+        ...packet.episodes
+      ].map((item) => item.id)
+    });
   }
 
   return packet;
