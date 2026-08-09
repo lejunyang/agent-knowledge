@@ -3219,6 +3219,43 @@ integration
   .option("--mode <mode>", t("merge 或 overwrite", "merge or overwrite"))
   .option("--overwrite", t("覆盖目标文件和 symlink", "replace target files and symlinks"), false)
   .option("--debug", t("输出完整 JSON", "emit the full JSON result"), false)
+  .addHelpText(
+    "after",
+    t(
+      `
+产品默认值：
+  TRAE / TRAE CN / Claude Code 默认安装 hooks,agents,skills。
+  Codex 默认安装 hooks,skills，不支持 standalone agents。
+
+Codex 路径：
+  Hooks:  ~/.codex/hooks.json 或 <repo>/.codex/hooks.json
+  Skills: ~/.agents/skills 或 <repo>/.agents/skills
+
+Codex plugin 模式：
+  agent-knowledge integration install --product codex --scope user --components plugin-bundle
+  codex plugin marketplace add ~/.codex/agent-knowledge-marketplace
+  codex plugin add agent-knowledge@agent-knowledge-local
+
+默认使用 merge，保留第三方 Hook 和未托管文件；只有显式 overwrite 才替换目标节点。
+`,
+      `
+Product defaults:
+  TRAE / TRAE CN / Claude Code install hooks,agents,skills by default.
+  Codex installs hooks,skills by default and does not support standalone agents.
+
+Codex paths:
+  Hooks:  ~/.codex/hooks.json or <repo>/.codex/hooks.json
+  Skills: ~/.agents/skills or <repo>/.agents/skills
+
+Codex plugin mode:
+  agent-knowledge integration install --product codex --scope user --components plugin-bundle
+  codex plugin marketplace add ~/.codex/agent-knowledge-marketplace
+  codex plugin add agent-knowledge@agent-knowledge-local
+
+Merge is the default and preserves foreign Hooks and unmanaged files. Only explicit overwrite replaces target nodes.
+`
+    )
+  )
   .action(
     async (options: {
       product?: string;

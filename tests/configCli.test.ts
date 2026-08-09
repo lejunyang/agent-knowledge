@@ -176,6 +176,11 @@ describe("CLI user configuration", () => {
     const eventAppend = await runCli(["event", "append", "--help"]);
     const sourceMark = await runCli(["source", "mark", "--help"]);
     const ingestGit = await runCli(["ingest", "git", "--help"]);
+    const integrationInstall = await runCli([
+      "integration",
+      "install",
+      "--help"
+    ]);
 
     expect(source).toContain("推荐日常流程");
     expect(source).toContain("source refresh");
@@ -190,6 +195,11 @@ describe("CLI user configuration", () => {
     expect(sourceMark).toContain("duplicate 需要 --duplicate-of");
     expect(ingestGit).toContain("只读取本地 committed blob");
     expect(ingestGit).toContain("不会执行 fetch/pull");
+    expect(integrationInstall).toContain("Codex 默认安装 hooks,skills");
+    expect(integrationInstall).toContain(".codex/hooks.json");
+    expect(integrationInstall).toContain(".agents/skills");
+    expect(integrationInstall).toContain("codex plugin marketplace add");
+    expect(integrationInstall).toContain("不支持 standalone agents");
   });
 
   it("describes user-facing management commands in parent help", async () => {
