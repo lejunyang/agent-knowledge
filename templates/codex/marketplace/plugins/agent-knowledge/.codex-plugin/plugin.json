@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Local governed knowledge retrieval, lifecycle recording, and memory maintenance for Codex",
   "skills": "./skills/",
+  "hooks": "./hooks.json",
   "interface": {
     "displayName": "Agent Knowledge",
     "shortDescription": "Governed local knowledge and memory workflows",

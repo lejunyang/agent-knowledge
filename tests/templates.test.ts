@@ -777,7 +777,10 @@ describe("managed integrations", () => {
         path.join(pluginRoot, ".codex-plugin", "plugin.json"),
         "utf8"
       )
-    ).resolves.toContain('"skills": "./skills/"');
+    ).resolves.toContain('"hooks": "./hooks.json"');
+    await expect(
+      readFile(path.join(pluginRoot, "hooks.json"), "utf8")
+    ).resolves.toContain("agent-knowledge hook user-prompt-submit");
     await expect(
       readFile(
         path.join(
