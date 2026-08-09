@@ -42,6 +42,33 @@ afterEach(async () => {
 });
 
 describe("managed integrations", () => {
+  it("keeps plugin-bundle Skills identical to the canonical project Skills", async () => {
+    for (const skillName of [
+      "knowledge-organizer",
+      "memory-maintainer",
+      "source-distiller",
+      "lifecycle-recorder"
+    ]) {
+      const canonical = await readFile(
+        path.join(".trae", "skills", skillName, "SKILL.md"),
+        "utf8"
+      );
+      const bundled = await readFile(
+        path.join(
+          "templates",
+          "trae",
+          "plugin",
+          "skills",
+          skillName,
+          "SKILL.md"
+        ),
+        "utf8"
+      );
+
+      expect(bundled, `${skillName} plugin Skill drifted`).toBe(canonical);
+    }
+  });
+
   it("installs TRAE hooks, agents, and skills as regular managed files", async () => {
     const targetDir = await mkdtemp(path.join(tmpdir(), "agent-knowledge-trae-target-"));
     tempDirs.push(targetDir);
