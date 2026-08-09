@@ -91,6 +91,7 @@ import {
   rejectMaintenanceProposal,
   readMaintenanceObservations,
   readNotification,
+  renderAutomationService,
   readConnectorRegistration,
   showMaintenanceProposal,
   showLifecycleEvent,
@@ -2972,6 +2973,100 @@ automation
       )
     );
   });
+
+const automationService = automation
+  .command("service")
+  .description(
+    t(
+      "渲染外部 Agent CLI 的常驻服务模板",
+      "Render background service templates for an external Agent CLI"
+    )
+  );
+
+automationService
+  .command("render")
+  .description(
+    t(
+      "生成 launchd、systemd 或 Docker 文件，不自动安装",
+      "Generate launchd, systemd, or Docker files without installing them"
+    )
+  )
+  .requiredOption(
+    "--manager <manager>",
+    t("launchd、systemd 或 docker", "launchd, systemd, or docker")
+  )
+  .requiredOption("--label <label>", t("安全服务标签", "safe service label"))
+  .requiredOption(
+    "--profile <file>",
+    t("Automation profile 绝对路径", "absolute automation profile path")
+  )
+  .requiredOption(
+    "--runner <file>",
+    t("外部 Agent wrapper 绝对路径", "absolute external Agent wrapper path")
+  )
+  .requiredOption(
+    "--interval-minutes <minutes>",
+    t("执行间隔分钟数", "execution interval in minutes")
+  )
+  .requiredOption(
+    "--output <dir>",
+    t("生成文件目录", "generated file directory")
+  )
+  .option(
+    "--workspace <dir>",
+    t("Docker 需要的知识库绝对路径", "absolute knowledge workspace required by Docker")
+  )
+  .option(
+    "--system-prompt <file>",
+    t("覆盖系统提示词绝对路径", "override the absolute system prompt path")
+  )
+  .addHelpText(
+    "after",
+    t(
+      `
+命令只生成模板并返回 install/uninstall 命令，不会调用 launchctl、systemctl 或 docker。
+Runner wrapper 契约见 templates/automation/runner-contract.md。`,
+      `
+This command only renders files and returns install/uninstall commands. It never invokes launchctl, systemctl, or Docker.
+See templates/automation/runner-contract.md for the wrapper contract.`
+    )
+  )
+  .action(
+    async (options: {
+      manager: string;
+      label: string;
+      profile: string;
+      runner: string;
+      intervalMinutes: string;
+      output: string;
+      workspace?: string;
+      systemPrompt?: string;
+    }) => {
+      if (
+        options.manager !== "launchd" &&
+        options.manager !== "systemd" &&
+        options.manager !== "docker"
+      ) {
+        throw new Error("--manager must be launchd, systemd, or docker");
+      }
+      console.log(
+        JSON.stringify(
+          await renderAutomationService({
+            manager: options.manager,
+            label: options.label,
+            profilePath: options.profile,
+            runnerPath: options.runner,
+            intervalMinutes: Number.parseInt(options.intervalMinutes, 10),
+            outputDir: options.output,
+            workspacePath: options.workspace,
+            systemPromptPath: options.systemPrompt
+          }),
+          null,
+          2
+        )
+      );
+    }
+  );
 
 const notifications = program
   .command("notifications")
