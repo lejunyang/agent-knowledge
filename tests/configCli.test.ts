@@ -279,6 +279,8 @@ describe("CLI user configuration", () => {
     const sidecarHistory = await runCli(["sidecar", "history", "--help"]);
     const feedback = await runCli(["feedback", "--help"]);
     const query = await runCli(["query", "--help"]);
+    const policy = await runCli(["policy", "--help"]);
+    const policyAccept = await runCli(["policy", "accept", "--help"]);
 
     expect(top).toContain("把单个候选 JSON 安全写入");
     expect(top).toContain("全局 --config/--locale/--json 必须放在子命令之前");
@@ -303,6 +305,9 @@ describe("CLI user configuration", () => {
     expect(feedback).toContain("--reason");
     expect(feedback).toContain("wrong_route");
     expect(query).toContain("--retain-task-evidence");
+    expect(policy).toContain("Retrieval Lesson / Reasoning Policy");
+    expect(policy).toContain("proposals");
+    expect(policyAccept).toContain("Git shadow Policy");
   });
 
   it("records query-level structured feedback without a memory ID", async () => {

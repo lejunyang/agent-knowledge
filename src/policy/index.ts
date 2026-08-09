@@ -2,3 +2,4 @@
 export * from "./queryRuns.js";
 export * from "./types.js";
 export * from "./store.js";
+export * from "./proposals.js";

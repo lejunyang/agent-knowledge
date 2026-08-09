@@ -18,6 +18,7 @@ import { Command } from "commander";
 import {
   MemoryQueryRequestSchema,
   acceptMaintenanceProposal,
+  acceptPolicyProposal,
   ackNotification,
   appendLifecycleEvent,
   applyMaintenanceCleanup,
@@ -64,6 +65,8 @@ import {
   listAutomationJobs,
   listKnowledge,
   listNotifications,
+  listPolicies,
+  listPolicyProposals,
   readSidecarComparisonHistory,
   retainQueryTaskEvidence,
   listSources,
@@ -88,9 +91,12 @@ import {
   readAutomationJob,
   readAutomationProfile,
   readMaintenanceProposals,
+  readPolicy,
+  readPolicyProposal,
   readKnowledgeGraph,
   resolveRetrievalModelDescriptor,
   rejectMaintenanceProposal,
+  rejectPolicyProposal,
   readMaintenanceObservations,
   readNotification,
   renderAutomationService,
@@ -128,6 +134,8 @@ import {
   readSidecarConfig,
   uninstallIntegration,
   writeSidecarConfig,
+  validatePolicyFile,
+  writePolicy,
   vaultKeyFromEnvironment,
   writeVaultObjectToFile,
   exportSourceEvidence,
@@ -1770,6 +1778,152 @@ program
         note: options.note
       });
       console.log(JSON.stringify(result, null, 2));
+    }
+  );
+
+const policy = program
+  .command("policy")
+  .description(
+    t(
+      "管理 shadow-only Retrieval Lesson / Reasoning Policy",
+      "Manage shadow-only Retrieval Lessons and Reasoning Policies"
+    )
+  );
+
+policy
+  .command("validate")
+  .description(t("校验 Policy YAML，不写 workspace", "Validate a Policy YAML without writing it"))
+  .requiredOption("--input <file>", t("Policy YAML 文件", "Policy YAML file"))
+  .action(async (options: { input: string }) => {
+    console.log(
+      JSON.stringify(
+        { valid: true, policy: await validatePolicyFile(options.input) },
+        null,
+        2
+      )
+    );
+  });
+
+policy
+  .command("import")
+  .description(
+    t(
+      "显式导入 reviewed shadow Policy，拒绝覆盖",
+      "Explicitly import a reviewed shadow Policy without overwrite"
+    )
+  )
+  .requiredOption("--input <file>", t("Policy YAML 文件", "Policy YAML file"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { input: string; root?: string }) => {
+    const imported = await validatePolicyFile(options.input);
+    const policyPath = await writePolicy(resolveCliRoot(options.root), imported);
+    console.log(JSON.stringify({ policyPath, policy: imported }, null, 2));
+  });
+
+policy
+  .command("list")
+  .description(t("列出 Git shadow Policies", "List Git-backed shadow Policies"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (options: { root?: string }) => {
+    console.log(
+      JSON.stringify(await listPolicies(resolveCliRoot(options.root)), null, 2)
+    );
+  });
+
+policy
+  .command("show")
+  .description(t("显示单个 Git Policy", "Show one Git-backed Policy"))
+  .argument("<policy-id>", t("Policy ID", "Policy ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (policyId: string, options: { root?: string }) => {
+    const item = await readPolicy(resolveCliRoot(options.root), policyId);
+    if (!item) {
+      throw new Error(`Policy not found: ${policyId}`);
+    }
+    console.log(JSON.stringify(item, null, 2));
+  });
+
+policy
+  .command("proposals")
+  .description(
+    t("列出 `.memory` Policy proposals", "List `.memory` Policy proposals")
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .option("--status <status>", t("pending、accepted 或 rejected", "pending, accepted, or rejected"))
+  .action(async (options: { root?: string; status?: string }) => {
+    const proposals = await listPolicyProposals(resolveCliRoot(options.root));
+    console.log(
+      JSON.stringify(
+        options.status
+          ? proposals.filter((proposal) => proposal.status === options.status)
+          : proposals,
+        null,
+        2
+      )
+    );
+  });
+
+policy
+  .command("proposal-show")
+  .description(t("显示单个 Policy proposal", "Show one Policy proposal"))
+  .argument("<proposal-id>", t("Policy proposal ID", "Policy proposal ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (proposalId: string, options: { root?: string }) => {
+    const proposal = await readPolicyProposal(
+      resolveCliRoot(options.root),
+      proposalId
+    );
+    if (!proposal) {
+      throw new Error(`Policy proposal not found: ${proposalId}`);
+    }
+    console.log(JSON.stringify(proposal, null, 2));
+  });
+
+policy
+  .command("accept")
+  .description(
+    t(
+      "显式接受 proposal 并写入 Git shadow Policy",
+      "Explicitly accept a proposal into the Git shadow Policy store"
+    )
+  )
+  .argument("<proposal-id>", t("Policy proposal ID", "Policy proposal ID"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(async (proposalId: string, options: { root?: string }) => {
+    console.log(
+      JSON.stringify(
+        await acceptPolicyProposal(
+          resolveCliRoot(options.root),
+          proposalId
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+policy
+  .command("reject")
+  .description(t("拒绝 Policy proposal 并保留原因", "Reject a Policy proposal with a reason"))
+  .argument("<proposal-id>", t("Policy proposal ID", "Policy proposal ID"))
+  .requiredOption("--reason <reason>", t("拒绝原因", "rejection reason"))
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .action(
+    async (
+      proposalId: string,
+      options: { root?: string; reason: string }
+    ) => {
+      console.log(
+        JSON.stringify(
+          await rejectPolicyProposal(
+            resolveCliRoot(options.root),
+            proposalId,
+            options.reason
+          ),
+          null,
+          2
+        )
+      );
     }
   );
 
