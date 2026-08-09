@@ -8,6 +8,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import fg from "fast-glob";
 import { KNOWLEDGE_DIRS, resolveWorkspacePath, toPosixRelativePath } from "../core/paths.js";
 import { isDiscoverableKnowledgeFile } from "./knowledgePaths.js";
+import { initializePolicyWorkspace } from "../policy/store.js";
 
 const README = `# Knowledge Base
 
@@ -54,6 +55,7 @@ export async function initKnowledgeWorkspace(rootDir: string): Promise<void> {
   await writeFileIfMissing(resolveWorkspacePath(rootDir, "knowledge", "_catalog.md"), "# Knowledge Catalog\n");
   await writeFileIfMissing(resolveWorkspacePath(rootDir, "knowledge", "_conflicts.md"), "# Knowledge Conflicts\n");
   await writeFileIfMissing(resolveWorkspacePath(rootDir, "knowledge", "_review_queue.md"), "# Review Queue\n");
+  await initializePolicyWorkspace(rootDir);
 }
 
 /**

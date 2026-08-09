@@ -83,6 +83,7 @@ export type KnowledgeGitStatus = {
   branch: string | null;
   dirty: boolean;
   trackedKnowledgeFiles: number;
+  trackedPolicyFiles: number;
 };
 
 /**
@@ -128,12 +129,18 @@ export async function getKnowledgeGitStatus(
       remote: null,
       branch: null,
       dirty: false,
-      trackedKnowledgeFiles: 0
+      trackedKnowledgeFiles: 0,
+      trackedPolicyFiles: 0
     };
   }
   const tracked = runGit(resolvedRoot, ["ls-files", "knowledge"]) ?? "";
+  const trackedPolicies = runGit(resolvedRoot, ["ls-files", "policies"]) ?? "";
   // 只返回数量；文件路径和知识标题仍留在本地 Git 工具中，避免 doctor 输出扩大暴露面。
   const trackedKnowledgeFiles = tracked
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean).length;
+  const trackedPolicyFiles = trackedPolicies
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean).length;
@@ -145,6 +152,7 @@ export async function getKnowledgeGitStatus(
     branch:
       runGit(resolvedRoot, ["branch", "--show-current"]) ?? null,
     dirty: Boolean(runGit(resolvedRoot, ["status", "--porcelain"])),
-    trackedKnowledgeFiles
+    trackedKnowledgeFiles,
+    trackedPolicyFiles
   };
 }
