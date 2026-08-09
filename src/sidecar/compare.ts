@@ -219,7 +219,7 @@ export async function compareSidecars(options: {
   const completedAt = (options.now?.() ?? new Date()).toISOString();
   await writeSidecarRun(options.rootDir, {
     sidecarId: "comparison",
-    provider: "hindsight",
+    provider: "comparison",
     operation: "compare",
     status: "succeeded",
     startedAt,

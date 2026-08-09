@@ -509,6 +509,17 @@ export async function runAutomation(
     trigger: "schedule",
     now: now()
   });
+  if (
+    job.status === "succeeded" ||
+    job.status === "needs_confirmation"
+  ) {
+    return {
+      jobId: job.id,
+      status: job.status,
+      completedSteps: job.artifacts,
+      notificationIds: []
+    };
+  }
   const plan = await inspectAutomation(profile, {
     packageRoot: dependencies.packageRoot
   });
@@ -591,7 +602,8 @@ export async function runAutomation(
     status,
     updatedAt: now().toISOString(),
     completedAt: now().toISOString(),
-    summary: `${completedSteps.length}/${plan.steps.length} steps completed`
+    summary: `${completedSteps.length}/${plan.steps.length} steps completed`,
+    artifacts: completedSteps
   });
   return { jobId: job.id, status, completedSteps, notificationIds };
 }

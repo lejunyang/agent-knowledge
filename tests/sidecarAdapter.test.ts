@@ -153,6 +153,28 @@ describe("shadow sidecar HTTP adapter", () => {
     expect(runs).toHaveLength(1);
     const artifact = await readFile(runs[0]!.artifactPath, "utf8");
     expect(artifact).toContain('"provider": "mem0"');
+    expect(artifact).not.toContain('"query": "rule"');
+    expect(artifact).not.toContain('"text": "rule"');
     expect(artifact.length).toBeLessThan(100_000);
+  });
+
+  it("accepts HTML health endpoints without treating them as search JSON", async () => {
+    const config = createSidecarPreset("mem0", {
+      id: "mem0-local",
+      baseUrl: "http://localhost:8888",
+      scope: "merchant-center"
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response("<html>Mem0 docs</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" }
+        })
+      );
+
+    await expect(
+      doctorSidecar(config, { fetch: fetchMock })
+    ).resolves.toMatchObject({ healthy: true, status: 200 });
   });
 });

@@ -45,7 +45,8 @@ describe("background service templates", () => {
       profilePath: "/secure/agent-knowledge/profile.json",
       runnerPath: "/opt/agent-runners/run-knowledge-agent",
       intervalMinutes: 15,
-      outputDir: output
+      outputDir: output,
+      environmentFilePath: "/secure/agent-knowledge/automation.env"
     });
 
     expect(result.files).toHaveLength(2);
@@ -62,6 +63,9 @@ describe("background service templates", () => {
     expect(service).toContain(
       "AGENT_KNOWLEDGE_AUTOMATION_PROFILE=/secure/agent-knowledge/profile.json"
     );
+    expect(service).toContain(
+      "EnvironmentFile=-/secure/agent-knowledge/automation.env"
+    );
     expect(timer).toContain("OnUnitActiveSec=15min");
     expect(timer).toContain("Persistent=true");
   });
@@ -76,7 +80,8 @@ describe("background service templates", () => {
       runnerPath: "/opt/agent-runners/run-knowledge-agent",
       intervalMinutes: 60,
       outputDir: output,
-      workspacePath: "/srv/agent-knowledge-data"
+      workspacePath: "/srv/agent-knowledge-data",
+      environmentFilePath: "/secure/agent-knowledge/automation.env"
     });
 
     const compose = await readFile(
@@ -91,6 +96,9 @@ describe("background service templates", () => {
       "/srv/agent-knowledge-data:/data/agent-knowledge"
     );
     expect(compose).toContain("AGENT_KNOWLEDGE_INTERVAL_MINUTES: \"60\"");
+    expect(compose).toContain(
+      "/secure/agent-knowledge/automation.env"
+    );
     expect(compose).not.toContain("Bearer ");
   });
 

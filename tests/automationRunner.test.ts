@@ -204,6 +204,40 @@ describe("bounded automation runner", () => {
     );
   });
 
+  it("does not execute a completed idempotent job twice", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "ak-automation-idempotent-"));
+    tempDirs.push(root);
+    const configured = AutomationProfileSchema.parse({
+      ...profile(root),
+      sources: [],
+      tasks: {
+        refreshSources: false,
+        maintenance: false,
+        audit: true,
+        evalFiles: [],
+        sidecarComparisons: [],
+        deliverNotifications: false
+      }
+    });
+    const command = vi.fn(async () => ({
+      stdout: JSON.stringify({ summary: {}, findings: [] }),
+      stderr: ""
+    }));
+
+    const first = await runAutomation(configured, {
+      command,
+      idempotencyKey: "same-window"
+    });
+    const second = await runAutomation(configured, {
+      command,
+      idempotencyKey: "same-window"
+    });
+
+    expect(first.status).toBe("succeeded");
+    expect(second.status).toBe("succeeded");
+    expect(command).toHaveBeenCalledTimes(1);
+  });
+
   it("runs scheduled sidecar comparisons and notifies when a provider regresses", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "ak-automation-sidecar-"));
     tempDirs.push(root);

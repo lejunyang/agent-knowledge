@@ -3066,6 +3066,13 @@ automationService
     "--system-prompt <file>",
     t("覆盖系统提示词绝对路径", "override the absolute system prompt path")
   )
+  .option(
+    "--environment-file <file>",
+    t(
+      "可选凭据/运行环境文件绝对路径",
+      "optional absolute credentials/runtime environment file"
+    )
+  )
   .addHelpText(
     "after",
     t(
@@ -3087,6 +3094,7 @@ See templates/automation/runner-contract.md for the wrapper contract.`
       output: string;
       workspace?: string;
       systemPrompt?: string;
+      environmentFile?: string;
     }) => {
       if (
         options.manager !== "launchd" &&
@@ -3105,7 +3113,8 @@ See templates/automation/runner-contract.md for the wrapper contract.`
             intervalMinutes: Number.parseInt(options.intervalMinutes, 10),
             outputDir: options.output,
             workspacePath: options.workspace,
-            systemPromptPath: options.systemPrompt
+            systemPromptPath: options.systemPrompt,
+            environmentFilePath: options.environmentFile
           }),
           null,
           2

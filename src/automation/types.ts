@@ -197,6 +197,7 @@ export const NotificationSchema = z
     details: z.record(JsonValueSchema),
     status: NotificationStatusSchema,
     attempts: z.number().int().nonnegative(),
+    retryExhausted: z.boolean().default(false),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     nextAttemptAt: z.string().datetime().optional(),

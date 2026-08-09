@@ -134,4 +134,31 @@ describe("automation notification outbox", () => {
     ).rejects.toThrow("secret-like");
     expect(await listNotifications(root)).toEqual([]);
   });
+
+  it("does not retry exhausted failed notifications on later delivery runs", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "ak-notification-exhausted-"));
+    tempDirs.push(root);
+    await enqueueNotification(root, {
+      type: "automation_failed",
+      severity: "error",
+      title: "失败",
+      summary: "永久错误。",
+      dedupeKey: "permanent",
+      details: {}
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("bad request", { status: 400 }));
+    const config = {
+      url: "https://notify.example.com/hook",
+      timeoutMs: 1000,
+      retry: { maxAttempts: 3, baseDelayMs: 1, maxDelayMs: 2 }
+    };
+
+    await deliverNotifications(root, config, { fetch: fetchMock });
+    const second = await deliverNotifications(root, config, { fetch: fetchMock });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(second).toEqual({ attempted: 0, delivered: 0, failed: 0 });
+  });
 });

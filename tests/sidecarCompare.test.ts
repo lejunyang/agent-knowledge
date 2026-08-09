@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   compareSidecars,
   createSidecarPreset,
+  listSidecarRuns,
   scaffoldSidecar
 } from "../src/sidecar/index.js";
 import type { EvalCase } from "../src/retrieval/eval.js";
@@ -136,5 +137,6 @@ describe("sidecar scaffold and comparison", () => {
     expect(await readFile(report.markdownPath, "utf8")).toContain(
       "hindsight-local"
     );
+    expect((await listSidecarRuns(root))[0]?.provider).toBe("comparison");
   });
 });

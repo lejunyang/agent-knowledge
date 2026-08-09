@@ -22,7 +22,8 @@ export const AutomationServiceOptionsSchema = z
     intervalMinutes: z.number().int().min(1).max(30 * 24 * 60),
     outputDir: AbsolutePathSchema,
     workspacePath: AbsolutePathSchema.optional(),
-    systemPromptPath: AbsolutePathSchema.optional()
+    systemPromptPath: AbsolutePathSchema.optional(),
+    environmentFilePath: AbsolutePathSchema.optional()
   })
   .strict();
 
@@ -106,6 +107,15 @@ async function renderLaunchd(
         `      <key>${escapeXml(key)}</key>\n      <string>${escapeXml(value)}</string>`
     )
     .join("\n");
+  const programArguments = options.environmentFilePath
+    ? `    <array>
+      <string>/bin/sh</string>
+      <string>-lc</string>
+      <string>. ${escapeXml(JSON.stringify(options.environmentFilePath))}; exec ${escapeXml(JSON.stringify(options.runnerPath))}</string>
+    </array>`
+    : `    <array>
+      <string>${escapeXml(options.runnerPath)}</string>
+    </array>`;
   const target = path.join(options.outputDir, `${label}.plist`);
   await writeServiceFile(
     target,
@@ -116,9 +126,7 @@ async function renderLaunchd(
     <key>Label</key>
     <string>${escapeXml(label)}</string>
     <key>ProgramArguments</key>
-    <array>
-      <string>${escapeXml(options.runnerPath)}</string>
-    </array>
+${programArguments}
     <key>EnvironmentVariables</key>
     <dict>
 ${environmentXml}
@@ -176,7 +184,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=${options.runnerPath}
+${options.environmentFilePath ? `EnvironmentFile=-${options.environmentFilePath}\n` : ""}ExecStart=${options.runnerPath}
 ${environmentLines}
 
 [Install]
@@ -235,7 +243,7 @@ async function renderDocker(
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    environment:
+${options.environmentFilePath ? `    env_file:\n      - ${yamlValue(options.environmentFilePath)}\n` : ""}    environment:
       AGENT_KNOWLEDGE_AUTOMATION_PROFILE: "/config/profile.json"
       AGENT_KNOWLEDGE_AUTOMATION_SYSTEM_PROMPT: "/config/system-prompt.md"
       AGENT_KNOWLEDGE_NOTIFICATION_COMMAND: "agent-knowledge notifications deliver --profile /config/profile.json"

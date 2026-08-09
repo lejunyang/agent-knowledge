@@ -24,7 +24,7 @@ export async function writeSidecarRun(
   rootDir: string,
   input: {
     sidecarId: string;
-    provider: SidecarProvider;
+    provider: SidecarProvider | "comparison";
     operation: SidecarRun["operation"];
     status: SidecarRun["status"];
     startedAt: string;

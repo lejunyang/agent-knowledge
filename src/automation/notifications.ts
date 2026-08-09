@@ -154,6 +154,7 @@ export async function enqueueNotification(
       details: input.details,
       status: "pending",
       attempts: 0,
+      retryExhausted: false,
       createdAt: timestamp,
       updatedAt: timestamp
     })
@@ -241,9 +242,15 @@ export async function deliverNotifications(
     ((milliseconds: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
   const now = dependencies.now ?? (() => new Date());
+  const currentTime = now();
   const notifications = (await listNotifications(rootDir)).filter(
     (notification) =>
-      notification.status === "pending" || notification.status === "failed"
+      (notification.status === "pending" ||
+        (notification.status === "failed" &&
+          !notification.retryExhausted &&
+          notification.attempts < config.retry.maxAttempts)) &&
+      (!notification.nextAttemptAt ||
+        Date.parse(notification.nextAttemptAt) <= currentTime.getTime())
   );
   let delivered = 0;
   let failed = 0;
@@ -302,6 +309,7 @@ export async function deliverNotifications(
               ...current,
               status: "delivered",
               attempts: attempt,
+              retryExhausted: false,
               updatedAt: timestamp,
               deliveredAt: timestamp,
               nextAttemptAt: undefined,
@@ -345,6 +353,7 @@ export async function deliverNotifications(
           ...current,
           status: exhausted ? "failed" : "pending",
           attempts: attempt,
+          retryExhausted: exhausted,
           updatedAt: timestamp,
           nextAttemptAt: exhausted
             ? undefined

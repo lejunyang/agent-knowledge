@@ -3,6 +3,7 @@
  *
  * 外部 API 版本可能变化，因此 endpoint 可配置；doctor 必须先通过，生产部署还应固定上游版本。
  */
+import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { redactEvidenceText } from "../ingestion/redaction.js";
 import {
@@ -95,7 +96,22 @@ async function requestJson(
       if (Buffer.byteLength(text, "utf8") > 512_000) {
         throw new Error("Sidecar response exceeds 512KB");
       }
-      const value = text.trim() ? JSON.parse(text) : {};
+      const contentType = response.headers.get("content-type") ?? "";
+      const trimmed = text.trim();
+      const value =
+        !trimmed
+          ? {}
+          : contentType.includes("json") ||
+              trimmed.startsWith("{") ||
+              trimmed.startsWith("[")
+            ? JSON.parse(trimmed)
+            : {
+                contentType,
+                bytes: Buffer.byteLength(text, "utf8"),
+                contentHash: `sha256:${createHash("sha256")
+                  .update(text)
+                  .digest("hex")}`
+              };
       if (response.ok) {
         return { status: response.status, value };
       }
@@ -359,7 +375,10 @@ export async function ingestSidecarItems(
         operation: "ingest",
         accepted: items.length,
         completed,
-        response: result.value
+        itemIds: items.map((item) => item.id),
+        responseHash: `sha256:${createHash("sha256")
+          .update(JSON.stringify(result.value))
+          .digest("hex")}`
       }
     });
     output.runId = run.id;
@@ -404,9 +423,20 @@ export async function searchSidecar(
         provider: config.provider,
         sidecarId: config.id,
         operation: "search",
-        query,
-        results: result.results,
-        response: response.value
+        queryHash: `sha256:${createHash("sha256")
+          .update(query)
+          .digest("hex")}`,
+        results: result.results.map((item) => ({
+          textHash: `sha256:${createHash("sha256")
+            .update(item.text)
+            .digest("hex")}`,
+          score: item.score,
+          nativeMemoryId: item.nativeMemoryId,
+          metadataKeys: Object.keys(item.metadata).sort()
+        })),
+        responseHash: `sha256:${createHash("sha256")
+          .update(JSON.stringify(response.value))
+          .digest("hex")}`
       }
     });
     result.runId = run.id;

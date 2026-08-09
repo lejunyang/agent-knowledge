@@ -84,7 +84,7 @@ export const SidecarRunSchema = z
     version: z.literal(1),
     id: z.string().regex(/^sidecar_run_[a-f0-9]{24}$/),
     sidecarId: z.string().min(1),
-    provider: SidecarProviderSchema,
+    provider: z.union([SidecarProviderSchema, z.literal("comparison")]),
     operation: z.enum(["doctor", "ingest", "search", "compare"]),
     status: z.enum(["succeeded", "failed"]),
     startedAt: z.string().datetime(),
