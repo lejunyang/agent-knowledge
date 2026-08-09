@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Knowledge Guide"
+  short_description: "Learn, operate, and diagnose Agent Knowledge workflows"
+  default_prompt: "Explain how to use Agent Knowledge for this task and run the safest relevant diagnostic."

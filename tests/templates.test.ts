@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rm,
   symlink,
   writeFile
@@ -36,6 +37,23 @@ function hashText(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+/** 递归列出 Skill 内的相对文件路径，确保安装模板不会漏掉 reference 或 UI metadata。 */
+async function listRelativeFiles(
+  root: string,
+  current = root
+): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await readdir(current, { withFileTypes: true })) {
+    const target = path.join(current, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listRelativeFiles(root, target)));
+    } else if (entry.isFile()) {
+      files.push(path.relative(root, target));
+    }
+  }
+  return files.sort();
+}
+
 afterEach(async () => {
   await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
   tempDirs = [];
@@ -47,7 +65,8 @@ describe("managed integrations", () => {
       "knowledge-organizer",
       "memory-maintainer",
       "source-distiller",
-      "lifecycle-recorder"
+      "lifecycle-recorder",
+      "agent-knowledge-guide"
     ]) {
       const canonical = await readFile(
         path.join(".trae", "skills", skillName, "SKILL.md"),
@@ -66,6 +85,54 @@ describe("managed integrations", () => {
       );
 
       expect(bundled, `${skillName} plugin Skill drifted`).toBe(canonical);
+    }
+  });
+
+  it("keeps the complete guide Skill bundle identical and documents every operating loop", async () => {
+    const canonicalRoot = path.join(
+      ".trae",
+      "skills",
+      "agent-knowledge-guide"
+    );
+    const bundledRoot = path.join(
+      "templates",
+      "trae",
+      "plugin",
+      "skills",
+      "agent-knowledge-guide"
+    );
+    const canonicalFiles = await listRelativeFiles(canonicalRoot);
+
+    expect(canonicalFiles).toEqual([
+      "SKILL.md",
+      path.join("agents", "openai.yaml"),
+      path.join("references", "diagnostics.md"),
+      path.join("references", "workflows.md")
+    ]);
+    expect(await listRelativeFiles(bundledRoot)).toEqual(canonicalFiles);
+    for (const relativePath of canonicalFiles) {
+      await expect(
+        readFile(path.join(bundledRoot, relativePath), "utf8")
+      ).resolves.toBe(
+        await readFile(path.join(canonicalRoot, relativePath), "utf8")
+      );
+    }
+
+    const guide = await readFile(
+      path.join(canonicalRoot, "SKILL.md"),
+      "utf8"
+    );
+    for (const requiredTopic of [
+      "source refresh",
+      "knowledge evidence",
+      "event append",
+      "maintenance run",
+      "knowledge audit",
+      "feedback",
+      "integration doctor",
+      "不自动批准"
+    ]) {
+      expect(guide).toContain(requiredTopic);
     }
   });
 
