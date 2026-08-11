@@ -481,6 +481,7 @@ export function buildSourceManifest(input: {
   projectKeys?: string[];
   contentType?: string;
   contentBytes?: number;
+  contentHash?: string;
   redactionPolicy?: z.input<typeof SourceManifestSchema>["redaction_policy"];
   processingProfile?: string;
   redactions?: Record<string, number>;
@@ -495,7 +496,12 @@ export function buildSourceManifest(input: {
 }): SourceManifest {
   const headings = headingsIn(input.content);
   const sections: Array<z.input<typeof SourceSectionSchema>> = [];
-  const contentHash = `sha256:${sha256(input.content)}`;
+  // 二进制 attachment 的 section 来自安全描述，但版本身份必须绑定 Vault 原始 bytes。
+  const contentHash = input.contentHash
+    ? input.contentHash.startsWith("sha256:")
+      ? input.contentHash
+      : `sha256:${input.contentHash}`
+    : `sha256:${sha256(input.content)}`;
   const processingStatus = input.processingStatus ?? "pending";
   let headingPath: string[] = [];
 

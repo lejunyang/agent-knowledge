@@ -616,24 +616,34 @@ async function runConnectorIngestionLocked(
     try {
       const raw = await connector.fetch(descriptor);
       const normalized = await connector.normalize(descriptor, raw);
-      if (
-        !normalized.bytes.equals(
-          Buffer.from(normalized.textForManifest, "utf8")
-        )
-      ) {
+      if (normalized.encoding === "utf8") {
+        if (
+          !normalized.bytes.equals(
+            Buffer.from(normalized.textForManifest, "utf8")
+          )
+        ) {
+          throw new Error(
+            `Connector normalized bytes differ from manifest text: ${descriptor.externalKey}`
+          );
+        }
+      } else if (descriptor.artifactKind !== "attachment") {
+        // 二进制绕过通用文本脱敏，只允许 attachment 使用，避免普通 source 伪装成不可检查 blob。
         throw new Error(
-          `Connector normalized bytes differ from manifest text: ${descriptor.externalKey}`
+          `Binary normalized artifacts must be attachments: ${descriptor.externalKey}`
         );
       }
       const redacted = redactEvidenceText(
         normalized.textForManifest,
         options.redactionPolicy
       );
-      const redactedBytes = Buffer.from(redacted.text, "utf8");
+      const evidenceBytes =
+        normalized.encoding === "utf8"
+          ? Buffer.from(redacted.text, "utf8")
+          : normalized.bytes;
       const vaultObject = await putVaultObject(
         rootDir,
         {
-          bytes: redactedBytes,
+          bytes: evidenceBytes,
           contentType: normalized.contentType
         },
         options.vault
@@ -649,8 +659,12 @@ async function runConnectorIngestionLocked(
         upstreamVersion: descriptor.probe.upstream,
         projectKeys: descriptor.projectKeys,
         contentType: normalized.contentType,
-        contentBytes: redactedBytes.length,
-        redactionPolicy: options.redactionPolicy,
+        contentBytes: evidenceBytes.length,
+        contentHash: createHash("sha256").update(evidenceBytes).digest("hex"),
+        redactionPolicy:
+          normalized.encoding === "utf8"
+            ? options.redactionPolicy
+            : "connector-specific",
         processingProfile,
         redactions: redacted.counts,
         processingStatus: "pending",

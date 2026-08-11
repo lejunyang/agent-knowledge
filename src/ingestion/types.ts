@@ -81,11 +81,26 @@ export type ConnectorSourceDescriptor = z.output<
   typeof ConnectorSourceDescriptorSchema
 >;
 
-export type NormalizedArtifact = {
-  bytes: Buffer;
-  textForManifest: string;
-  contentType: string;
-};
+/**
+ * Connector 规范化结果显式区分文本与 Vault-only 二进制。
+ *
+ * 文本 bytes 必须与 `textForManifest` 完全一致，随后由 core 做统一脱敏；二进制原件不适合
+ * 伪装成 UTF-8，只能作为 attachment 写入 Vault，manifest sections 使用 Connector 提供的
+ * 安全描述。该描述仍会执行文本脱敏，但不能宣称已检查图片像素或附件正文。
+ */
+export type NormalizedArtifact =
+  | {
+      encoding: "utf8";
+      bytes: Buffer;
+      textForManifest: string;
+      contentType: string;
+    }
+  | {
+      encoding: "binary-vault-only";
+      bytes: Buffer;
+      textForManifest: string;
+      contentType: string;
+    };
 
 export type ConnectorCursor = {
   version: 1;

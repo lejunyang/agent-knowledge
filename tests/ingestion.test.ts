@@ -84,6 +84,7 @@ class MutableTextConnector implements KnowledgeConnector {
   ): Promise<NormalizedArtifact> {
     const text = raw.toString("utf8");
     return {
+      encoding: "utf8",
       bytes: Buffer.from(text, "utf8"),
       textForManifest: text,
       contentType: descriptor.contentType

@@ -164,6 +164,7 @@ export class FileSystemConnector implements KnowledgeConnector {
       );
     }
     return {
+      encoding: "utf8",
       bytes: Buffer.from(text, "utf8"),
       textForManifest: text,
       contentType: descriptor.contentType
