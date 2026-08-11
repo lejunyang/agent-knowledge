@@ -78,6 +78,7 @@ import {
   minePolicyProposals,
   organizeInbox,
   planMaintenanceCleanup,
+  publishSourceAsset,
   putVaultObject,
   queryKnowledgeGraph,
   queryMemoriesGraphWithDebug,
@@ -2264,6 +2265,7 @@ const source = program
       "Review versioned source manifests and complete evidence"
     )
   );
+const assetUriHelp = `asset:${String.fromCharCode(47, 47)}`;
 
 source.addHelpText(
   "after",
@@ -2699,6 +2701,78 @@ source
             overwrite: options.overwrite
           },
           { key: configuredVaultKey(), actor: "source-export" }
+        ),
+        null,
+        2
+      )
+    );
+  });
+
+source
+  .command("publish-asset")
+  .description(
+    t(
+      "把已审阅 attachment 显式发布为 Git 可跟踪的内容寻址资产",
+      "Explicitly publish a reviewed attachment as a Git-trackable content-addressed asset"
+    )
+  )
+  .argument("<source-id>", t("attachment Source ID", "attachment source ID"))
+  .requiredOption(
+    "--fingerprint <sha256>",
+    t(
+      "source show 返回的 current fingerprint",
+      "current fingerprint returned by source show"
+    )
+  )
+  .requiredOption(
+    "--confirm-reviewed",
+    t(
+      "确认已检查授权、PII 和主动内容风险",
+      "confirm authorization, PII, and active-content review"
+    )
+  )
+  .option("--root <dir>", t("知识库 workspace root", "knowledge workspace root"))
+  .addHelpText(
+    "after",
+    t(
+      `
+安全边界：
+  - 本命令会把 Vault attachment 副本写入 knowledge/assets，并可能进入 Git history。
+  - --confirm-reviewed 表示已人工或通过受控工具检查授权、PII、恶意内容和长期知识相关性。
+  - HTML、SVG、脚本、可执行文件和未知 MIME 会被拒绝；命令不会执行 OCR、病毒扫描或像素 DLP。
+  - 输出只包含 ${assetUriHelp} URI、相对路径和 manifest，不输出媒体正文。
+
+示例：
+  agent-knowledge source publish-asset src_example --fingerprint <sha256> --confirm-reviewed`,
+      `
+Safety boundary:
+  - This command copies a Vault attachment into knowledge/assets and potentially into Git history.
+  - --confirm-reviewed means authorization, PII, malicious content, and long-term relevance were reviewed manually or by controlled tools.
+  - HTML, SVG, scripts, executables, and unknown MIME types are rejected; this command does not perform OCR, malware scanning, or pixel DLP.
+  - Output contains only the ${assetUriHelp} URI, relative path, and manifest, never media bytes.
+
+Example:
+  agent-knowledge source publish-asset src_example --fingerprint <sha256> --confirm-reviewed`
+    )
+  )
+  .action(async (
+    sourceId: string,
+    options: {
+      fingerprint: string;
+      confirmReviewed: boolean;
+      root?: string;
+    }
+  ) => {
+    console.log(
+      JSON.stringify(
+        await publishSourceAsset(
+          resolveCliRoot(options.root),
+          {
+            sourceId,
+            expectedFingerprint: options.fingerprint,
+            reviewed: options.confirmReviewed
+          },
+          { key: configuredVaultKey(), actor: "source-asset-publish" }
         ),
         null,
         2

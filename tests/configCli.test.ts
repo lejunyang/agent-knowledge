@@ -39,6 +39,16 @@ async function runCli(args: string[], environment: NodeJS.ProcessEnv = {}): Prom
 }
 
 describe("CLI user configuration", () => {
+  it("documents the reviewed Git side effect of publishing source assets", async () => {
+    const help = await runCli(["source", "publish-asset", "--help"]);
+
+    expect(help).toContain("--fingerprint <sha256>");
+    expect(help).toContain("--confirm-reviewed");
+    expect(help).toContain("knowledge/assets");
+    expect(help).toContain("Git history");
+    expect(help).toContain("asset://");
+  });
+
   it("prefers explicit root, then user config, then legacy environment", async () => {
     const temp = await mkdtemp(path.join(tmpdir(), "agent-knowledge-config-cli-"));
     tempDirs.push(temp);
@@ -859,7 +869,7 @@ describe("CLI user configuration", () => {
       path.join(exportDir, "manifest.json"),
       `${JSON.stringify(
         {
-          version: 1,
+          version: 2,
           generatedAt: "2026-08-09T00:00:00.000Z",
           roots: ["wiki:root"],
           documents: {
@@ -871,10 +881,13 @@ describe("CLI user configuration", () => {
               upstreamUpdatedAt: "2026-08-08T12:00:00.000Z",
               observedAt: "2026-08-09T00:00:00.000Z",
               directory: "account-guide",
-              contentHash
+              contentHash,
+              mediaReferences: []
             }
           },
           resources: {},
+          media: {},
+          mediaFailures: {},
           failures: {},
           complete: true,
           pending: []
