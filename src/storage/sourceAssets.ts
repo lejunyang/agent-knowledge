@@ -58,6 +58,11 @@ export type PublishSourceAssetResult = {
   deduplicated: boolean;
 };
 
+type ResolvedPublishedAsset = {
+  manifest: PublishedAssetManifest;
+  objectPath: string;
+};
+
 /**
  * 允许发布的 MIME 映射同时决定规范扩展名。
  *
@@ -144,6 +149,206 @@ export function getPublishedAssetManifestPath(
     "manifests",
     `${AssetIdSchema.parse(assetId)}.json`
   );
+}
+
+/** 读取发布 manifest 和对象，并重新校验内容 hash/长度，阻止 Markdown 链接指向撕裂资产。 */
+async function readPublishedAsset(
+  rootDir: string,
+  assetId: string
+): Promise<ResolvedPublishedAsset> {
+  const parsedAssetId = AssetIdSchema.parse(assetId);
+  const manifestPath = getPublishedAssetManifestPath(rootDir, parsedAssetId);
+  if (!existsSync(manifestPath)) {
+    throw new Error(`Published asset manifest not found: ${parsedAssetId}`);
+  }
+  const manifest = PublishedAssetManifestSchema.parse(
+    JSON.parse(await readFile(manifestPath, "utf8"))
+  );
+  if (manifest.asset_id !== parsedAssetId) {
+    throw new Error(`Published asset manifest ID mismatch: ${parsedAssetId}`);
+  }
+  const objectPath = resolveWorkspacePath(rootDir, manifest.relative_path);
+  if (!existsSync(objectPath)) {
+    throw new Error(`Published asset object is missing: ${parsedAssetId}`);
+  }
+  const bytes = await readFile(objectPath);
+  const contentHash = `sha256:${createHash("sha256")
+    .update(bytes)
+    .digest("hex")}`;
+  if (
+    contentHash !== manifest.content_hash ||
+    bytes.length !== manifest.content_bytes ||
+    assetIdFromContentHash(contentHash) !== parsedAssetId
+  ) {
+    throw new Error(`Published asset object hash mismatch: ${parsedAssetId}`);
+  }
+  return { manifest, objectPath };
+}
+
+/**
+ * 只转换 fenced code block 之外的 Markdown。
+ *
+ * Skill 文档可能在代码块中展示 asset URI 示例；示例不能被解析成真实依赖。这里只识别行首
+ * 最多三个空格后的反引号或波浪线 fence，并要求结束 fence 使用相同字符且长度不短于起始。
+ */
+async function transformOutsideFencedCode(
+  markdown: string,
+  transform: (segment: string) => Promise<string>
+): Promise<string> {
+  const lines = markdown.match(/[^\n]*(?:\n|$)/g) ?? [];
+  let fence: { marker: "`" | "~"; length: number } | null = null;
+  let prose = "";
+  let result = "";
+  const flushProse = async (): Promise<void> => {
+    if (!prose) {
+      return;
+    }
+    result += await transform(prose);
+    prose = "";
+  };
+  for (const line of lines) {
+    const marker = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+    if (!fence && marker) {
+      await flushProse();
+      const value = marker[1]!;
+      fence = {
+        marker: value[0] as "`" | "~",
+        length: value.length
+      };
+      result += line;
+      continue;
+    }
+    if (
+      fence &&
+      new RegExp(
+        `^[ \\t]{0,3}\\${fence.marker}{${fence.length},}[ \\t]*(?:\\n|$)`
+      ).test(line)
+    ) {
+      result += line;
+      fence = null;
+      continue;
+    }
+    if (fence) {
+      result += line;
+    } else {
+      prose += line;
+    }
+  }
+  await flushProse();
+  return result;
+}
+
+/** 计算从 Markdown 文件到 asset object 的 POSIX 相对链接。 */
+function relativeAssetLink(
+  markdownRelativePath: string,
+  assetRelativePath: string
+): string {
+  const normalizedMarkdownPath = markdownRelativePath.replaceAll("\\", "/");
+  const normalizedAssetPath = assetRelativePath.replaceAll("\\", "/");
+  if (
+    path.posix.isAbsolute(normalizedMarkdownPath) ||
+    path.posix.isAbsolute(normalizedAssetPath) ||
+    !normalizedMarkdownPath.startsWith("knowledge/") ||
+    !normalizedAssetPath.startsWith("knowledge/assets/objects/")
+  ) {
+    throw new Error("Knowledge asset links require workspace-relative paths");
+  }
+  const relative = path.posix.relative(
+    path.posix.dirname(normalizedMarkdownPath),
+    normalizedAssetPath
+  );
+  const explicitRelative =
+    relative.startsWith(".") ? relative : `./${relative}`;
+  return encodeURI(explicitRelative);
+}
+
+/**
+ * 把候选正文中的 asset URI 转为目标 Markdown 可解析的相对链接。
+ *
+ * 只有标准 Markdown link/image destination 会转换；prose 中残留 URI 视为错误，避免序列化
+ * 一个知识读取器无法稳定解释的半成品。代码块中的教学示例保持原样。
+ */
+export async function resolveAssetUris(
+  rootDir: string,
+  markdownRelativePath: string,
+  markdown: string
+): Promise<string> {
+  return transformOutsideFencedCode(markdown, async (segment) => {
+    const pattern = /(!?\[[^\]\n]*\]\()asset:\/\/(asset_sha256_[a-f0-9]{64})(\))/g;
+    let cursor = 0;
+    let output = "";
+    for (const match of segment.matchAll(pattern)) {
+      const index = match.index ?? 0;
+      output += segment.slice(cursor, index);
+      const asset = await readPublishedAsset(rootDir, match[2]!);
+      output += `${match[1]}${relativeAssetLink(
+        markdownRelativePath,
+        asset.manifest.relative_path
+      )}${match[3]}`;
+      cursor = index + match[0].length;
+    }
+    output += segment.slice(cursor);
+    if (output.includes(ASSET_URI_PREFIX)) {
+      throw new Error(
+        "Published asset URI must be used as a Markdown link or image"
+      );
+    }
+    return output;
+  });
+}
+
+/**
+ * 在 Knowledge Markdown 移动后重定位已有 asset 相对链接。
+ *
+ * 仅处理从原文件位置解析到 `knowledge/assets/objects` 的链接，其他外链和普通相对链接保持
+ * 原样。每个资产都会重新校验 manifest/object，防止移动过程固化已经损坏的引用。
+ */
+export async function relocateAssetLinks(
+  rootDir: string,
+  fromMarkdownRelativePath: string,
+  toMarkdownRelativePath: string,
+  markdown: string
+): Promise<string> {
+  const normalizedFrom = fromMarkdownRelativePath.replaceAll("\\", "/");
+  return transformOutsideFencedCode(markdown, async (segment) => {
+    const pattern =
+      /(!?\[[^\]\n]*\]\()((?:\.\.?\/)[^)\s]+)(\))/g;
+    let cursor = 0;
+    let output = "";
+    for (const match of segment.matchAll(pattern)) {
+      const index = match.index ?? 0;
+      output += segment.slice(cursor, index);
+      const decoded = decodeURI(match[2]!);
+      const resolved = path.posix.normalize(
+        path.posix.join(path.posix.dirname(normalizedFrom), decoded)
+      );
+      if (!resolved.startsWith("knowledge/assets/objects/")) {
+        output += match[0];
+        cursor = index + match[0].length;
+        continue;
+      }
+      const basename = path.posix.basename(resolved);
+      const assetMatch = basename.match(
+        /^(asset_sha256_[a-f0-9]{64})\.[a-z0-9]+$/
+      );
+      if (!assetMatch) {
+        throw new Error(`Invalid published asset object path: ${resolved}`);
+      }
+      const asset = await readPublishedAsset(rootDir, assetMatch[1]!);
+      if (asset.manifest.relative_path !== resolved) {
+        throw new Error(
+          `Published asset link does not match manifest: ${assetMatch[1]}`
+        );
+      }
+      output += `${match[1]}${relativeAssetLink(
+        toMarkdownRelativePath,
+        asset.manifest.relative_path
+      )}${match[3]}`;
+      cursor = index + match[0].length;
+    }
+    output += segment.slice(cursor);
+    return output;
+  });
 }
 
 /** 构造 content-addressed object 相对路径；扩展名只来自 MIME allowlist。 */

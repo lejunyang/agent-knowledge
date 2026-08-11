@@ -25,6 +25,10 @@ import {
   isGeneratedKnowledgeFile,
   isSkillReviewDraft
 } from "../storage/knowledgePaths.js";
+import {
+  relocateAssetLinks,
+  resolveAssetUris
+} from "../storage/sourceAssets.js";
 
 export type KnowledgeListSummary = {
   rootDir: string;
@@ -331,9 +335,27 @@ export async function organizeInbox(
     }
 
     const targetAbsolutePath = resolveWorkspacePath(rootDir, targetRelativePath);
+    const relocatedDocument = KnowledgeDocumentSchema.parse({
+      ...updatedDocument,
+      filePath: targetRelativePath,
+      body: await relocateAssetLinks(
+        rootDir,
+        document.filePath,
+        targetRelativePath,
+        updatedDocument.body
+      )
+    });
     await mkdir(path.dirname(targetAbsolutePath), { recursive: true });
-    await writeFile(targetAbsolutePath, serializeKnowledgeMarkdown({ ...updatedDocument, filePath: targetRelativePath }), "utf8");
-    await invalidateSupersededDocuments(rootDir, updatedDocument.frontmatter.supersedes, allDocuments);
+    await writeFile(
+      targetAbsolutePath,
+      serializeKnowledgeMarkdown(relocatedDocument),
+      "utf8"
+    );
+    await invalidateSupersededDocuments(
+      rootDir,
+      relocatedDocument.frontmatter.supersedes,
+      allDocuments
+    );
     await rename(resolveWorkspacePath(rootDir, document.filePath), resolveWorkspacePath(rootDir, "knowledge", "_archive", path.basename(document.filePath)));
   }
 
@@ -398,6 +420,15 @@ export async function captureMaterial(
   options: CaptureMaterialOptions
 ): Promise<CaptureMaterialResult> {
   await initKnowledgeWorkspace(rootDir);
+  // 先对整批正文执行资产存在性/完整性预检，避免第二条失败时第一条已经写入事实层。
+  for (const input of inputs) {
+    const normalized = normalizeCandidateInput(input);
+    await resolveAssetUris(
+      rootDir,
+      "knowledge/_material/preflight.md",
+      normalized.explanation
+    );
+  }
   const written: CaptureMaterialResult["written"] = [];
   const existingDocuments = await readAllKnowledgeDocuments(rootDir);
   const existingById = new Map(
@@ -408,9 +439,14 @@ export async function captureMaterial(
     const existing = input.id ? existingById.get(input.id) : undefined;
     if (existing) {
       const normalized = normalizeCandidateInput(input);
+      const resolvedExplanation = await resolveAssetUris(
+        rootDir,
+        existing.filePath,
+        normalized.explanation
+      );
       const contentMatches =
         existing.frontmatter.synopsis === normalized.synopsis &&
-        existing.body === normalized.explanation.trimStart();
+        existing.body === resolvedExplanation.trimStart();
       if (contentMatches) {
         written.push({
           id: existing.frontmatter.id,
@@ -450,6 +486,11 @@ export async function captureMaterial(
       const replacementDocument = KnowledgeDocumentSchema.parse({
         ...replacement,
         filePath: existing.filePath,
+        body: await resolveAssetUris(
+          rootDir,
+          existing.filePath,
+          replacement.body
+        ),
         frontmatter: {
           ...replacement.frontmatter,
           created_at: existing.frontmatter.created_at,
@@ -484,9 +525,26 @@ export async function captureMaterial(
     }
     const targetRelativePath = await uniqueRelativePath(rootDir, activeRelativePath(document.frontmatter));
     const targetAbsolutePath = resolveWorkspacePath(rootDir, targetRelativePath);
+    const resolvedDocument = KnowledgeDocumentSchema.parse({
+      ...document,
+      filePath: targetRelativePath,
+      body: await resolveAssetUris(
+        rootDir,
+        targetRelativePath,
+        document.body
+      )
+    });
     await mkdir(path.dirname(targetAbsolutePath), { recursive: true });
-    await writeFile(targetAbsolutePath, serializeKnowledgeMarkdown({ ...document, filePath: targetRelativePath }), "utf8");
-    await invalidateSupersededDocuments(rootDir, document.frontmatter.supersedes, existingDocuments);
+    await writeFile(
+      targetAbsolutePath,
+      serializeKnowledgeMarkdown(resolvedDocument),
+      "utf8"
+    );
+    await invalidateSupersededDocuments(
+      rootDir,
+      resolvedDocument.frontmatter.supersedes,
+      existingDocuments
+    );
     written.push({
       id: document.frontmatter.id,
       status: document.frontmatter.status,

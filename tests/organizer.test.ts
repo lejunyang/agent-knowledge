@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,6 +7,7 @@ import { parseKnowledgeMarkdown } from "../src/storage/markdown.js";
 import { listKnowledge, organizeInbox } from "../src/memory/organizer.js";
 import { captureMaterial } from "./helpers/candidate.js";
 import { queryMemories } from "../src/retrieval/query.js";
+import { PublishedAssetManifestSchema } from "../src/storage/sourceAssets.js";
 
 let tempDirs: string[] = [];
 
@@ -13,6 +15,54 @@ afterEach(async () => {
   await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
   tempDirs = [];
 });
+
+/** 创建一个无需 Vault 的已发布资产 fixture，专门验证 Markdown 引用解析和移动。 */
+async function createPublishedAsset(rootDir: string): Promise<{
+  assetId: string;
+  relativePath: string;
+}> {
+  const bytes = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01
+  ]);
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const assetId = `asset_sha256_${hash}`;
+  const relativePath = path.posix.join(
+    "knowledge",
+    "assets",
+    "objects",
+    hash.slice(0, 2),
+    `${assetId}.png`
+  );
+  const manifest = PublishedAssetManifestSchema.parse({
+    schema_version: 1,
+    asset_id: assetId,
+    source_id: "src_test_diagram",
+    source_fingerprint: `sha256:${"b".repeat(64)}`,
+    content_hash: `sha256:${hash}`,
+    content_type: "image/png",
+    content_bytes: bytes.length,
+    title: "部署拓扑.png",
+    relative_path: relativePath,
+    published_at: "2026-08-11T00:00:00.000Z"
+  });
+  const objectPath = path.join(rootDir, relativePath);
+  const manifestPath = path.join(
+    rootDir,
+    "knowledge",
+    "assets",
+    "manifests",
+    `${assetId}.json`
+  );
+  await mkdir(path.dirname(objectPath), { recursive: true });
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(objectPath, bytes);
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8"
+  );
+  return { assetId, relativePath };
+}
 
 describe("listKnowledge", () => {
   it("summarizes active knowledge and inbox items", async () => {
@@ -52,6 +102,88 @@ describe("listKnowledge", () => {
 });
 
 describe("organizeInbox", () => {
+  it("rewrites inbox asset links relative to the promoted active Markdown path", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-organize-assets-")
+    );
+    tempDirs.push(root);
+    const asset = await createPublishedAsset(root);
+    const assetUri = `asset:${String.fromCharCode(47, 47)}${asset.assetId}`;
+    const explanation = `# 图文排障流程
+
+## 部署拓扑
+
+![部署拓扑](${assetUri})
+
+该图展示入口、服务和存储之间的调用方向。排障时先确认入口请求是否到达服务，再检查服务到存储的依赖；如果图片版本与当前发布版本不一致，应回到 attachment source 重新审阅，不得猜测旧图含义。
+
+## 失败策略
+
+若图片缺失、hash 不一致或授权范围不明确，应停止发布并保留 Vault evidence。不能把飞书临时 URL、token 或本机绝对路径写入长期知识。
+
+\`\`\`md
+![仅作语法示例](${assetUri})
+\`\`\`
+`;
+    const captured = await captureMaterial(
+      root,
+      [
+        {
+          title: "图文排障流程",
+          kind: "procedural",
+          layer: "knowledge",
+          synopsis: "排障知识可引用经过审阅发布的部署拓扑。",
+          explanation,
+          aliases: [],
+          domain: "knowledge/media",
+          related_domains: [],
+          scenarios: [
+            { id: "knowledge-media", role: "primary", weight: 1 }
+          ],
+          tags: [],
+          claims: [],
+          confidence: 0.9,
+          source_authority: "documented",
+          evidence: ["source:src_test_diagram"]
+        }
+      ],
+      { target: "inbox", rebuild: false }
+    );
+    const inboxMarkdown = await readFile(
+      captured.written[0]!.filePath,
+      "utf8"
+    );
+
+    expect(inboxMarkdown).toContain(
+      `![部署拓扑](../assets/objects/${asset.assetId.slice(
+        "asset_sha256_".length,
+        "asset_sha256_".length + 2
+      )}/${asset.assetId}.png)`
+    );
+    expect(inboxMarkdown).toContain(`![仅作语法示例](${assetUri})`);
+
+    const result = await organizeInbox(root, {
+      apply: true,
+      rebuild: false
+    });
+    const promoted = result.moved[0]!;
+    const activeMarkdown = await readFile(
+      path.join(root, promoted.to),
+      "utf8"
+    );
+
+    expect(activeMarkdown).toContain(
+      `![部署拓扑](../../../assets/objects/${asset.assetId.slice(
+        "asset_sha256_".length,
+        "asset_sha256_".length + 2
+      )}/${asset.assetId}.png)`
+    );
+    expect(activeMarkdown).not.toContain(
+      `![部署拓扑](../assets/objects/`
+    );
+    expect(activeMarkdown).toContain(`![仅作语法示例](${assetUri})`);
+  });
+
   it("dry-runs inbox promotion without moving files", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-organize-dry-"));
     tempDirs.push(root);
@@ -241,6 +373,128 @@ describe("organizeInbox", () => {
 });
 
 describe("captureMaterial", () => {
+  it("writes published asset URIs as relative links in active Markdown", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-capture-assets-")
+    );
+    tempDirs.push(root);
+    const asset = await createPublishedAsset(root);
+    const assetUri = `asset:${String.fromCharCode(47, 47)}${asset.assetId}`;
+
+    const result = await captureMaterial(
+      root,
+      [
+        {
+          title: "带图的业务说明",
+          kind: "semantic",
+          layer: "knowledge",
+          synopsis: "业务说明包含经过审阅的部署拓扑。",
+          explanation: `# 带图的业务说明
+
+## 结论
+
+![部署拓扑](${assetUri})
+
+该拓扑用于解释业务入口、服务节点和持久化层的关系。读取者应先核对图示版本与当前 source fingerprint，再根据文字说明判断适用范围；图片只是证据的一部分，不能替代失败策略和版本边界。
+
+## 边界
+
+媒体未发布、对象 hash 校验失败或权限不明确时必须停止写入。长期 Markdown 只能保留可从当前文件位置解析的相对路径，不能保存临时 URL、token 或绝对路径。
+`,
+          aliases: [],
+          domain: "business/media",
+          related_domains: [],
+          scenarios: [{ id: "business-media", role: "primary", weight: 1 }],
+          tags: [],
+          claims: [],
+          confidence: 0.9,
+          source_authority: "documented",
+          evidence: ["source:src_test_diagram"]
+        }
+      ],
+      { target: "active", rebuild: false }
+    );
+    const markdown = await readFile(result.written[0]!.filePath, "utf8");
+
+    expect(markdown).toContain(
+      `![部署拓扑](../../../assets/objects/${asset.assetId.slice(
+        "asset_sha256_".length,
+        "asset_sha256_".length + 2
+      )}/${asset.assetId}.png)`
+    );
+    expect(markdown).not.toContain(assetUri);
+    await expect(
+      readFile(
+        path.resolve(
+          path.dirname(result.written[0]!.filePath),
+          `../../../assets/objects/${asset.assetId.slice(
+            "asset_sha256_".length,
+            "asset_sha256_".length + 2
+          )}/${asset.assetId}.png`
+        )
+      )
+    ).resolves.toBeInstanceOf(Buffer);
+  });
+
+  it("rejects an unknown asset URI before writing any candidate in the batch", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-capture-unknown-asset-")
+    );
+    tempDirs.push(root);
+    const missingAssetUri = `asset:${String.fromCharCode(
+      47,
+      47
+    )}asset_sha256_${"c".repeat(64)}`;
+
+    await expect(
+      captureMaterial(
+        root,
+        [
+          {
+            title: "批次第一条",
+            kind: "source",
+            layer: "evidence",
+            synopsis: "第一条本来可以写入。",
+            explanation: "<p>第一条证据。</p>",
+            aliases: [],
+            domain: "business/media",
+            related_domains: [],
+            scenarios: [
+              { id: "business-media", role: "primary", weight: 1 }
+            ],
+            tags: [],
+            claims: [],
+            confidence: 0.9,
+            source_authority: "documented",
+            evidence: ["source:first"]
+          },
+          {
+            title: "批次第二条",
+            kind: "source",
+            layer: "evidence",
+            synopsis: "第二条引用不存在的资产。",
+            explanation: `![缺失](${missingAssetUri})`,
+            aliases: [],
+            domain: "business/media",
+            related_domains: [],
+            scenarios: [
+              { id: "business-media", role: "primary", weight: 1 }
+            ],
+            tags: [],
+            claims: [],
+            confidence: 0.9,
+            source_authority: "documented",
+            evidence: ["source:second"]
+          }
+        ],
+        { target: "active", rebuild: false }
+      )
+    ).rejects.toThrow(/Published asset manifest not found/);
+
+    const summary = await listKnowledge(root);
+    expect(summary.total).toBe(0);
+  });
+
   it("writes user-provided structured material directly to active knowledge and indexes it", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "agent-knowledge-capture-"));
     tempDirs.push(root);

@@ -15,6 +15,7 @@ import { parseKnowledgeMarkdown, serializeKnowledgeMarkdown } from "../storage/m
 import { resolveWorkspacePath } from "../core/paths.js";
 import { KnowledgeDocumentSchema } from "../core/schema.js";
 import type { KnowledgeDocument, MemoryStatus } from "../core/types.js";
+import { resolveAssetUris } from "../storage/sourceAssets.js";
 
 export type WriteCandidateResult = {
   id: string;
@@ -125,14 +126,17 @@ export async function writeCandidateMemory(rootDir: string, input: CandidateMemo
 `
   };
 
-  const validatedDocument = KnowledgeDocumentSchema.parse(document);
+  const validatedDocument = KnowledgeDocumentSchema.parse({
+    ...document,
+    body: await resolveAssetUris(rootDir, relativePath, document.body)
+  });
   try {
     await access(absolutePath);
     const existing = parseKnowledgeMarkdown(relativePath, await readFile(absolutePath, "utf8"));
     if (
       existing.frontmatter.id === id &&
       existing.frontmatter.synopsis === normalized.synopsis &&
-      existing.body.startsWith(normalized.explanation.trimStart())
+      existing.body.startsWith(validatedDocument.body.trimStart())
     ) {
       return {
         id,
