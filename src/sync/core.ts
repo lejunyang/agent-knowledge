@@ -64,6 +64,16 @@ const SENSITIVITY_LEVEL: Record<Sensitivity, number> = {
   secret: 3
 };
 
+/** WebDAV/S3 只接受正式 KnowledgeDocument 路径；asset 即使伪装成 Markdown 也由 private Git 管理。 */
+function isSyncableKnowledgePath(filePath: string): boolean {
+  const normalized = filePath.split(path.sep).join("/");
+  return (
+    normalized.startsWith("knowledge/") &&
+    !normalized.startsWith("knowledge/assets/") &&
+    isDiscoverableKnowledgeFile(normalized)
+  );
+}
+
 /** 计算同步 manifest、内容和冲突文件名使用的 SHA-256。 */
 function sha256(input: string): string {
   return createHash("sha256").update(input).digest("hex");
@@ -124,7 +134,7 @@ function metadataAllowed(
   );
 }
 
-/** 读取允许同步的正式 Markdown，并硬排除生成文件、inbox 和 archive。 */
+/** 读取允许同步的正式 Markdown，并硬排除生成文件、inbox、archive 和 Git asset 目录。 */
 async function readLocalFiles(
   rootDir: string,
   policy: Required<SyncPolicy>
@@ -140,7 +150,7 @@ async function readLocalFiles(
   >();
   for (const filePath of paths.sort()) {
     const normalized = filePath.split(path.sep).join("/");
-    if (!isDiscoverableKnowledgeFile(normalized)) {
+    if (!isSyncableKnowledgePath(normalized)) {
       continue;
     }
     const content = await readFile(resolveWorkspacePath(rootDir, normalized), "utf8");
@@ -176,6 +186,11 @@ async function readRemoteState(
   >();
   const inaccessible = new Set<string>();
   for (const [filePath, entry] of Object.entries(manifest?.entries ?? {})) {
+    // 旧远端或恶意 manifest 不能把 asset/source 外路径注入本地知识事实层。
+    if (!isSyncableKnowledgePath(filePath)) {
+      inaccessible.add(filePath);
+      continue;
+    }
     if (entry.deleted) {
       state.set(filePath, null);
       continue;

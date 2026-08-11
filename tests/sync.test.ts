@@ -129,6 +129,13 @@ describe("syncKnowledge", () => {
       "---\nname: release-validation\ndescription: Review draft\n---\n",
       "utf8"
     );
+    const assetDirectory = path.join(root, "knowledge", "assets", "objects");
+    await mkdir(assetDirectory, { recursive: true });
+    await writeFile(
+      path.join(assetDirectory, "README.md"),
+      "asset object documentation is managed by private Git",
+      "utf8"
+    );
 
     const result = await syncKnowledge(root, backend);
 
@@ -139,6 +146,9 @@ describe("syncKnowledge", () => {
     expect([...backend.files.keys()]).not.toContain("knowledge/_inbox/candidate.md");
     expect([...backend.files.keys()]).not.toContain(
       "knowledge/_inbox-skills/release-validation/SKILL.md"
+    );
+    expect([...backend.files.keys()]).not.toContain(
+      "knowledge/assets/objects/README.md"
     );
     expect(backend.manifest?.entries["knowledge/semantic/test/fact.md"]?.deleted).toBe(false);
   });
@@ -241,6 +251,43 @@ describe("syncKnowledge", () => {
 
     expect(readCount).toBe(0);
     expect(result.pulled).toEqual([]);
+  });
+
+  it("never reads or pulls asset paths advertised by a remote manifest", async () => {
+    const root = await createRoot();
+    const backend = new MemorySyncBackend();
+    const assetPath = "knowledge/assets/objects/ab/README.md";
+    backend.files.set(
+      assetPath,
+      knowledgeMarkdown("must not be treated as a knowledge document")
+    );
+    backend.manifest = {
+      version: 1,
+      generation: 1,
+      updatedAt: "2026-08-11T00:00:00.000Z",
+      entries: {
+        [assetPath]: {
+          hash: "ignored",
+          deleted: false,
+          updatedAt: "2026-08-11T00:00:00.000Z",
+          visibility: "project",
+          sensitivity: "internal"
+        }
+      }
+    };
+    let readCount = 0;
+    backend.readFile = async () => {
+      readCount += 1;
+      throw new Error("asset path must not be read");
+    };
+
+    const result = await syncKnowledge(root, backend);
+
+    expect(readCount).toBe(0);
+    expect(result.pulled).toEqual([]);
+    await expect(
+      readFile(path.join(root, assetPath), "utf8")
+    ).rejects.toThrow();
   });
 
   it("pulls remote-only Markdown and rebuilds the local index", async () => {
