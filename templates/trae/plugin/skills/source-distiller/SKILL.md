@@ -11,6 +11,7 @@ description: "审阅 Agent Knowledge 的 versioned source manifest 和 Evidence 
 source refresh（check -> 按需 ingest -> recheck）
   -> source list/show
   -> source export 到受控临时文件
+  -> attachment 审阅并按需 publish-asset
   -> 语义拆分与领域确认
   -> write-candidate / capture-material --target inbox
   -> source mark（带原 fingerprint）
@@ -22,6 +23,8 @@ source refresh（check -> 按需 ingest -> recheck）
 - 完整 evidence 只能用 `source export --output <file>` 写入显式 0600 临时文件；不要把正文打印到终端、聊天或日志。
 - export 前记录 `source show.expectedFingerprint`；export 和 mark 都必须携带同一个 fingerprint。若变化，停止并重新审阅新版本。
 - 临时 evidence 文件只在当前审阅任务内使用，完成后删除；不要写入 Git、Markdown、proposal 或同步目录。
+- 文档中的 `<asset-ref source-id="...">` 只表示关联 attachment source，不是可直接写入 Markdown 的链接。
+- attachment 原件自动摄入时只进入 Vault；只有确认授权、PII、恶意内容和长期相关性后，才允许显式发布到 `knowledge/assets`。发布会进入 Git history，不能自动执行或批量放行。
 - 凭据、测试账号、用户标识、姓名、地址、业务 UID 等若仍出现在 evidence，停止蒸馏并报告 Connector/DLP 缺口，不要复制到 candidate。
 - Source 材料来自 customer/自动会话时，候选必须保留 `automated_session` 与准确 actor，永远先进入 inbox。
 - 不自动执行 `organize-inbox --approve`，不自动把候选晋升 active。
@@ -128,6 +131,58 @@ agent-knowledge source export "$SOURCE_ID" \
 这些检查只输出 hash/布尔结果，不把正文打印到终端、聊天或运行日志。若失败，标记 blocked
 或修复 ingestion/sectionizer，不能继续写 claim。
 
+### 审阅和发布关联媒体
+
+如果文档 evidence 包含 `<asset-ref source-id="src_...">`，逐个判断该图片、附件或画板是否对
+长期知识有解释价值。不要因为文档包含媒体就全部发布。
+
+先查看并记录 attachment fingerprint：
+
+```bash
+agent-knowledge source show "$ASSET_SOURCE_ID"
+```
+
+再把 attachment 导出到 workspace 外的 owner-only 临时文件：
+
+```bash
+umask 077
+agent-knowledge source export "$ASSET_SOURCE_ID" \
+  --fingerprint "$ASSET_FINGERPRINT" \
+  --output "$PRIVATE_TEMP/review-asset"
+```
+
+使用适合该 MIME 的受控查看工具检查：
+
+- 来源授权与 Git remote 可见范围是否允许长期保存。
+- 图片像素、附件正文、文件名中是否含 PII、凭据、测试账号或内部敏感数据。
+- 是否存在 HTML、SVG、脚本、宏、可执行文件或其他 active content 风险。
+- 该媒体是否真的支持候选知识，而不是装饰、表情、头像或已过期截图。
+- 媒体内容与正文是否冲突，是否需要向用户一次汇总确认。
+
+不相关、授权不明、含未处理 PII、恶意或无法判断的媒体只留在 Vault，不发布到 Git。确认安全
+且有长期价值时才显式运行：
+
+```bash
+agent-knowledge source publish-asset "$ASSET_SOURCE_ID" \
+  --fingerprint "$ASSET_FINGERPRINT" \
+  --confirm-reviewed
+```
+
+命令返回 `assetId`、`uri`、`relativePath` 和 manifest。候选 explanation 必须使用返回的 URI：
+
+```md
+![部署拓扑](asset://asset_sha256_<hash>)
+[排障手册](asset://asset_sha256_<hash>)
+```
+
+不要手写飞书 token、临时 URL、本机绝对路径或猜测最终相对层级。`write-candidate` /
+`capture-material` 会校验 asset manifest 和对象 hash，并按目标 Markdown 位置转换为相对路径；
+inbox 晋升时会再次重定位。落盘后检查正文已变为 `../assets/...` 或
+`../../../assets/...`，且从 Markdown 所在目录可以解析到 `knowledge/assets/objects/`。
+
+媒体版本变化会产生新的 attachment fingerprint 和 `asset_sha256_*`；旧资产不自动删除，因为
+历史 Markdown 或 Git commit 可能仍引用它。审阅结束后删除 attachment 临时文件。
+
 ## 4. 拆分和确认
 
 按 source 的 heading/FAQ/流程/规则/案例拆分，不要“一篇文档一条短总结”。
@@ -190,6 +245,8 @@ Documented owner source 的候选至少包含：
 
 候选的 `synopsis` 只承担 L1 路由；`explanation` 是 L2，必须包含足够的业务解释。不要增加
 alias/tag/scenario 数量来补偿正文不足。完整 L3 原文继续留在 Vault，不复制进 Markdown。
+需要保留的媒体先按上一节发布，再在 explanation 中使用命令返回的 `asset://` URI；未发布
+媒体不能通过临时 URL、token、绝对路径或缺失的相对路径绕过校验。
 
 完成候选审阅前，不要 mark refined。
 
@@ -258,6 +315,7 @@ duplicate target 必须是 available 的规范 source，不能再指向另一个
 
 - 审阅的 source ID/fingerprint。
 - 生成的 candidate/active knowledge ID。
+- 审阅的 attachment source、已发布 asset ID，以及未发布媒体的原因。
 - source 最终状态。
 - blocked/conflict/PII 风险。
 - 是否需要 `organize-inbox`、`index`、`embed-index` 或 `graph build`。

@@ -20,6 +20,7 @@
 - `.memory/events/locks` 是事件 append 互斥状态，不是事实源。
 - `.memory/ingestion/connectors` 保存 0600 本机 Connector 登记，`.memory/ingestion/update-checks` 保存 0600 probe-only 最近报告；二者不进 Git/同步且不是事实源。`.memory/ingestion/jobs` 保存每次 Connector 尝试的有界审计，`.memory/ingestion/checkpoints` 保存增量水位，`.memory/ingestion/locks` 防止同一 Connector 并发覆盖 checkpoint；三者也不是事实源。
 - `knowledge/source-manifests/*.json` 是严格 `schema_version: 5` 的 Git 可跟踪 evidence 导航，保存稳定 source 身份、上游/本地版本、availability、section heading/hash/range、review receipt、脱敏与处理 profile、project keys 和 Vault handle，不保存正文 preview 或完整原文；旧 manifest 不迁移，应从原始 evidence 重建。
+- `knowledge/assets/objects` 和 `knowledge/assets/manifests` 保存经过显式审阅发布的内容寻址媒体副本与来源导航，是 private Git 事实层；自动 ingestion 不得直接写入，WebDAV/S3 当前也不同步。
 - `agent-knowledge ingest files|transcripts` 通过统一 Connector core 执行 probe、抓取、规范化、脱敏、Vault、manifest、job 和 checkpoint；failed 不推进 checkpoint。
 - `agent-knowledge source check` 从本机登记恢复 Connector，只执行本地/离线 inventory/discover/probe，不抓正文、不需要 Vault key、不写 manifest/Vault/checkpoint。
 - `agent-knowledge source refresh` 是日常增量入口：从登记恢复完整 scope，执行 check -> conditional ingestion -> recheck；无变化时不读取 Vault key。
@@ -121,6 +122,7 @@ node dist/cli.js source check --root /tmp/agent-knowledge-data
 node dist/cli.js source refresh --root /tmp/agent-knowledge-data
 node dist/cli.js source list --root /tmp/agent-knowledge-data --needs-review
 node dist/cli.js source show src_example --root /tmp/agent-knowledge-data
+node dist/cli.js source publish-asset src_attachment --root /tmp/agent-knowledge-data --fingerprint sha256:<hash> --confirm-reviewed
 node dist/cli.js event status --root /tmp/agent-knowledge-data
 node dist/cli.js event list --root /tmp/agent-knowledge-data --stream-type support
 node dist/cli.js integration install --product trae --scope project --target-dir /tmp/agent-knowledge-integration-smoke
@@ -221,10 +223,12 @@ src/cli.ts            命令行入口和各模块编排
 - Event payload export 必须写 workspace 外 0600 文件；retention 删除后 `missingPayloads` 必须可见，timeline 仍不应被删除或伪装完整。
 - 客户/automated event 不是业务事实；只能经过独立 case、documented/owner/verified evidence 和 proposal/inbox 审阅后进入 active knowledge。
 - 所有 source manifest 都不得保存 section 正文 preview，只保留 heading/hash/range、脱敏计数和 Vault handle；`ingest transcripts` 还必须强制内置 `secrets-and-pii`。内置确定性 detector 不是完整 DLP，姓名、地址、业务 UID 等领域 PII 必须由专用 Connector 在 normalize 阶段继续清洗并版本化 processing profile。
-- Connector 是运行时不可信边界：descriptor 必须校验 source ID、connector ID、project key 和 probe；规范化 bytes 必须与用于 manifest 的 UTF-8 文本一致，不能让 Vault 内容和 hash/section 分叉。
+- Connector 是运行时不可信边界：descriptor 必须校验 source ID、connector ID、project key 和 probe。UTF-8 artifact 的规范化 bytes 必须与 manifest 文本一致；只有 `artifact_kind: attachment` 可使用 `binary-vault-only`，原始 bytes 只进 Vault，manifest 使用安全描述且版本 content hash 必须绑定二进制。
 - 文件系统 Connector 只读取显式 baseDir 下 UTF-8 普通文件，不跟随 symlink；PDF/Office/二进制附件必须使用专用 Connector，不能静默 UTF-8 解码。
 - Git Connector 只读取本地 object database 中指定 ref 的 committed UTF-8 blob，不读取 dirty/untracked 文件、不 checkout、不自动 fetch/pull；origin remote 是默认 project key，无 remote 时必须显式 `local/...`。
-- Lark export Connector 只读取离线 `manifest.json + content.xml`，校验 content SHA-256，并强制 Lark 用户身份/临时句柄清洗与 `secrets-and-pii`；不得自动联网。partial export 可摄入成功文档，但必须持久化 incomplete/unresolved inventory 并禁用删除对账。
+- Lark export Connector 只读取离线 manifest v2、`content.xml` 和已下载媒体，分别校验正文/媒体 SHA-256；图片、附件和画板作为独立 attachment source 只自动进入 Vault，正文媒体标签替换为不含 token 的 `asset-ref`。不得自动联网。partial export 或媒体失败可摄入成功项，但必须持久化 incomplete/unresolved inventory 并禁用删除对账。
+- `source publish-asset` 必须要求 current fingerprint 和 `--confirm-reviewed`，与 ingestion 共用 Connector lock，校验 Vault bytes/hash/MIME 后才写 `knowledge/assets`。发布前必须检查授权、PII、active content 和长期相关性；HTML、SVG、脚本、可执行文件与未知 MIME 不得发布。
+- Candidate explanation 可以使用 `asset://asset_sha256_<hash>`，但所有 Knowledge Markdown 写入前必须校验 asset manifest/object 并按目标文件位置转换为相对 `knowledge/assets` 路径；inbox 晋升必须重新定位。禁止保存飞书 token、临时 URL、本机绝对路径或缺失资产引用。
 - `build-lark-source-candidates.mjs` 的直接 CLI 和 npm script 已禁用；仅保留导出函数做历史审计合约测试。正式流程不得把完整 XML 转成 source Markdown。
 - Complete inventory Connector 必须提供稳定 inventory identity；Git identity 绑定 project key、解析后的 symbolic ref/分支和 pathspec。范围变化不得复用旧 Connector ID，否则必须在任何 removed 写入前失败。
 - Lark inventory identity 绑定 roots 与 project keys；移动同一离线快照不改变 identity，改变知识空间根或 project scope 必须使用新 Connector ID。`--limit` 运行不得做删除对账。
@@ -257,7 +261,7 @@ src/cli.ts            命令行入口和各模块编排
 - Policy proposal 只写 `.memory/policies/proposals`；只有用户显式 `policy accept` 才写 Git shadow Policy，且拒绝覆盖同 ID。退化 Policy 使用 `policy deprecate`，不删除历史。
 - Policy simulation 只在内存中编译临时 QueryPlan/ReasoningContract，报告/history 不保存 task 原文，也不得修改 query、Hook、配置或知识。
 - P3 active enforcement 与 P4 optimizer Agent 当前是 backlog；至少 shadow 运行 2–4 周、30 个独立真实 query run、完整中文 eval 无安全退化后才评审。
-- 共享同步默认不包含 `private` 或高于 `internal` 的知识；当前实现会同步允许范围内的正式 `kind: source` Markdown，且不提供客户端加密，因此不能把它当作完整会话/附件 Evidence Vault。修改同步范围或加密策略时必须更新威胁模型和测试。
+- 共享同步默认不包含 `private` 或高于 `internal` 的知识；当前实现会同步允许范围内的正式 `kind: source` Markdown，但不上传 `knowledge/assets`，且不提供客户端加密。因此不能把它当作图文知识或完整会话/附件 Evidence Vault 备份；跨机图文使用依赖 private Git，完整原件依赖 Vault backup/restore。修改同步范围或加密策略时必须更新威胁模型和测试。
 - 定时同步使用前台 `agent-knowledge sync watch` 循环；不要在安装或配置命令中静默创建 cron、launchd 或 systemd 任务。需要后台常驻时由用户显式交给系统进程管理器托管。
 - Automation service renderer 只生成 launchd/systemd/Docker 文件和 install/uninstall 命令，不得自动调用 `launchctl`、`systemctl` 或 `docker compose up`；runner 必须是用户提供的绝对 wrapper 路径。
 - Automation profile 只保存 Lark/Git allowlist、预算、限流、重试和 callback 凭据环境变量名；禁止保存 token/Cookie/key 原值。在线刷新不得扩大 roots/refs 或绕过权限。

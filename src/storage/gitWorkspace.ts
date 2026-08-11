@@ -23,6 +23,7 @@ const DATA_SECURITY = `# Knowledge Data Security
 
 - Do not commit credentials, cookies, private keys, or unredacted customer data.
 - Keep complete evidence objects under the encrypted Vault; Git stores manifests and reviewed Markdown.
+- Publishing an attachment copies it into Git history; review authorization, PII, active content, and remote visibility first.
 - Review the remote destination and repository visibility before the first push.
 `;
 

@@ -149,10 +149,13 @@ project key，以 commit SHA 记录仓库版本、以 blob SHA (`path_hash`) 判
 解析后的 symbolic ref/分支和 pathspec inventory；改变这些范围时必须使用新 Connector ID，避免旧 source
 被误判为删除。
 
-`ingest lark-export` 只读取 `fetch-lark-corpus.mjs` 生成的离线 `manifest.json + content.xml`，
-不调用网络。它校验每份 content hash，并强制 secret+PII 与飞书用户身份/临时资源句柄治理。
-有 pending/failures 时仍摄入成功文档，但 `inventory.complete=false`、持久化 unresolved warning，
-且绝不做删除对账；清零后才恢复 complete inventory。
+`ingest lark-export` 只读取 `fetch-lark-corpus.mjs` 生成的离线 manifest v2、`content.xml` 和
+已下载媒体，不调用网络。导出器识别图片、普通附件和画板，保存二进制 SHA-256、MIME、大小、
+文档内顺序和相对缓存路径；飞书 token、临时下载 URL 和本机绝对路径不进入 source manifest
+或 Knowledge Markdown。Connector 校验每份正文和媒体 hash，正文强制 secret+PII 与飞书
+用户身份/临时句柄治理；媒体作为独立 attachment source 只自动进入加密 Vault。
+有 pending、文档 failures 或媒体 failures 时仍摄入成功项，但 `inventory.complete=false`、
+持久化 unresolved warning，且绝不做删除对账；清零后才恢复 complete inventory。
 Connector ID 绑定 roots 与 project keys；移动同一快照目录不改变 identity，切换知识空间范围
 或 project scope 时必须使用新 ID。
 
@@ -275,6 +278,22 @@ agent-knowledge organize-inbox
 7. 增加真实 query、hard-negative 和 no-answer eval，避免新增知识破坏已有检索边界。
 8. active knowledge 完成后才标记 source receipt，并删除临时 evidence。
 
+飞书正文中的 `<asset-ref source-id="...">` 指向独立 attachment source。只有确实支持长期
+知识的图片、附件或画板，才在导出检查授权、PII、恶意/active content 和业务相关性后执行：
+
+```bash
+agent-knowledge source publish-asset "$ASSET_SOURCE_ID" \
+  --fingerprint "$ASSET_FINGERPRINT" \
+  --confirm-reviewed
+```
+
+该命令把 Vault attachment 的内容寻址副本写入
+`knowledge/assets/objects/<prefix>/asset_sha256_<hash>.<ext>`，并写 Git 可跟踪 asset manifest。
+候选 explanation 使用命令返回的 `asset://asset_sha256_<hash>`；`write-candidate` /
+`capture-material` 会校验对象 hash，并按目标 Markdown 位置自动改成 `../assets/...` 相对链接，
+inbox 晋升时也会重定位。禁止把飞书 token、临时 URL、本机绝对路径或手工猜测的相对路径写入
+候选。不相关、授权不明、含未处理 PII 或 active content 的媒体只保留在 Vault，不发布到 Git。
+
 `maintenance` 会读取 `.memory/logs` 中的 usefulness feedback。同一 `memoryId + queryRunId` 的重复上报只采用最新一条，不能通过重复日志放大票数；Skill proposal 的净正反馈数量必须至少覆盖独立 session 数。如果 feedback 晚于 observation 到达，下次 `maintenance run/watch` 会重新检查已消费 observation，不需要重置 watermark。
 
 也可以直接要求 AI 使用 `memory-maintainer` Skill：AI 负责运行 maintenance、汇总 proposal/candidate/Skill、清理已消费日志；用户只决定接受、拒绝、批准和安装。清理命令：
@@ -348,6 +367,10 @@ current claim anchor 指向 source 当前 section/hash 后，才可 `source mark
 2. knowledge 正文：保存背景、条件、例外、步骤、失败策略和验证方式。
 3. evidence：source manifest 保存 source/section/hash、版本、脱敏摘要和 Vault handle；完整
    原文进入客户端加密 Evidence Vault，不进入普通 query 或 Git。
+
+图文知识在三层之外增加显式发布资产：完整媒体 L3 原件仍在 Vault；只有经过审阅且确实需要在
+L2 解释中展示的副本进入 `knowledge/assets`。Markdown 使用相对路径，因此 private Git checkout
+后可直接浏览；旧 asset 不自动删除，避免历史 Markdown 或 Git commit 断链。
 
 现有 656 份飞书 source 和 33 条旧精炼知识只用于审计问题与构造评测，不会迁移进 V2 正式知识库。使用 Connector、Vault、source manifest v5 和 source-distiller 从原始飞书导出或重新拉取结果全量重建。
 
@@ -599,6 +622,7 @@ agent-knowledge source refresh --connector-id <connector-id>
 agent-knowledge source list --needs-review
 agent-knowledge source show <source-id>
 agent-knowledge source export <source-id> --fingerprint <sha256> --output /secure/tmp/evidence
+agent-knowledge source publish-asset <attachment-source-id> --fingerprint <sha256> --confirm-reviewed
 agent-knowledge source mark <source-id> --fingerprint <sha256> --review-token <token> --status refined --knowledge-id <active-id>
 
 # 客服与需求生命周期事件
@@ -612,6 +636,7 @@ agent-knowledge event status
 # 飞书批量导出与摄入
 node scripts/fetch-lark-corpus.mjs --root-url <wiki-url> --output /secure/exports/lark --refresh-existing
 agent-knowledge ingest lark-export --connector-id lark-business --export-dir /secure/exports/lark --project-key github.com/example/business
+# 图片/附件/画板先 source show/export 审阅，再按需 publish-asset；候选只使用返回的 asset URI
 
 # 加密完整 evidence
 agent-knowledge vault status

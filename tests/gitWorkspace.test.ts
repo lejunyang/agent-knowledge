@@ -39,6 +39,9 @@ describe("knowledge Git workspace", () => {
     expect(gitignore).not.toContain("knowledge/");
     expect(gitignore).not.toContain("policies/");
     expect(security).toContain("Do not commit credentials");
+    expect(security).toContain(
+      "Publishing an attachment copies it into Git history"
+    );
   });
 
   it("refuses initialization inside an unrelated code repository", async () => {

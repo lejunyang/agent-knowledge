@@ -104,6 +104,19 @@ agent-knowledge source list --needs-review
 
 正式蒸馏必须使用 `source-distiller`。该流程会验证 fingerprint，把 evidence 导出到 `0600` 私有临时文件，检查 DLP 与 section hash，生成有 claim anchor 的 L1/L2 知识，标记 source receipt，并删除临时 evidence。
 
+飞书图片、附件和画板会作为独立 attachment source 进入 Vault，不会自动写入知识 Git。
+需要在 Markdown 保留的媒体必须由 `source-distiller` 导出检查后显式执行：
+
+```bash
+agent-knowledge source publish-asset "$ASSET_SOURCE_ID" \
+  --fingerprint "$ASSET_FINGERPRINT" \
+  --confirm-reviewed
+```
+
+候选只使用命令返回的 `asset://asset_sha256_<hash>`。落盘时系统会按 Markdown 位置改写为
+`../assets/...` 相对路径；不要保存飞书临时 URL、token、本机绝对路径或手工猜测相对层级。
+`knowledge/assets` 会进入 Git history，WebDAV/S3 当前不传这些二进制。
+
 ## 生命周期与经验改进
 
 客服或需求不要直接压缩成一条结论。先记录 append-only 事件：

@@ -1293,7 +1293,10 @@ ingest
   .requiredOption("--connector-id <id>", t("稳定 Connector ID", "stable connector ID"))
   .requiredOption(
     "--export-dir <dir>",
-    t("包含 manifest.json 和 content.xml 的导出目录", "export directory containing manifest.json and content.xml")
+    t(
+      "包含 manifest v2、content.xml 和已下载媒体的导出目录",
+      "export directory containing manifest v2, content.xml, and downloaded media"
+    )
   )
   .option(
     "--project-key <key>",
@@ -1310,12 +1313,12 @@ ingest
 示例：
   agent-knowledge ingest lark-export --connector-id lark-business --export-dir /secure/exports/lark --project-key github.com/example/business
 
-边界：只读取 offline export，不访问在线飞书。要识别在线更新，先显式刷新 export，再运行 source refresh。`,
+边界：只读取 offline export，不访问在线飞书。图片、附件和画板作为 attachment 只自动进入 Vault；发布到 knowledge/assets 必须单独审阅并执行 source publish-asset。要识别在线更新，先显式刷新 export，再运行 source refresh。`,
       `
 Example:
   agent-knowledge ingest lark-export --connector-id lark-business --export-dir /secure/exports/lark --project-key github.com/example/business
 
-Boundary: reads the offline export only and never accesses online Lark. Refresh the export explicitly before source refresh to detect online changes.`
+Boundary: reads the offline export only and never accesses online Lark. Images, attachments, and whiteboards enter the Vault as attachments; publishing to knowledge/assets requires separate review and source publish-asset. Refresh the export explicitly before source refresh to detect online changes.`
     )
   )
   .action(async (options: {

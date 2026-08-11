@@ -5,6 +5,7 @@
 - [首次启用](#首次启用)
 - [日常任务查询](#日常任务查询)
 - [批量业务文档](#批量业务文档)
+- [飞书图文知识](#飞书图文知识)
 - [Git 仓库知识](#git-仓库知识)
 - [客服问题](#客服问题)
 - [需求全生命周期](#需求全生命周期)
@@ -119,6 +120,62 @@ agent-knowledge source list --needs-review
 
 不适合长期保存的一次性通知使用 `no_long_term_value`；严格重复使用 `duplicate`；明确废弃使用 `obsolete`；有歧义或 DLP 缺口使用 `blocked`。
 
+## 飞书图文知识
+
+先把在线飞书文档刷新为离线 export，再摄入 document 与 attachment：
+
+```bash
+node scripts/fetch-lark-corpus.mjs \
+  --root-url "$LARK_ROOT" \
+  --output /secure/exports/lark-business \
+  --refresh-existing
+
+agent-knowledge ingest lark-export \
+  --connector-id lark-business \
+  --export-dir /secure/exports/lark-business \
+  --project-key github.com/example/business
+```
+
+导出 manifest v2 会记录文档、图片、普通附件、画板、媒体 hash/大小/MIME 和失败 inventory。
+飞书 token 和临时下载 URL 只用于离线抓取，不进入 source manifest 或 Knowledge Markdown。
+媒体下载失败时文档仍可摄入，但 inventory 保持 incomplete，删除对账禁用。
+
+文档 evidence 中的 `<asset-ref source-id="...">` 指向 attachment source。需要把媒体放入长期
+知识时，先固定 fingerprint 并导出到 workspace 外检查：
+
+```bash
+agent-knowledge source show "$ASSET_SOURCE_ID"
+agent-knowledge source export "$ASSET_SOURCE_ID" \
+  --fingerprint "$ASSET_FINGERPRINT" \
+  --output "$PRIVATE_TEMP/review-asset"
+```
+
+确认授权、PII、active content 和业务相关性后显式发布：
+
+```bash
+agent-knowledge source publish-asset "$ASSET_SOURCE_ID" \
+  --fingerprint "$ASSET_FINGERPRINT" \
+  --confirm-reviewed
+```
+
+在 candidate explanation 中使用返回的 URI：
+
+```md
+![部署拓扑](asset://asset_sha256_<hash>)
+[排障手册](asset://asset_sha256_<hash>)
+```
+
+`write-candidate` / `capture-material` 会验证内容 hash，并自动写成相对于当前 Markdown 的
+`../assets/...` 链接；inbox 晋升后会重新计算路径。成功标准：
+
+- `knowledge/assets/objects/` 中对象与 asset manifest hash 一致。
+- Knowledge Markdown 不含飞书 token、临时 URL、绝对路径或非代码块中的 `asset://`。
+- 从 Markdown 所在目录解析相对链接能到达 asset object。
+- 不相关、授权不明或含 PII 的媒体仍只在 Vault，不进入 Git。
+
+`knowledge/assets` 是 private Git 事实层的一部分；WebDAV/S3 当前只同步 Markdown，不同步
+asset、source manifest 或 Vault。跨设备使用图文知识应同步 private Git，并独立备份加密 Vault。
+
 ## Git 仓库知识
 
 使用 committed blob 摄入，不读取 dirty/untracked 内容作为正式版本：
@@ -232,6 +289,7 @@ agent-knowledge sync watch
 
 - `.memory`
 - `.vault`
+- `knowledge/assets`（WebDAV/S3 不传；private Git 可跟踪）
 - source manifest
 - `_inbox`
 - `_inbox-skills`

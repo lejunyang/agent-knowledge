@@ -182,7 +182,10 @@ agent-knowledge ingest lark-export \
 
 飞书在线知识库先使用 `fetch-lark-corpus.mjs --refresh-existing` 尽量完成离线导出，再
 `ingest lark-export`；不要用旧 source candidate 脚本把完整 XML 写进 Markdown。若 export
-仍有 failures，成功文档可先摄入，但必须汇报 source list 的 unresolved inventory，不能宣称完成。
+仍有文档或媒体 failures，成功项可先摄入，但必须汇报 source list 的 unresolved inventory，
+不能宣称完成。图片、附件和画板会成为 attachment source；本 Skill 不直接发布媒体，也不把
+飞书 token、临时 URL 或本机路径写进 candidate。需要在知识 Markdown 展示媒体时转交
+`source-distiller`，由其审阅后显式 `source publish-asset` 并使用返回的 asset URI。
 
 摄入后使用：
 

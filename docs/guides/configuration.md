@@ -142,7 +142,11 @@ agent-knowledge source refresh \
 - files/transcripts Connector ID 绑定 base directory、glob、artifact kind、project keys 和
   content type；后续命令漏掉原 project key 也会被视为 scope 降级并失败。
 - Lark Connector ID 绑定 export roots 与 project keys；移动同一 scope 的离线快照目录允许更新
-  本地登记，切换知识空间范围必须使用新 ID。
+  本地登记，切换知识空间范围必须使用新 ID。离线 export 必须是 manifest v2，正文与媒体分别
+  保存 hash；媒体 failure 会使 inventory incomplete 并关闭删除对账。
+- Lark 图片、附件和画板只自动进入 Vault attachment。只有显式审阅后执行
+  `source publish-asset --confirm-reviewed` 才会写入 `knowledge/assets`；该 Git 副作用不是
+  Connector 配置项，也不能由 `source refresh` 自动开启。
 - 完整 `ingest git` 运行会做 source 删除对账；传 `--limit` 的截断运行不会标记删除。
 - `source check` 不读取正文、不需要 Vault key，也不修改 Vault/manifest/checkpoint。Git 只检查
   登记的本地 ref，飞书只检查离线 export；远端更新必须先由用户或受控自动化显式 fetch/刷新。

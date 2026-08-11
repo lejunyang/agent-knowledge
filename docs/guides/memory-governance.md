@@ -146,6 +146,20 @@ export/mark 与 Connector ingestion 使用同一把本地锁，确保 fingerprin
    才能 `source mark --status refined`。
 9. 删除临时 evidence，并在 Git 中只提交知识和 manifest receipt。
 
+文档含图片、附件或画板时，正文 evidence 会使用 `<asset-ref source-id="...">` 指向独立
+attachment source。媒体不会自动进入知识 Git；先用 `source show/export` 固定 fingerprint 并
+检查授权、PII、active content 和业务相关性，再按需执行：
+
+```bash
+agent-knowledge source publish-asset "$ASSET_SOURCE_ID" \
+  --fingerprint "$ASSET_FINGERPRINT" \
+  --confirm-reviewed
+```
+
+候选 explanation 只使用命令返回的 `asset://asset_sha256_<hash>`。写入 active/inbox 时系统会
+校验 asset manifest 和二进制 hash，再按 Markdown 位置改写为相对路径；inbox 晋升后重新定位。
+飞书 token、临时下载 URL、本机绝对路径和手工猜测的资产相对路径都不得进入候选。
+
 如果文档明确废弃、严格重复、一次性通知或意义不明，分别使用
 `obsolete`、`duplicate`、`no_long_term_value` 或 `blocked`，不要为了提高 source coverage
 强制制造 active knowledge。
@@ -255,8 +269,10 @@ agent-knowledge source refresh --connector-id lark-business
 agent-knowledge source list --needs-review
 ```
 
-content hash 不一致的文档会失败且不推进 source watermark。导出未 complete 或仍有 failures
-时允许成功文档先进入队列，但 inventory warning 持久化、删除对账关闭；这不等于完整覆盖。
+manifest v2 会保存图片、附件和画板 inventory；同一媒体重复出现保留各自 occurrence，但下载
+bytes 可复用。content hash 不一致的文档或媒体会作为独立 source 失败且不推进对应 watermark。
+导出未 complete 或仍有文档/媒体 failures 时允许成功项先进入队列，但 inventory warning
+持久化、删除对账关闭；这不等于完整覆盖。
 旧 `build-lark-source-candidates.mjs` 不属于正式 pipeline。
 
 `source list` 顶层 `inventory` 和 `knowledge audit` 的

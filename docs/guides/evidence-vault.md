@@ -3,6 +3,7 @@
 Evidence Vault 用于保存完整文档、完整会话、工具轨迹和附件。它与 Git 知识仓库分离：
 
 - `knowledge/`：可 review、可 diff 的 synopsis、knowledge、claim 和 source manifest。
+- `knowledge/assets/`：经过显式审阅后发布的内容寻址媒体副本，可由 Markdown 相对路径引用并进入 private Git。
 - `.vault/`：AES-256-GCM 客户端加密的完整 evidence object。
 - `.memory/`：可重建索引和运行状态。
 
@@ -82,10 +83,17 @@ Git Connector 只读本地 object database 的 committed blob，不读取工作�
 文件，也不会联网更新仓库。commit SHA 记录仓库时间点，blob SHA 写入 `path_hash` 并优先
 用于轻量比较：无关 commit 只更新 manifest metadata，不重新读取正文。
 
-Lark export Connector 只读离线递归导出的 `manifest.json + content.xml`。每份 XML 必须命中
-导出时记录的 SHA-256；临时资源句柄和 user cite 会先清洗，之后再执行统一
-`secrets-and-pii`，不允许降级。若 manifest 有 pending/failures，成功文档仍可进入 Vault，
-但 checkpoint inventory 标记 incomplete/unresolved，删除对账关闭。
+Lark export Connector 只读离线递归导出的 manifest v2、`content.xml` 和媒体文件。导出器识别
+`<img>`、`<source>` 和 `<whiteboard>`，下载媒体后记录二进制 SHA-256、MIME、大小、出现顺序
+和相对缓存路径；普通下载失败时可使用 preview 降级。正文和媒体都必须命中导出时记录的
+SHA-256。正文中的临时 URL、token、block handle 和 user cite 会先清洗，媒体标签替换为不含
+上游 token 的 `<asset-ref source-id="...">`，之后正文再执行统一 `secrets-and-pii`。
+
+媒体作为 `artifact_kind: attachment` 保存原始 bytes 到加密 Vault；source manifest 只保存
+安全描述和二进制 content hash，并使用 `redaction_policy: connector-specific`，因为文本
+detector 不能宣称已检查图片像素或附件正文。若 manifest 有 pending、文档 failures 或媒体
+failures，成功项仍可进入 Vault，但 checkpoint inventory 标记 incomplete/unresolved，删除
+对账关闭。
 
 推荐文件输入，避免完整内容进入 shell history：
 
@@ -178,6 +186,43 @@ source export 复用 Vault 的 GCM/hash 校验和 0600 文件边界，不向 std
 只要历史 Vault object 仍存在，也允许显式 export 用于删除影响分析。输出路径必须位于
 knowledge workspace 之外，处理完成后删除临时文件。
 
+## Attachment 审阅与发布
+
+自动 ingestion 不会把媒体写进 Git。文档 evidence 的 `<asset-ref source-id="...">` 只是
+attachment source 导航。先固定 attachment fingerprint 并导出到 workspace 外：
+
+```bash
+agent-knowledge source show "$ASSET_SOURCE_ID"
+agent-knowledge source export "$ASSET_SOURCE_ID" \
+  --fingerprint "$ASSET_FINGERPRINT" \
+  --output /secure/tmp/review-asset
+```
+
+用适合 MIME 的受控工具检查来源授权、PII、恶意/active content、文件名和业务相关性。确认
+需要进入长期知识后才运行：
+
+```bash
+agent-knowledge source publish-asset "$ASSET_SOURCE_ID" \
+  --fingerprint "$ASSET_FINGERPRINT" \
+  --confirm-reviewed
+```
+
+`publish-asset` 与 ingestion 共用 Connector 锁，并重新校验 Vault bytes 的 hash、长度、MIME
+和 source fingerprint。HTML、SVG、脚本、可执行文件与未知 MIME 被拒绝。成功后写：
+
+```text
+knowledge/assets/objects/<hash-prefix>/asset_sha256_<hash>.<ext>
+knowledge/assets/manifests/asset_sha256_<hash>.json
+```
+
+该副本会进入 Git history；`--confirm-reviewed` 不是自动 DLP、OCR 或病毒扫描的替代品。
+不相关、授权不明、含未处理 PII 或有 active content 风险的媒体继续只留在 Vault。
+
+候选正文使用命令返回的 `asset://asset_sha256_<hash>`。知识落盘时校验 asset manifest/object，
+再改写成相对于目标 Markdown 的 `../assets/...` 路径；inbox 晋升会重新计算路径。代码块中的
+教学 URI 不转换。媒体内容变化会生成新的 attachment fingerprint 和 asset ID，旧 asset 不会
+自动删除，以免历史 Markdown 或 Git commit 断链。
+
 ## 读取
 
 CLI 不向 stdout 输出完整 evidence，只能写到显式文件：
@@ -214,4 +259,6 @@ agent-knowledge vault delete vault_sha256_<hash> \
 - source manifest 可以保存 `vault_object` handle，但 Git 中不能保存解密原文。
 - 所有 source manifest 都不保存 section 正文 preview，只保存 heading/range/hash、脱敏计数和 Vault handle。
 - Connector 会脱敏 external key/title，但 source ID 与 connector ID 仍应使用不含个人信息的稳定标识。
-- 当前 WebDAV/S3 是 Markdown 镜像，不会上传 `.vault/`。远端加密 Vault backend 属于后续 Connector/Storage adapter 阶段。
+- 当前 WebDAV/S3 是 Markdown 镜像，不会上传 `.vault/`、source manifest 或
+  `knowledge/assets/`。图文知识跨机使用依赖 private Git；完整媒体原件仍需独立加密 Vault
+  backup/restore。远端加密 Vault backend 属于后续 Connector/Storage adapter 阶段。

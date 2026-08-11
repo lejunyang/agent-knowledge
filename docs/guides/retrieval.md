@@ -52,7 +52,10 @@ agent-knowledge knowledge show <knowledge-id> --layer knowledge
 agent-knowledge knowledge evidence <claim-id>
 ```
 
-两条命令会重新执行 active、validity、visibility、sensitivity、project 和 kind 过滤；知道 ID 或 claim ID 不能绕过隔离。当前 `evidence` 返回 source/section/hash handle，完整原文读取等 Evidence Vault 交付后再增加。
+两条命令会重新执行 active、validity、visibility、sensitivity、project 和 kind 过滤；知道 ID
+或 claim ID 不能绕过隔离。`evidence` 返回 source/section/hash handle；完整原文和 attachment
+仍需显式 `source export`。L2 Markdown 中经过审阅的媒体使用相对 `knowledge/assets` 路径，
+检索索引只处理 Markdown 文本，不解析图片像素、音视频或附件正文。
 
 ## Hybrid
 
