@@ -23,6 +23,7 @@ import { rebuildIndex } from "../storage/indexer.js";
 import { writeCandidateMemory } from "./inbox.js";
 import {
   isGeneratedKnowledgeFile,
+  isKnowledgeAssetPath,
   isSkillReviewDraft
 } from "../storage/knowledgePaths.js";
 import {
@@ -174,7 +175,9 @@ async function readAllKnowledgeDocuments(rootDir: string): Promise<KnowledgeDocu
   for (const filePath of files
     .filter(
       (filePath) =>
-        !isGeneratedKnowledgeFile(filePath) && !isSkillReviewDraft(filePath)
+        !isGeneratedKnowledgeFile(filePath) &&
+        !isSkillReviewDraft(filePath) &&
+        !isKnowledgeAssetPath(filePath)
     )
     .sort()) {
     const absolutePath = resolveWorkspacePath(rootDir, filePath);

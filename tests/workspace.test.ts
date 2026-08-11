@@ -1,4 +1,4 @@
-import { access, mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -37,6 +37,9 @@ describe("initKnowledgeWorkspace", () => {
     await expect(
       access(path.join(root, "policies", "reasoning"))
     ).resolves.toBeUndefined();
+    await expect(
+      readFile(path.join(root, "knowledge", "README.md"), "utf8")
+    ).resolves.toContain("assets/");
   });
 });
 
@@ -63,6 +66,10 @@ describe("discoverKnowledgeFiles", () => {
       path.join(root, "knowledge", "_inbox-skills", "proposal-skill"),
       { recursive: true }
     );
+    await mkdir(
+      path.join(root, "knowledge", "assets", "objects"),
+      { recursive: true }
+    );
     await writeFile(path.join(root, "knowledge", "_inbox", "candidate.md"), "# candidate\n", "utf8");
     await writeFile(path.join(root, "knowledge", "_archive", "old.md"), "# old\n", "utf8");
     await writeFile(
@@ -76,6 +83,11 @@ describe("discoverKnowledgeFiles", () => {
       "---\nname: proposal-skill\ndescription: Review draft\n---\n",
       "utf8"
     );
+    await writeFile(
+      path.join(root, "knowledge", "assets", "objects", "README.md"),
+      "# Asset object metadata\n",
+      "utf8"
+    );
 
     const files = await discoverKnowledgeFiles(root);
 
@@ -84,6 +96,7 @@ describe("discoverKnowledgeFiles", () => {
     expect(files).not.toContain(
       "knowledge/_inbox-skills/proposal-skill/SKILL.md"
     );
+    expect(files).not.toContain("knowledge/assets/objects/README.md");
   });
 });
 

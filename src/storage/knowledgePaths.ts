@@ -1,8 +1,8 @@
 /**
  * knowledge 路径策略统一定义哪些 Markdown 属于正式知识，哪些只是生成或审阅产物。
  *
- * `knowledge/_inbox-skills/<proposal>/SKILL.md` 虽然位于 knowledge 目录并使用 Markdown，但它遵循
- * Skill frontmatter，不是 KnowledgeDocument；所有事实读取链都必须在解析前排除它。
+ * Skill 草稿和 `knowledge/assets` 中的说明文件虽然位于 knowledge 目录并可能使用 Markdown，
+ * 但都不是 KnowledgeDocument；所有事实读取链必须在解析前统一排除。
  */
 export const GENERATED_KNOWLEDGE_FILES = new Set([
   "knowledge/README.md",
@@ -16,6 +16,7 @@ const KNOWLEDGE_REVIEW_PREFIXES = [
   "knowledge/_archive/",
   "knowledge/_inbox-skills/"
 ] as const;
+const KNOWLEDGE_ASSET_PREFIX = "knowledge/assets/";
 
 /** 统一 Windows/POSIX 分隔符，保证路径策略跨平台一致。 */
 export function normalizeKnowledgePath(filePath: string): string {
@@ -42,6 +43,11 @@ export function isSkillReviewDraft(filePath: string): boolean {
   );
 }
 
+/** 判断路径是否属于内容寻址媒体；其中即使出现 Markdown 也不是 KnowledgeDocument。 */
+export function isKnowledgeAssetPath(filePath: string): boolean {
+  return normalizeKnowledgePath(filePath).startsWith(KNOWLEDGE_ASSET_PREFIX);
+}
+
 /** 判断 Markdown 是否可进入 index、embedding、catalog、graph 或同步事实链。 */
 export function isDiscoverableKnowledgeFile(filePath: string): boolean {
   const normalized = normalizeKnowledgePath(filePath);
@@ -49,6 +55,7 @@ export function isDiscoverableKnowledgeFile(filePath: string): boolean {
     normalized.startsWith("knowledge/") &&
     normalized.endsWith(".md") &&
     !isGeneratedKnowledgeFile(normalized) &&
-    !isKnowledgeReviewArtifact(normalized)
+    !isKnowledgeReviewArtifact(normalized) &&
+    !isKnowledgeAssetPath(normalized)
   );
 }

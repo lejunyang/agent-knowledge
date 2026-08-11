@@ -99,6 +99,30 @@ describe("listKnowledge", () => {
 
     expect(summary.total).toBe(2);
   });
+
+  it("does not parse asset documentation as KnowledgeDocument", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-list-asset-doc-")
+    );
+    tempDirs.push(root);
+    await cp("tests/fixtures/basic-knowledge", root, { recursive: true });
+    const assetDirectory = path.join(
+      root,
+      "knowledge",
+      "assets",
+      "objects"
+    );
+    await mkdir(assetDirectory, { recursive: true });
+    await writeFile(
+      path.join(assetDirectory, "README.md"),
+      "# Content-addressed asset object\n",
+      "utf8"
+    );
+
+    const summary = await listKnowledge(root);
+
+    expect(summary.total).toBe(2);
+  });
 });
 
 describe("organizeInbox", () => {

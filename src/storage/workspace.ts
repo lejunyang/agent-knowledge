@@ -21,6 +21,7 @@ This directory is the V2 human-readable fact source for agent memory.
 - \`principle/\`: evidence-tested reasoning and memory-use principles.
 - \`skills/\`: reviewed reusable capabilities represented as knowledge.
 - \`source-manifests/\`: source hashes, sections, and Vault handles; not raw evidence bodies.
+- \`assets/\`: explicitly reviewed content-addressed media referenced by Markdown with relative paths.
 - \`_inbox/\`: proposed memories awaiting review.
 - \`_archive/\`: deprecated or rejected memories.
 - \`_inbox-skills/\`: reviewed Skill drafts; not knowledge facts.
