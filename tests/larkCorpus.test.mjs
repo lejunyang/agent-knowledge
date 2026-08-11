@@ -58,10 +58,41 @@ test("separates sheet, bitable, and whiteboard resources from recursive docs", (
     [
       "bitable:base123",
       "sheet:sheet456",
-      "sheets:sheet123",
-      "whiteboard:board123"
+      "sheets:sheet123"
     ]
   );
+  assert.deepEqual(
+    result.media.map((item) => `${item.kind}:${item.token}`),
+    ["whiteboard:board123"]
+  );
+});
+
+test("extracts ordered image, attachment, and whiteboard references without deduplicating occurrences", () => {
+  const result = extractLarkReferences(`
+    <img src="img-token" name="diagram.png" alt="架构图" mime="image/png" block-id="block-image"/>
+    <source token="file-token" name="排障手册.pdf" mime="application/pdf" block-id="block-file"/>
+    <whiteboard token="board-token" name="流程画板" block-id="block-board"/>
+    <img src="img-token" name="diagram.png" alt="架构图复用" mime="image/png"/>
+  `);
+
+  assert.deepEqual(
+    result.media.map(({ kind, token, ordinal }) => ({
+      kind,
+      token,
+      ordinal
+    })),
+    [
+      { kind: "image", token: "img-token", ordinal: 0 },
+      { kind: "attachment", token: "file-token", ordinal: 1 },
+      { kind: "whiteboard", token: "board-token", ordinal: 2 },
+      { kind: "image", token: "img-token", ordinal: 3 }
+    ]
+  );
+  assert.equal(result.media[0].alt, "架构图");
+  assert.equal(result.media[0].mime, "image/png");
+  assert.equal(result.media[0].blockId, "block-image");
+  assert.equal(result.media[1].name, "排障手册.pdf");
+  assert.equal(result.media[2].name, "流程画板");
 });
 
 test("stops cleanly at the per-run limit and rebuilds pending work from the manifest", async () => {
@@ -226,6 +257,148 @@ if (args[0] === "wiki") {
     assert.equal(result.complete, true);
     assert.equal(Object.keys(result.documents).length, 1);
     assert.equal(await readFile(counterPath, "utf8"), "3");
+  } finally {
+    process.env.PATH = originalPath;
+    await rm(output, { recursive: true, force: true });
+  }
+});
+
+test("downloads images, attachments, and whiteboards into a versioned media inventory", async () => {
+  const output = await mkdtemp(path.join(tmpdir(), "lark-corpus-media-"));
+  const originalPath = process.env.PATH;
+  const fixtureBin = path.join(output, "bin");
+  const { mkdir, writeFile, chmod } = await import("node:fs/promises");
+  await mkdir(fixtureBin, { recursive: true });
+  const fakeCli = path.join(fixtureBin, "lark-cli");
+  await writeFile(
+    fakeCli,
+    `#!/usr/bin/env node
+const fs = require("fs");
+const path = require("path");
+const args = process.argv.slice(2);
+const nodeIndex = args.indexOf("--node-token");
+const docIndex = args.indexOf("--doc");
+if (args[0] === "wiki") {
+  const token = args[nodeIndex + 1];
+  process.stdout.write(JSON.stringify({ok:true,data:{node_token:token,obj_token:token,obj_type:"docx",title:token}}));
+} else if (args[0] === "docs" && args[1] === "+fetch") {
+  const token = args[docIndex + 1];
+  const content = '<h1>图文指南</h1><img src="img-token" name="diagram.png" alt="部署拓扑" mime="image/png"/><source token="file-token" name="guide.pdf" mime="application/pdf"/><whiteboard token="board-token" name="board.png"/>';
+  process.stdout.write(JSON.stringify({ok:true,data:{document:{document_id:token,revision_id:1,content}}}));
+} else if (args[0] === "docs" && args[1] === "+media-download") {
+  const token = args[args.indexOf("--token") + 1];
+  const target = args[args.indexOf("--output") + 1];
+  fs.mkdirSync(path.dirname(target), {recursive:true});
+  fs.writeFileSync(target, Buffer.from('binary:' + token));
+  process.stdout.write(JSON.stringify({ok:true,data:{output:target}}));
+} else {
+  process.stderr.write("unexpected command: " + args.join(" "));
+  process.exit(2);
+}
+`,
+    "utf8"
+  );
+  await chmod(fakeCli, 0o755);
+  process.env.PATH = `${fixtureBin}:${originalPath}`;
+  try {
+    const result = await fetchLarkCorpus({
+      roots: ["root"],
+      output,
+      identity: "user",
+      maxDocuments: 10
+    });
+    const media = Object.values(result.media);
+
+    assert.equal(result.version, 2);
+    assert.equal(media.length, 3);
+    assert.equal(Object.keys(result.mediaFailures).length, 0);
+    assert.equal(result.documents["wiki:root"].mediaReferences.length, 3);
+    for (const item of media) {
+      assert.match(item.sha256, /^[a-f0-9]{64}$/);
+      assert.ok(item.bytes > 0);
+      assert.equal(
+        await readFile(path.join(output, item.relativePath), "utf8"),
+        `binary:${item.token}`
+      );
+    }
+    assert.equal(
+      media.find((item) => item.kind === "image").contentType,
+      "image/png"
+    );
+    assert.equal(
+      media.find((item) => item.kind === "attachment").contentType,
+      "application/pdf"
+    );
+    assert.equal(
+      media.find((item) => item.kind === "whiteboard").downloadMethod,
+      "download"
+    );
+  } finally {
+    process.env.PATH = originalPath;
+    await rm(output, { recursive: true, force: true });
+  }
+});
+
+test("falls back to media preview and records unresolved media without failing the document export", async () => {
+  const output = await mkdtemp(path.join(tmpdir(), "lark-corpus-media-fallback-"));
+  const originalPath = process.env.PATH;
+  const fixtureBin = path.join(output, "bin");
+  const { mkdir, writeFile, chmod } = await import("node:fs/promises");
+  await mkdir(fixtureBin, { recursive: true });
+  const fakeCli = path.join(fixtureBin, "lark-cli");
+  await writeFile(
+    fakeCli,
+    `#!/usr/bin/env node
+const fs = require("fs");
+const path = require("path");
+const args = process.argv.slice(2);
+if (args[0] === "wiki") {
+  const token = args[args.indexOf("--node-token") + 1];
+  process.stdout.write(JSON.stringify({ok:true,data:{node_token:token,obj_token:token,obj_type:"docx",title:token}}));
+} else if (args[0] === "docs" && args[1] === "+fetch") {
+  const token = args[args.indexOf("--doc") + 1];
+  const content = '<h1>媒体降级</h1><img src="preview-token" name="preview.png" mime="image/png"/><source token="failed-token" name="failed.pdf" mime="application/pdf"/>';
+  process.stdout.write(JSON.stringify({ok:true,data:{document:{document_id:token,revision_id:1,content}}}));
+} else if (args[0] === "docs" && args[1] === "+media-download") {
+  process.stderr.write("download denied");
+  process.exit(1);
+} else if (args[0] === "docs" && args[1] === "+media-preview") {
+  const token = args[args.indexOf("--token") + 1];
+  if (token === "failed-token") {
+    process.stderr.write("preview denied");
+    process.exit(1);
+  }
+  const target = args[args.indexOf("--output") + 1];
+  fs.mkdirSync(path.dirname(target), {recursive:true});
+  fs.writeFileSync(target, Buffer.from('preview:' + token));
+  process.stdout.write(JSON.stringify({ok:true,data:{output:target}}));
+} else {
+  process.stderr.write("unexpected command: " + args.join(" "));
+  process.exit(2);
+}
+`,
+    "utf8"
+  );
+  await chmod(fakeCli, 0o755);
+  process.env.PATH = `${fixtureBin}:${originalPath}`;
+  try {
+    const result = await fetchLarkCorpus({
+      roots: ["root"],
+      output,
+      identity: "user",
+      maxDocuments: 10
+    });
+    const media = Object.values(result.media);
+    const failures = Object.values(result.mediaFailures);
+
+    assert.equal(result.complete, true);
+    assert.equal(media.length, 1);
+    assert.equal(media[0].downloadMethod, "preview");
+    assert.equal(await readFile(path.join(output, media[0].relativePath), "utf8"), "preview:preview-token");
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0].kind, "attachment");
+    assert.equal(failures[0].parent, "wiki:root");
+    assert.doesNotMatch(JSON.stringify(failures[0]), /failed-token/);
   } finally {
     process.env.PATH = originalPath;
     await rm(output, { recursive: true, force: true });

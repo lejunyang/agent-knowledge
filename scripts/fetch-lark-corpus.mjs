@@ -2,13 +2,19 @@
 /**
  * 递归导出飞书 Wiki/Doc 内容。
  *
- * 脚本只执行只读 `lark-cli` 命令，将 raw JSON、完整 XML、引用图和失败信息写到指定目录。
- * 默认遍历 wiki/docx/doc 引用；Sheet/Base/Whiteboard 等资源记录到 manifest，交由后续专用流程处理。
+ * 脚本只执行只读 `lark-cli` 命令，将 raw JSON、完整 XML、媒体副本、引用图和失败信息写到指定目录。
+ * 默认遍历 wiki/docx/doc 引用并下载图片、附件、画板；Sheet/Base 等结构化资源仍交给专用 Connector。
  */
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile
+} from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -77,6 +83,7 @@ function referenceFromUrl(url) {
 export function extractLarkReferences(content) {
   const references = new Map();
   const resources = new Map();
+  const media = [];
   const add = (target, item) => {
     if (!item.token) {
       return;
@@ -109,7 +116,7 @@ export function extractLarkReferences(content) {
     });
   }
 
-  for (const match of content.matchAll(/<(sheet|bitable|whiteboard)\b([^>]*)>/g)) {
+  for (const match of content.matchAll(/<(sheet|bitable)\b([^>]*)>/g)) {
     const attributes = parseAttributes(match[2]);
     add(resources, {
       token: attributes.token,
@@ -129,9 +136,58 @@ export function extractLarkReferences(content) {
     }
   }
 
+  const mediaMatches = [];
+  for (const match of content.matchAll(
+    /<(img|source|whiteboard)\b([^>]*)\/?>/g
+  )) {
+    const attributes = parseAttributes(match[2]);
+    const tag = match[1];
+    const kind =
+      tag === "img"
+        ? "image"
+        : tag === "source"
+          ? "attachment"
+          : "whiteboard";
+    const token = tag === "img" ? attributes.src : attributes.token;
+    if (!token) {
+      continue;
+    }
+    mediaMatches.push({
+      offset: match.index,
+      kind,
+      token,
+      name: attributes.name ?? attributes.title,
+      alt: attributes.alt,
+      mime: attributes.mime ?? attributes["content-type"],
+      blockId:
+        attributes["block-id"] ??
+        attributes["block_id"] ??
+        attributes["block-id"],
+      source: tag
+    });
+  }
+  mediaMatches
+    .sort((left, right) => left.offset - right.offset)
+    .forEach((item, ordinal) => {
+      media.push({
+        referenceId: `media_ref_${shortHash(
+          `${item.kind}\0${item.token}\0${ordinal}`
+        )}`,
+        kind: item.kind,
+        token: item.token,
+        ordinal,
+        name: item.name,
+        alt: item.alt,
+        mime: item.mime,
+        blockId: item.blockId,
+        source: item.source
+      });
+    });
+
   return {
     documents: [...references.values()],
-    resources: [...resources.values()]
+    resources: [...resources.values()],
+    media
   };
 }
 
@@ -148,6 +204,72 @@ function safeName(value) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
   return normalized || "untitled";
+}
+
+/** 从可信 MIME 或文件名推断安全扩展名，避免把 token 或任意路径拼进导出目录。 */
+function mediaExtension(reference) {
+  const mimeExtensions = {
+    "application/pdf": ".pdf",
+    "application/zip": ".zip",
+    "application/json": ".json",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+      ".pptx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+      ".xlsx",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      ".docx",
+    "image/gif": ".gif",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "text/csv": ".csv",
+    "text/plain": ".txt",
+    "video/mp4": ".mp4"
+  };
+  const fromMime = mimeExtensions[String(reference.mime ?? "").toLowerCase()];
+  if (fromMime) {
+    return fromMime;
+  }
+  const fromName = path.extname(String(reference.name ?? "")).toLowerCase();
+  if (/^\.[a-z0-9]{1,10}$/.test(fromName)) {
+    return fromName;
+  }
+  if (reference.kind === "whiteboard" || reference.kind === "image") {
+    return ".png";
+  }
+  return ".bin";
+}
+
+/** 用 MIME、扩展名和媒体种类生成 source manifest 可用的稳定 content type。 */
+function mediaContentType(reference, extension) {
+  if (reference.mime) {
+    return reference.mime;
+  }
+  const extensionTypes = {
+    ".csv": "text/csv",
+    ".docx":
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".gif": "image/gif",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".json": "application/json",
+    ".mp4": "video/mp4",
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".pptx":
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".txt": "text/plain",
+    ".webp": "image/webp",
+    ".xlsx":
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".zip": "application/zip"
+  };
+  return (
+    extensionTypes[extension] ??
+    (reference.kind === "whiteboard" || reference.kind === "image"
+      ? "image/png"
+      : "application/octet-stream")
+  );
 }
 
 /** 原子写 JSON，避免长任务中断留下半写 manifest。 */
@@ -250,6 +372,173 @@ async function fetchDocument(reference, identity, policy) {
     "--format",
     "json"
   ], policy);
+}
+
+/**
+ * 下载一个媒体引用。
+ *
+ * 普通 media 下载失败时允许 preview 降级；画板没有等价 preview 语义，因此保持失败供后续重试。
+ * 输出目录只由 reference ID 和清洗后的显示名构造，飞书 token 不进入文件名。
+ */
+async function downloadMediaReference(
+  output,
+  documentDirectory,
+  parent,
+  reference,
+  identity,
+  policy
+) {
+  const extension = mediaExtension(reference);
+  const baseName = safeName(
+    path.basename(
+      String(reference.name ?? `${reference.kind}-${reference.ordinal}`),
+      path.extname(String(reference.name ?? ""))
+    )
+  );
+  const mediaDirectory = path.join(
+    documentDirectory,
+    "media",
+    reference.referenceId
+  );
+  const target = path.join(mediaDirectory, `${baseName}${extension}`);
+  await mkdir(mediaDirectory, { recursive: true });
+  const baseArgs = [
+    "--as",
+    identity,
+    "--token",
+    reference.token,
+    "--output",
+    target,
+    "--format",
+    "json"
+  ];
+  let downloadMethod = "download";
+  try {
+    await runLark(
+      [
+        "docs",
+        "+media-download",
+        ...baseArgs,
+        ...(reference.kind === "whiteboard"
+          ? ["--type", "whiteboard"]
+          : [])
+      ],
+      policy
+    );
+  } catch (downloadError) {
+    if (reference.kind === "whiteboard") {
+      await rm(mediaDirectory, { recursive: true, force: true });
+      throw downloadError;
+    }
+    downloadMethod = "preview";
+    try {
+      await runLark(["docs", "+media-preview", ...baseArgs], policy);
+    } catch (previewError) {
+      await rm(mediaDirectory, { recursive: true, force: true });
+      throw previewError;
+    }
+  }
+  if (!existsSync(target)) {
+    await rm(mediaDirectory, { recursive: true, force: true });
+    throw new Error("lark-cli media output is missing");
+  }
+  const bytes = await readFile(target);
+  return {
+    referenceId: reference.referenceId,
+    parent,
+    kind: reference.kind,
+    token: reference.token,
+    ordinal: reference.ordinal,
+    name: reference.name,
+    alt: reference.alt,
+    mime: reference.mime,
+    blockId: reference.blockId,
+    contentType: mediaContentType(reference, extension),
+    relativePath: path.relative(output, target),
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    bytes: bytes.length,
+    downloadMethod,
+    observedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * 为单篇文档下载全部媒体并更新独立 inventory。
+ *
+ * 相同 kind+token 在同一轮只读取一次；每个 occurrence 仍保留自己的 reference ID 和顺序，
+ * 以便后续把 XML 中的每个标签稳定替换成 attachment source。
+ */
+async function collectDocumentMedia(input) {
+  const {
+    output,
+    documentDirectory,
+    parent,
+    references,
+    identity,
+    policy,
+    manifest,
+    downloadCache
+  } = input;
+  const activeReferenceIds = new Set(
+    references.map((reference) => reference.referenceId)
+  );
+  for (const [key, item] of Object.entries(manifest.media)) {
+    if (
+      item.parent === parent &&
+      !activeReferenceIds.has(item.referenceId)
+    ) {
+      delete manifest.media[key];
+    }
+  }
+  for (const [key, item] of Object.entries(manifest.mediaFailures)) {
+    if (
+      item.parent === parent &&
+      !activeReferenceIds.has(item.referenceId)
+    ) {
+      delete manifest.mediaFailures[key];
+    }
+  }
+
+  for (const reference of references) {
+    const inventoryKey = `${parent}#${reference.referenceId}`;
+    const downloadKey = `${reference.kind}:${reference.token}`;
+    try {
+      let downloaded = downloadCache.get(downloadKey);
+      if (!downloaded) {
+        downloaded = await downloadMediaReference(
+          output,
+          documentDirectory,
+          parent,
+          reference,
+          identity,
+          policy
+        );
+        downloadCache.set(downloadKey, downloaded);
+      }
+      manifest.media[inventoryKey] = {
+        ...downloaded,
+        referenceId: reference.referenceId,
+        parent,
+        ordinal: reference.ordinal,
+        name: reference.name,
+        alt: reference.alt,
+        mime: reference.mime,
+        blockId: reference.blockId
+      };
+      delete manifest.mediaFailures[inventoryKey];
+    } catch {
+      delete manifest.media[inventoryKey];
+      manifest.mediaFailures[inventoryKey] = {
+        referenceId: reference.referenceId,
+        parent,
+        kind: reference.kind,
+        ordinal: reference.ordinal,
+        name: reference.name,
+        message: "media_download_failed",
+        updatedAt: new Date().toISOString()
+      };
+    }
+  }
 }
 
 /** 从 URL 或 raw token 构造首层 queue item。 */
@@ -399,16 +688,28 @@ export async function fetchLarkCorpus(options) {
   const manifest = existsSync(manifestPath)
     ? JSON.parse(await readFile(manifestPath, "utf8"))
     : {
-        version: 1,
+        version: 2,
         generatedAt: new Date().toISOString(),
         roots: [],
         documents: {},
         resources: {},
+        media: {},
+        mediaFailures: {},
         failures: {}
       };
+  // v1 导出可从已保存 XML 原地补抓媒体；迁移只发生在 local_exports，不修改知识事实层。
+  manifest.version = 2;
+  manifest.media ??= {};
+  manifest.mediaFailures ??= {};
   manifest.roots = [
     ...new Set([...manifest.roots, ...options.roots])
   ];
+  const downloadCache = new Map();
+  for (const item of Object.values(manifest.media)) {
+    if (item.token && existsSync(path.join(output, item.relativePath))) {
+      downloadCache.set(`${item.kind}:${item.token}`, item);
+    }
+  }
   // Parser 升级后从已保存 XML 重建引用图，避免旧误判永久污染恢复队列。
   manifest.resources = {};
   for (const document of Object.values(manifest.documents)) {
@@ -425,12 +726,23 @@ export async function fetchLarkCorpus(options) {
     );
     document.documentReferences = references.documents;
     document.resourceReferences = references.resources;
+    document.mediaReferences = references.media;
     for (const resource of references.resources) {
       manifest.resources[`${resource.fileType}:${resource.token}`] = {
         ...resource,
         parent: document.key
       };
     }
+    await collectDocumentMedia({
+      output,
+      documentDirectory: path.join(output, document.directory),
+      parent: document.key,
+      references: references.media,
+      identity: options.identity,
+      policy: requestPolicy,
+      manifest,
+      downloadCache
+    });
   }
   const stillReferenced = new Set(
     options.roots.map((root) => {
@@ -615,7 +927,8 @@ export async function fetchLarkCorpus(options) {
         directory: path.relative(output, directory),
         contentHash,
         documentReferences: references.documents,
-        resourceReferences: references.resources
+        resourceReferences: references.resources,
+        mediaReferences: references.media
       };
       manifest.documents[key] = record;
       delete manifest.failures[key];
@@ -632,6 +945,16 @@ export async function fetchLarkCorpus(options) {
           parent: key
         };
       }
+      await collectDocumentMedia({
+        output,
+        documentDirectory: directory,
+        parent: key,
+        references: references.media,
+        identity: options.identity,
+        policy: requestPolicy,
+        manifest,
+        downloadCache
+      });
     } catch (error) {
       manifest.failures[key] = {
         key,
