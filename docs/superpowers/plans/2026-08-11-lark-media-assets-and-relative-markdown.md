@@ -32,7 +32,7 @@
 - Modify: `tests/larkCorpus.test.mjs`
 - Modify: `scripts/fetch-lark-corpus.mjs`
 
-- [ ] **Step 1: 写媒体引用顺序和元数据的失败测试**
+- [x] **Step 1: 写媒体引用顺序和元数据的失败测试**
 
 在 `tests/larkCorpus.test.mjs` 增加包含 `<img>`、`<source>`、`<whiteboard>` 和重复 token 的 XML，断言：
 
@@ -50,13 +50,13 @@ assert.equal(result.media[0].alt, "架构图");
 assert.equal(result.media[1].name, "排障手册.pdf");
 ```
 
-- [ ] **Step 2: 运行测试确认当前解析器失败**
+- [x] **Step 2: 运行测试确认当前解析器失败**
 
 Run: `node --test tests/larkCorpus.test.mjs`
 
 Expected: FAIL，`result.media` 尚不存在。
 
-- [ ] **Step 3: 实现有序媒体引用类型**
+- [x] **Step 3: 实现有序媒体引用类型**
 
 在 `extractLarkReferences()` 中按标签在原 XML 中的 offset 排序，生成：
 
@@ -76,7 +76,7 @@ Expected: FAIL，`result.media` 尚不存在。
 
 `sheet`、`bitable` 和不能下载的 cite 仍进入 `resources`；whiteboard 只进入 `media`，不能重复进入普通 resource inventory。
 
-- [ ] **Step 4: 写 fake CLI 下载和 manifest v2 的失败测试**
+- [x] **Step 4: 写 fake CLI 下载和 manifest v2 的失败测试**
 
 构造 fake `lark-cli`：
 
@@ -104,13 +104,13 @@ assert.equal(
 );
 ```
 
-- [ ] **Step 5: 运行测试确认当前导出器失败**
+- [x] **Step 5: 运行测试确认当前导出器失败**
 
 Run: `node --test tests/larkCorpus.test.mjs`
 
 Expected: FAIL，manifest 仍为 v1 且没有执行媒体下载。
 
-- [ ] **Step 6: 实现有界媒体下载和失败 inventory**
+- [x] **Step 6: 实现有界媒体下载和失败 inventory**
 
 新增 `downloadMediaReference()`，调用：
 
@@ -145,17 +145,17 @@ manifest 固定为：
 
 `complete` 只表达文档遍历是否完成；Connector 的 inventoryStatus 同时统计 `failures`、`pending` 和 `mediaFailures`，避免一个媒体失败触发文档全量重抓。
 
-- [ ] **Step 7: 增加 preview fallback 和媒体失败测试**
+- [x] **Step 7: 增加 preview fallback 和媒体失败测试**
 
 fake CLI 对一个 token 让 `+media-download` 失败、`+media-preview` 成功；对另一个 token 两者都失败。断言成功项 `downloadMethod === "preview"`，失败项只出现在 `mediaFailures`，文档正文仍成功导出。
 
-- [ ] **Step 8: 运行聚焦测试**
+- [x] **Step 8: 运行聚焦测试**
 
 Run: `node --test tests/larkCorpus.test.mjs`
 
 Expected: PASS。
 
-- [ ] **Step 9: 提交导出器功能**
+- [x] **Step 9: 提交导出器功能**
 
 ```bash
 git add scripts/fetch-lark-corpus.mjs tests/larkCorpus.test.mjs
@@ -172,7 +172,7 @@ Co-authored-by: TRAE CLI <noreply@bytedance.com>"
 - Modify: `src/ingestion/core.ts`
 - Modify: `src/ingestion/larkExport.ts`
 
-- [ ] **Step 1: 把测试 export fixture 升级到 manifest v2**
+- [x] **Step 1: 把测试 export fixture 升级到 manifest v2**
 
 fixture 增加：
 
@@ -183,7 +183,7 @@ mediaFailures: {}
 
 并把 `version` 改为 `2`，先保持原文档测试行为不变。
 
-- [ ] **Step 2: 写 document + attachment 摄入失败测试**
+- [x] **Step 2: 写 document + attachment 摄入失败测试**
 
 创建图片 bytes，计算 hash，在 export 中增加媒体记录和：
 
@@ -209,13 +209,13 @@ expect(documentEvidence).not.toContain("img-private-token");
 expect(documentEvidence).not.toContain("internal-api-drive-stream");
 ```
 
-- [ ] **Step 3: 运行测试确认现有单文本契约失败**
+- [x] **Step 3: 运行测试确认现有单文本契约失败**
 
 Run: `pnpm vitest run tests/larkExportConnector.test.ts`
 
 Expected: FAIL，Connector 只发现一个 document，core 拒绝二进制 bytes。
 
-- [ ] **Step 4: 扩展 normalize 契约**
+- [x] **Step 4: 扩展 normalize 契约**
 
 把 `NormalizedArtifact` 改为判别联合：
 
@@ -237,7 +237,7 @@ export type NormalizedArtifact =
 
 所有现有文本 Connector 显式返回 `encoding: "utf8"`。
 
-- [ ] **Step 5: 让 ingestion core 安全处理二进制**
+- [x] **Step 5: 让 ingestion core 安全处理二进制**
 
 文本继续要求 `bytes === utf8(textForManifest)` 并执行通用 redaction。二进制则：
 
@@ -250,7 +250,7 @@ export type NormalizedArtifact =
 
 为 `buildSourceManifest()` 增加可选 `contentHash`，保证 source version 指向真实附件 bytes 而不是描述文本。
 
-- [ ] **Step 6: 实现 Lark v2 snapshot 和 attachment descriptor**
+- [x] **Step 6: 实现 Lark v2 snapshot 和 attachment descriptor**
 
 `LarkExportConnector`：
 
@@ -263,11 +263,11 @@ export type NormalizedArtifact =
 - `<img>`、`<source>`、`<whiteboard>` 按 occurrence 替换成只含 `source-id/kind/name/alt/mime` 的 `<asset-ref/>`；
 - 删除所有临时 href、原始 token、用户 cite 和 block handle。
 
-- [ ] **Step 7: 增加 hash 撕裂和媒体失败 inventory 测试**
+- [x] **Step 7: 增加 hash 撕裂和媒体失败 inventory 测试**
 
 修改媒体 bytes 后不更新 manifest，断言该 attachment job 失败且 document 仍可摄入。设置 `mediaFailures` 后断言 inventory `complete=false`、`unresolved` 增加且不执行删除对账。
 
-- [ ] **Step 8: 运行聚焦测试和类型检查**
+- [x] **Step 8: 运行聚焦测试和类型检查**
 
 Run:
 
@@ -278,7 +278,7 @@ pnpm typecheck
 
 Expected: PASS。
 
-- [ ] **Step 9: 提交 attachment ingestion**
+- [x] **Step 9: 提交 attachment ingestion**
 
 ```bash
 git add src/ingestion/types.ts src/ingestion/core.ts src/ingestion/larkExport.ts src/storage/sourceManifest.ts tests/larkExportConnector.test.ts tests/ingestionCore.test.ts
@@ -295,7 +295,7 @@ Co-authored-by: TRAE CLI <noreply@bytedance.com>"
 - Modify: `src/index.ts`
 - Modify: `src/cli.ts`
 
-- [ ] **Step 1: 写发布成功和幂等失败测试**
+- [x] **Step 1: 写发布成功和幂等失败测试**
 
 使用现有 Vault helper 创建 attachment source manifest，调用：
 
@@ -320,13 +320,13 @@ expect(await readFile(path.join(rootDir, published.relativePath))).toEqual(bytes
 expect(second.deduplicated).toBe(true);
 ```
 
-- [ ] **Step 2: 运行测试确认模块不存在**
+- [x] **Step 2: 运行测试确认模块不存在**
 
 Run: `pnpm vitest run tests/sourceAssets.test.ts`
 
 Expected: FAIL，`sourceAssets.ts` 尚不存在。
 
-- [ ] **Step 3: 实现 asset schema 和发布流程**
+- [x] **Step 3: 实现 asset schema 和发布流程**
 
 资产 ID：
 
@@ -368,7 +368,7 @@ manifest：
 - 拒绝 `text/html`、`image/svg+xml`、JavaScript、可执行文件和未知二进制直接发布；
 - 同 asset ID/manifest 内容幂等，任何不一致都拒绝覆盖。
 
-- [ ] **Step 4: 写 active-content、错误 fingerprint 和缺失确认测试**
+- [x] **Step 4: 写 active-content、错误 fingerprint 和缺失确认测试**
 
 断言三种情况在创建任何 Git asset 前失败：
 
@@ -380,7 +380,7 @@ await expect(publishSourceAsset(root, { expectedFingerprint: "sha256:...", ...in
 await expect(publishHtmlAsset()).rejects.toThrow(/not safe to publish/);
 ```
 
-- [ ] **Step 5: 增加 CLI**
+- [x] **Step 5: 增加 CLI**
 
 命令：
 
@@ -393,7 +393,7 @@ agent-knowledge source publish-asset <source-id>
 
 帮助明确：该命令会把 Vault attachment 的副本写进 Git 事实层；调用者必须先检查媒体授权、PII 和内容安全。JSON 输出包含 `assetId/uri/relativePath/manifestPath/deduplicated`，不输出 bytes。
 
-- [ ] **Step 6: 运行聚焦测试、CLI help 和类型检查**
+- [x] **Step 6: 运行聚焦测试、CLI help 和类型检查**
 
 Run:
 
@@ -406,7 +406,7 @@ node dist/cli.js source publish-asset --help
 
 Expected: PASS，帮助包含 `--fingerprint`、`--confirm-reviewed` 和安全边界。
 
-- [ ] **Step 7: 提交显式发布能力**
+- [x] **Step 7: 提交显式发布能力**
 
 ```bash
 git add src/storage/sourceAssets.ts src/index.ts src/cli.ts tests/sourceAssets.test.ts
@@ -423,7 +423,7 @@ Co-authored-by: TRAE CLI <noreply@bytedance.com>"
 - Modify: `src/memory/inbox.ts`
 - Modify: `src/memory/organizer.ts`
 
-- [ ] **Step 1: 写 active capture 相对路径失败测试**
+- [x] **Step 1: 写 active capture 相对路径失败测试**
 
 先创建合法 asset manifest/object，候选 explanation 使用：
 
@@ -442,17 +442,17 @@ expect(markdown).toContain(
 expect(markdown).not.toContain("asset://");
 ```
 
-- [ ] **Step 2: 写 inbox 晋升重定位失败测试**
+- [x] **Step 2: 写 inbox 晋升重定位失败测试**
 
 候选先写 `knowledge/_inbox/...md`，断言路径为 `../assets/...`；随后 `organizeInbox --apply`，断言新 active Markdown 的链接重新计算为 `../../../assets/...`，旧路径没有原样复制。
 
-- [ ] **Step 3: 运行测试确认当前代码保留 asset URI**
+- [x] **Step 3: 运行测试确认当前代码保留 asset URI**
 
 Run: `pnpm vitest run tests/organizer.test.ts`
 
 Expected: FAIL，Markdown 仍含 `asset://` 或移动后路径错误。
 
-- [ ] **Step 4: 实现严格 URI 解析和路径重定位**
+- [x] **Step 4: 实现严格 URI 解析和路径重定位**
 
 在 `sourceAssets.ts` 导出：
 
@@ -471,18 +471,18 @@ relocateAssetLinks(rootDir, fromMarkdownPath, toMarkdownPath, markdownBody)
 - 相对链接只能指向 `knowledge/assets/objects`；
 - 未知 asset、越界 path、manifest/object 撕裂时在任何 KnowledgeDocument 写入前失败。
 
-- [ ] **Step 5: 接入所有知识写入路径**
+- [x] **Step 5: 接入所有知识写入路径**
 
 - `writeCandidateMemory()` 在序列化前按 inbox 路径解析 URI；
 - `captureMaterial()` active、新 source replacement 和 dedupe 比较都使用目标文件对应的解析结果；
 - `organizeInbox()` 在写 active 文件前把旧 Markdown 相对 asset 链接重定位；
 - 普通外链和非 asset 相对链接保持不变。
 
-- [ ] **Step 6: 增加未知 asset 原子失败测试**
+- [x] **Step 6: 增加未知 asset 原子失败测试**
 
 批次中第二条引用未知 asset，断言当前批次没有新增 Markdown。若现有 captureMaterial 不能满足批次原子性，先预解析全部目标和 asset 引用，再开始写文件。
 
-- [ ] **Step 7: 运行聚焦测试和类型检查**
+- [x] **Step 7: 运行聚焦测试和类型检查**
 
 Run:
 
@@ -493,7 +493,7 @@ pnpm typecheck
 
 Expected: PASS。
 
-- [ ] **Step 8: 提交 Markdown 相对引用**
+- [x] **Step 8: 提交 Markdown 相对引用**
 
 ```bash
 git add src/storage/sourceAssets.ts src/memory/inbox.ts src/memory/organizer.ts tests/organizer.test.ts tests/inbox.test.ts tests/sourceAssets.test.ts
@@ -519,7 +519,7 @@ Co-authored-by: TRAE CLI <noreply@bytedance.com>"
 - Modify: `src/storage/workspace.ts`
 - Modify: `src/storage/gitWorkspace.ts`
 
-- [ ] **Step 1: 更新 source-distiller 媒体流程**
+- [x] **Step 1: 更新 source-distiller 媒体流程**
 
 明确要求：
 
@@ -538,11 +538,11 @@ agent-knowledge source publish-asset "$ASSET_SOURCE_ID" \
 6. `capture-material` 落盘后检查 Markdown 已转换成相对路径。
 7. 不相关、含未处理 PII 或授权不明的媒体保留 Vault evidence，不发布到 Git。
 
-- [ ] **Step 2: 同步教程 Skill 和安装模板**
+- [x] **Step 2: 同步教程 Skill 和安装模板**
 
 在 agent-knowledge-guide 增加“飞书图文知识”教程，覆盖 export、ingest、source review、publish、candidate、capture、Git review。将项目 `.trae/skills` 内容同步到 TRAE plugin 与 Codex marketplace 对应模板，逐文件比较避免再次漂移。
 
-- [ ] **Step 3: 更新 README/指南/初始化说明**
+- [x] **Step 3: 更新 README/指南/初始化说明**
 
 写清：
 
@@ -554,11 +554,11 @@ agent-knowledge source publish-asset "$ASSET_SOURCE_ID" \
 - 未完成媒体 inventory 会让 Connector 停止 removed reconciliation；
 - WebDAV/S3 现阶段仍只同步 KnowledgeDocument Markdown，不同步 `knowledge/assets`，因此远端恢复和跨机器使用必须配合 private Git 或独立备份；不能宣称现有 sync 已覆盖媒体。
 
-- [ ] **Step 4: 更新数据 Git 安全模板**
+- [x] **Step 4: 更新数据 Git 安全模板**
 
 `knowledge/README.md` 增加 `assets/` 说明；`DATA_SECURITY` 增加“发布媒体会进入 Git history，必须先确认权限和 PII”。不要把 `knowledge/assets` 加入 `.gitignore`。
 
-- [ ] **Step 5: 流程联动审视**
+- [x] **Step 5: 流程联动审视**
 
 检查但仅在确有变化时修改：
 
@@ -573,7 +573,7 @@ agent-knowledge source publish-asset "$ASSET_SOURCE_ID" \
 
 媒体不改变 Hook、检索、Agent 工具权限或 integration ownership 时，保持对应文件不动，并在提交说明记录“已检查、无需变化”。
 
-- [ ] **Step 6: 运行模板一致性和帮助测试**
+- [x] **Step 6: 运行模板一致性和帮助测试**
 
 Run:
 
@@ -587,7 +587,7 @@ pnpm vitest run tests/integration.test.ts tests/cliHelp.test.ts
 
 Expected: diff 无输出，测试 PASS。
 
-- [ ] **Step 7: 提交文档和 Skill**
+- [x] **Step 7: 提交文档和 Skill**
 
 ```bash
 git add .trae/skills templates README.md AGENTS.md docs/guides src/storage/workspace.ts src/storage/gitWorkspace.ts
@@ -602,7 +602,7 @@ Co-authored-by: TRAE CLI <noreply@bytedance.com>"
 - Modify: `docs/superpowers/plans/2026-08-11-lark-media-assets-and-relative-markdown.md`
 - Modify: `docs/research/2026-07-18-hivemind-memory-and-embeddings-evaluation.md` only if its four-stage evidence checklist has a directly applicable ingestion item
 
-- [ ] **Step 1: 运行完整静态和测试验证**
+- [x] **Step 1: 运行完整静态和测试验证**
 
 Run:
 
@@ -615,13 +615,13 @@ pnpm check:comments
 
 Expected: 全部 PASS。
 
-- [ ] **Step 2: 运行端到端本地 smoke**
+- [x] **Step 2: 运行端到端本地 smoke**
 
 使用 fake Lark export 或现有 `local_exports/lark-probe` 的副本：
 
 ```bash
 node scripts/fetch-lark-corpus.mjs --root-url root --output "$TEMP_EXPORT"
-node dist/cli.js ingest lark-export --id lark-media-smoke --export-dir "$TEMP_EXPORT" --root "$TEMP_KB"
+node dist/cli.js ingest lark-export --connector-id lark-media-smoke --export-dir "$TEMP_EXPORT" --root "$TEMP_KB"
 node dist/cli.js source list --root "$TEMP_KB" --needs-review
 node dist/cli.js source publish-asset "$ATTACHMENT_SOURCE_ID" \
   --root "$TEMP_KB" \
@@ -643,11 +643,11 @@ node dist/cli.js capture-material \
 - `git status` 能看到 asset object、asset manifest 和 Knowledge Markdown；
 - `sync run` 的预览/测试仍只包含 Markdown，并明确不包含 asset。
 
-- [ ] **Step 3: 勾选本计划完成项并记录验证结果**
+- [x] **Step 3: 勾选本计划完成项并记录验证结果**
 
 把本计划中已完成 checkbox 改为 `[x]`，在文末追加实际执行命令、通过数量和未覆盖的真实在线飞书限制。不得把 fake CLI 结果描述成在线飞书验证。
 
-- [ ] **Step 4: 检查工作树和提交边界**
+- [x] **Step 4: 检查工作树和提交边界**
 
 Run:
 
@@ -658,7 +658,7 @@ git log --oneline -8
 
 Expected: 没有未提交实现文件；提交按导出、摄入、发布、Markdown、文档边界拆分。
 
-- [ ] **Step 5: 提交验证证据**
+- [x] **Step 5: 提交验证证据**
 
 ```bash
 git add docs/superpowers/plans/2026-08-11-lark-media-assets-and-relative-markdown.md docs/research/2026-07-18-hivemind-memory-and-embeddings-evaluation.md
@@ -676,3 +676,45 @@ Co-authored-by: TRAE CLI <noreply@bytedance.com>"
 - 不自动删除不再引用的 `knowledge/assets`。历史 Markdown 和 Git commit 可能仍依赖旧对象，清理必须是未来独立的可达性审计功能。
 - 本次不扩展 WebDAV/S3 上传二进制，避免在没有冲突、配额、加密和断点续传设计时误同步私域媒体。
 - 本次不实现 Sheet/Base 数据导出；它们继续作为 unsupported resource inventory，后续由专用 Connector 处理。
+
+## 实际验证结果
+
+验证日期：2026-08-11。
+
+完整门禁：
+
+```text
+pnpm test            PASS：68 个测试文件，354 个测试
+pnpm typecheck       PASS
+pnpm build           PASS
+pnpm check:comments  PASS：98 个 TypeScript 文件
+```
+
+聚焦回归覆盖：
+
+- 飞书媒体标签顺序、图片/附件/画板下载、重复引用、preview fallback 和失败 inventory。
+- document + binary attachment 摄入、Vault 原始 bytes、source manifest 二进制 hash、token/临时 URL 清理。
+- `source publish-asset` fingerprint 锁、显式审阅门、MIME allowlist、幂等和 Git 内容寻址对象。
+- active/inbox Markdown 相对链接、inbox 晋升重定位、代码块示例保留、未知 asset 批次原子失败。
+- `knowledge/assets` 从 index、embedding、catalog、graph、list、WebDAV/S3 push/pull 中硬排除。
+- TRAE/Codex 的 `knowledge-organizer`、`source-distiller`、`agent-knowledge-guide` 及工作流 reference 与项目 Skill 零差异。
+
+端到端 smoke 使用临时 fake `lark-cli`，实际运行：
+
+```text
+fetch-lark-corpus -> ingest lark-export -> source list/show
+-> source publish-asset -> capture-material --target inbox
+```
+
+结果：
+
+- export manifest 为 v2，识别 1 个媒体且 `mediaFailures=0`。
+- document 与 attachment 共 2 个 source 摄入成功。
+- export/source manifest 均未泄漏飞书媒体 token 或临时下载 URL。
+- 发布对象为 `knowledge/assets/objects/7f/asset_sha256_7f47b756761a46e6d4a4d96f0d8a4448f8449235009d1f3ad1493f5c773c19e8.png`。
+- inbox Markdown 链接为可解析的相对路径
+  `../assets/objects/7f/asset_sha256_7f47b756761a46e6d4a4d96f0d8a4448f8449235009d1f3ad1493f5c773c19e8.png`。
+
+该 smoke 证明本地命令链和安全契约，不代表真实在线飞书权限、下载限额、Content-Type、
+超大附件或不同企业租户行为已经验证。正式上线前仍应对用户自己的飞书 allowlist 运行一次
+小批量真实导出，检查 `mediaFailures`、下载方法、MIME 和权限错误；无需重新蒸馏现有验证知识库。
