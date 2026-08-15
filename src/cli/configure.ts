@@ -62,6 +62,7 @@ export async function runConfigurationWizard(options: {
   prompter: ConfigurationPrompter;
   current: UserConfig;
   locale?: SupportedLocale;
+  write?: boolean;
 }): Promise<UserConfig> {
   const { prompter, current } = options;
   let activeLocale = options.locale ?? "zh-CN";
@@ -544,6 +545,9 @@ export async function runConfigurationWizard(options: {
       detailedSubagentLogging
     }
   });
-  writeUserConfig(options.configPath, configured);
+  // CLI 一体化初始化需要先完成 Git workspace 副作用，再提交配置；普通调用保持原有立即写入。
+  if (options.write !== false) {
+    writeUserConfig(options.configPath, configured);
+  }
   return configured;
 }

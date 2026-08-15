@@ -337,4 +337,60 @@ describe("user configuration", () => {
     expect(raw).not.toContain("actual-access-key-value");
     expect(raw).not.toContain(Buffer.alloc(32, 5).toString("base64"));
   });
+
+  it("can collect a complete configuration without persisting it", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "agent-knowledge-config-collect-")
+    );
+    tempDirs.push(root);
+    const configPath = path.join(root, "config.json");
+    const knowledgeRoot = path.join(root, "knowledge-data");
+    const prompter = new AnswerPrompter([
+      "auto",
+      knowledgeRoot,
+      "owner",
+      "direct_material",
+      "private,project,team",
+      "internal",
+      "local",
+      "multilingual-e5-small",
+      "",
+      DEFAULT_USER_CONFIG.embeddings.cacheDir,
+      "no",
+      "lexical",
+      "1",
+      "0.65",
+      "30",
+      "",
+      "30",
+      "8",
+      "0.5",
+      "0.3",
+      "0.7",
+      "trae",
+      "user",
+      "hooks,agents,skills",
+      "",
+      "merge",
+      "none",
+      "0",
+      "project,team",
+      "internal",
+      "AGENT_KNOWLEDGE_VAULT_KEY",
+      "0.35",
+      "1200",
+      "5",
+      "no"
+    ]);
+
+    const configured = await runConfigurationWizard({
+      configPath,
+      prompter,
+      current: DEFAULT_USER_CONFIG,
+      write: false
+    });
+
+    expect(configured.knowledgeRoot).toBe(knowledgeRoot);
+    await expect(readFile(configPath, "utf8")).rejects.toThrow();
+  });
 });
