@@ -8,6 +8,20 @@ agent-knowledge configure
 
 向导使用方向键单选、空格多选、回车确认；路径、模型和阈值使用文本输入。它会读取已有配置作为默认答案，不会执行 integration 安装、模型下载或远端同步。
 
+默认情况下，向导还会在最终 `knowledgeRoot` 执行 private-data-safe workspace 初始化：
+
+- 创建 V2 `knowledge/`、`events/` 和 `policies/` 目录。
+- 创建缺失的安全 `.gitignore` 与 `SECURITY.md`。
+- 幂等执行本地 `git init`。
+- Git 初始化成功后才保存配置，失败时保留旧配置。
+
+它不会添加 remote、commit、push、安装 Integration、下载模型或访问远端服务。已有特殊
+Git 布局或由外部系统管理 workspace 时可显式执行：
+
+```bash
+agent-knowledge configure --no-git-init
+```
+
 默认写入：
 
 ```text
@@ -74,14 +88,23 @@ agent-knowledge config sources
 
 ## 独立 Git 数据仓库
 
-正式投入使用前，建议在当前代码仓库之外初始化 private 知识数据仓库：
+`configure` 默认已经在所选 `knowledgeRoot` 初始化 private Git 数据仓库。默认位置和诊断：
 
 ```bash
-agent-knowledge workspace git-init --root ~/agent-knowledge-data
-agent-knowledge workspace git-status --root ~/agent-knowledge-data
+agent-knowledge configure
+agent-knowledge workspace git-status --root ~/.agent_knowledge
 ```
 
-目标目录不能位于另一个 Git worktree 内。命令只创建本地 Git、V2 目录和安全 `.gitignore/SECURITY.md`，不添加 remote、不 commit、不 push；用户仍需自行创建 private remote 并确认访问权限。
+目标目录不能位于另一个 Git worktree 内。用户仍需自行创建 private remote 并确认访问权限。
+独立命令保留给迁移、修复或额外 workspace：
+
+```bash
+agent-knowledge workspace git-init --root <separate-dir>
+agent-knowledge workspace git-status --root <separate-dir>
+```
+
+`agent-knowledge init --root <dir>` 只创建 V2 目录，不初始化 Git；主要用于临时测试或
+`configure --no-git-init` 后由调用方自行管理 Git 的场景。
 
 ## 基础配置
 
@@ -104,29 +127,29 @@ limit 仍由 `ingest` 命令显式提供，避免安装或配置时静默创建�
 
 ```bash
 agent-knowledge ingest files \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --connector-id business-docs \
   --base-dir /secure/exports/business-docs \
   --pattern '**/*.md' \
   --project-key github.com/example/business
 
 agent-knowledge ingest transcripts \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --connector-id agent-sessions \
   --base-dir /secure/exports/agent-sessions \
   --project-key github.com/example/business
 
 agent-knowledge ingest git \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --connector-id business-repository \
   --repository /projects/business \
   --pathspec README.md docs
 
 agent-knowledge source check \
-  --root ~/agent-knowledge-data
+  --root ~/.agent_knowledge
 
 agent-knowledge source refresh \
-  --root ~/agent-knowledge-data
+  --root ~/.agent_knowledge
 ```
 
 - `connector-id` 必须稳定且不含个人信息；更改它会创建新的 checkpoint/source identity。

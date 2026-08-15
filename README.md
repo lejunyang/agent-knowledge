@@ -36,11 +36,16 @@ npm install -g .
 首次使用运行交互式配置：
 
 ```bash
-agent-knowledge workspace git-init --root ~/agent-knowledge-data
 agent-knowledge configure
 ```
 
-知识数据仓库应是当前代码仓库之外的独立 private Git 目录。`workspace git-init` 只执行本地 `git init`、创建 V2 目录和安全 `.gitignore/SECURITY.md`；不会添加 remote、commit 或 push。用户必须自行创建 private remote 并确认访问范围。
+`configure` 默认使用 `~/.agent_knowledge`，也可以在向导中选择其他独立目录。它会先创建
+V2 目录、安全 `.gitignore/SECURITY.md` 并执行本地 `git init`，成功后才保存配置；不会添加
+remote、commit、push、安装宿主 Integration 或下载模型。用户仍需自行创建 private remote
+并确认访问范围。已有特殊 Git 布局时可显式使用 `configure --no-git-init`。
+
+`workspace git-init --root <dir>` 继续保留为显式修复、迁移或额外 workspace 初始化命令，
+不再是默认首次使用的前置步骤。
 
 项目可选配置：
 
@@ -72,10 +77,9 @@ agent-knowledge integration install
 lifecycle 或 maintenance 中的哪条流程，并优先运行只读健康检查，不会自动批准候选或启动
 后台进程。
 
-初始化并查询：
+配置完成后构建索引并查询：
 
 ```bash
-agent-knowledge init
 agent-knowledge index
 agent-knowledge query --task "审查 Vue SFC lint 迁移方案"
 agent-knowledge knowledge audit
@@ -104,35 +108,35 @@ agent-knowledge source list --needs-review
 export AGENT_KNOWLEDGE_VAULT_KEY="<32-byte-key-as-hex-or-base64>"
 
 agent-knowledge ingest files \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --connector-id business-doc-exports \
   --base-dir /secure/exports/business-docs \
   --pattern '**/*.md' '**/*.txt' \
   --project-key github.com/example/business
 
 agent-knowledge ingest transcripts \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --connector-id trae-sessions \
   --base-dir /secure/exports/trae-sessions \
   --project-key github.com/example/business
 
 agent-knowledge ingest git \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --connector-id business-repository \
   --repository /projects/business \
   --pathspec README.md docs
 
 agent-knowledge ingest lark-export \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --connector-id lark-business \
   --export-dir /secure/exports/lark-business \
   --project-key github.com/example/business
 
 # 只检查已登记的本地/离线版本信号，不读取正文、不需要 Vault key
-agent-knowledge source check --root ~/agent-knowledge-data
+agent-knowledge source check --root ~/.agent_knowledge
 
 # 日常增量：检查 -> 按需摄入 -> 复查，不再重复填写来源目录/glob/project key
-agent-knowledge source refresh --root ~/agent-knowledge-data
+agent-knowledge source refresh --root ~/.agent_knowledge
 ```
 
 `ingest` 只输出 job、manifest 和 Vault handle，不输出正文。`files` 默认遮蔽内置规则可识别的
@@ -216,7 +220,6 @@ forbidden injection，平均 packet 约 1304 token。推荐 lexical 作为自动
 ```bash
 agent-knowledge configure
 agent-knowledge integration install
-agent-knowledge init
 agent-knowledge index
 ```
 
@@ -571,10 +574,11 @@ agent-knowledge query --task "当前任务" --retrieval hybrid-graph
 
 ```bash
 # 配置
-agent-knowledge workspace git-init --root ~/agent-knowledge-data
-agent-knowledge workspace git-status --root ~/agent-knowledge-data
-agent-knowledge vault init --root ~/agent-knowledge-data
 agent-knowledge configure
+agent-knowledge workspace git-status --root ~/.agent_knowledge
+agent-knowledge vault init --root ~/.agent_knowledge
+# 特殊布局、迁移或修复时才需要：
+agent-knowledge workspace git-init --root <separate-dir>
 agent-knowledge --locale en --help
 agent-knowledge config show
 agent-knowledge config path
@@ -586,7 +590,8 @@ agent-knowledge integration doctor --product trae --scope user
 agent-knowledge integration install --product codex --scope user
 
 # 知识库
-agent-knowledge init
+# configure 已创建默认 V2 目录；--no-git-init 或临时 workspace 才按需执行 init
+agent-knowledge init --root <temporary-or-non-git-dir>
 agent-knowledge index
 agent-knowledge list
 agent-knowledge catalog

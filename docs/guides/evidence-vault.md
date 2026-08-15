@@ -32,8 +32,8 @@ export AGENT_KNOWLEDGE_VAULT_KEY="<32-byte-key-as-hex-or-base64>"
 ## 初始化与状态
 
 ```bash
-agent-knowledge vault init --root ~/agent-knowledge-data
-agent-knowledge vault status --root ~/agent-knowledge-data
+agent-knowledge vault init --root ~/.agent_knowledge
+agent-knowledge vault status --root ~/.agent_knowledge
 ```
 
 `status` 只返回对象数、tombstone 数、加密字节数和 key ID，不输出对象 ID、路径或正文。
@@ -45,26 +45,26 @@ agent-knowledge vault status --root ~/agent-knowledge-data
 
 ```bash
 agent-knowledge ingest files \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --connector-id local-business-docs \
   --base-dir /secure/exports/business-docs \
   --pattern '**/*.md' \
   --project-key github.com/example/business
 
 agent-knowledge ingest transcripts \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --connector-id trae-sessions \
   --base-dir /secure/exports/trae-sessions \
   --project-key github.com/example/business
 
 agent-knowledge ingest git \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --connector-id business-repository \
   --repository /projects/business \
   --pathspec README.md docs
 
 agent-knowledge ingest lark-export \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --connector-id lark-business \
   --export-dir /secure/exports/lark-business \
   --project-key github.com/example/business
@@ -99,7 +99,7 @@ failures，成功项仍可进入 Vault，但 checkpoint inventory 标记 incompl
 
 ```bash
 agent-knowledge vault put \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --input complete-session.json \
   --content-type application/json \
   --actor owner
@@ -229,7 +229,7 @@ CLI 不向 stdout 输出完整 evidence，只能写到显式文件：
 
 ```bash
 agent-knowledge vault get vault_sha256_<hash> \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --output /secure/path/session.json
 ```
 
@@ -239,7 +239,7 @@ agent-knowledge vault get vault_sha256_<hash> \
 
 ```bash
 agent-knowledge vault delete vault_sha256_<hash> \
-  --root ~/agent-knowledge-data \
+  --root ~/.agent_knowledge \
   --reason "retention expired"
 ```
 

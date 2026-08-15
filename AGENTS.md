@@ -195,7 +195,10 @@ src/cli.ts            命令行入口和各模块编排
 - 修改 schema 时同步更新 README、AGENTS 和测试夹具。V2 是 breaking schema，不提供 V1 Markdown fallback 或 migration；旧知识从原始 evidence 重建。`aliases` 默认空数组，每项必须写 kind/weight/source；`scenarios` 区分 primary/secondary 并带 weight；`tags` 可用 retrieval=false 保留纯 provenance。`related_knowledge` 只有能指向明确已有或同批可生成的知识 ID 时才填写。`project_keys`、`capture_mode`、`actor_type`、`corroboration_count` 用于适用范围和来源治理。
 - 修改 CLI root 行为时同步更新 README 的“默认位置”章节、AGENTS 的“默认位置”章节和相关测试。
 - active 知识落盘目录必须保留 domain 的层级结构，例如 `bytedance/business/account` 写到 `knowledge/semantic/bytedance/business/account/`，不要压平成 `bytedance-business-account`。
-- 正式知识数据应放在独立 private Git 仓库，使用 `workspace git-init --root <separate-dir>` 初始化；不得把私域知识嵌入当前代码仓库。初始化命令不得自动添加 remote、commit 或 push。
+- 正式知识数据应放在独立 private Git 仓库。`configure` 默认在最终 `knowledgeRoot` 初始化
+  V2 目录和安全 Git workspace，成功后才保存配置；默认路径为 `~/.agent_knowledge`。
+  `workspace git-init --root <separate-dir>` 仅作为迁移、修复或额外 workspace 的显式入口。
+  两条路径都不得自动添加 remote、commit 或 push；不得把私域知识嵌入当前代码仓库。
 - `layer: knowledge` 的非 profile candidate 正文少于 300 字时必须保持 proposed，review reason 为 `knowledge_body_too_thin`；不能用高 confidence、documented 或 user_confirmed 绕过正文充分性门禁。
 - 用户直接材料中的垂直领域知识若意义不明、需要专业判断、与受信知识冲突或疑似错误/过期，必须一次汇总具体疑点找用户确认；确认前不得写入 active 或 inbox，不能用低 confidence 绕过。
 - 修改检索排序时同步更新 eval case 或增加新的 eval case。

@@ -18,13 +18,19 @@
 
 ## 首次启用
 
-1. 配置知识库、身份、检索、Vault 和集成默认值：
+1. 配置知识库、初始化安全 Git workspace，并保存身份、检索、Vault 和集成默认值：
 
 ```bash
 agent-knowledge configure
 agent-knowledge config sources
 agent-knowledge config show
+agent-knowledge workspace git-status --root ~/.agent_knowledge
 ```
+
+默认 `knowledgeRoot` 为 `~/.agent_knowledge`。`configure` 会创建 V2 目录、安全
+`.gitignore/SECURITY.md` 并执行本地 `git init`，但不添加 remote、commit、push、安装
+Integration 或下载模型。特殊布局可使用 `--no-git-init`；迁移或修复才单独使用
+`workspace git-init --root <separate-dir>`。
 
 2. 安装宿主接入：
 
@@ -33,10 +39,9 @@ agent-knowledge integration list
 agent-knowledge integration install
 ```
 
-3. 初始化事实源和索引：
+3. 初始化检索索引并审计：
 
 ```bash
-agent-knowledge init
 agent-knowledge index
 agent-knowledge knowledge audit
 ```
@@ -346,9 +351,12 @@ agent-knowledge policy history --limit 100
 知识库可直接初始化为 Git：
 
 ```bash
-agent-knowledge workspace git-init
-agent-knowledge workspace git-status
+agent-knowledge configure
+agent-knowledge workspace git-status --root ~/.agent_knowledge
 ```
+
+默认首次配置已完成 Git 初始化。`workspace git-init --root <separate-dir>` 只用于迁移、修复
+或创建额外 workspace；`init --root <dir>` 只创建 V2 目录，适用于临时或非 Git 场景。
 
 建议提交：
 

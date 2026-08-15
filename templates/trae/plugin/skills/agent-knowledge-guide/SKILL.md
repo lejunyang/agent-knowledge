@@ -41,10 +41,14 @@ Markdown 是正式事实源；SQLite、embedding、graph、logs、observations �
 ```bash
 agent-knowledge configure
 agent-knowledge integration install
-agent-knowledge init
 agent-knowledge index
 agent-knowledge knowledge audit
 ```
+
+`configure` 默认使用 `~/.agent_knowledge`，在最终 `knowledgeRoot` 创建 V2 目录、安全
+`.gitignore/SECURITY.md` 并初始化本地 Git，成功后才保存配置。它不添加 remote、不 commit、
+不 push、不安装 Integration 或下载模型；特殊 Git 布局才使用 `--no-git-init`。因此默认首次
+流程不再需要先运行 `workspace git-init` 或随后运行 `init`。
 
 先检查实际配置来源，避免在错误知识库上操作：
 
