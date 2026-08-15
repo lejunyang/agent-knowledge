@@ -39,6 +39,18 @@ async function runCli(args: string[], environment: NodeJS.ProcessEnv = {}): Prom
 }
 
 describe("CLI user configuration", () => {
+  it("documents that configure initializes the selected knowledge root as Git by default", async () => {
+    const help = await runCli(["configure", "--help"]);
+
+    expect(help).toContain("--no-git-init");
+    expect(help).toContain("默认");
+    expect(help).toContain("knowledgeRoot");
+    expect(help).toContain("Git");
+    expect(help).toContain("remote");
+    expect(help).toContain("commit");
+    expect(help).toContain("push");
+  });
+
   it("documents the reviewed Git side effect of publishing source assets", async () => {
     const help = await runCli(["source", "publish-asset", "--help"]);
 

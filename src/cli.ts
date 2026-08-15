@@ -170,9 +170,9 @@ import {
 import { getGitRuntimeContext, type GitRuntimeContext } from "./hooks/gitContext.js";
 import { hookContextJson } from "./hooks/hookOutput.js";
 import {
-  runConfigurationWizard,
   TerminalConfigurationPrompter
 } from "./cli/configure.js";
+import { configureKnowledgeWorkspace } from "./cli/configureBootstrap.js";
 import {
   formatIntegrationInstallResult,
   promptForIntegrationInstall,
@@ -431,7 +431,12 @@ async function readSidecarItems(filePath: string): Promise<
 
 program
   .command("configure")
-  .description(t("交互式配置 Agent Knowledge 默认设置", "Interactively configure Agent Knowledge defaults"))
+  .description(
+    t(
+      "交互式配置默认设置，并默认初始化 knowledgeRoot 的安全 Git workspace",
+      "Interactively configure defaults and initialize a safe Git workspace at knowledgeRoot"
+    )
+  )
   .option(
     "--scope <scope>",
     t(
@@ -440,7 +445,35 @@ program
     ),
     "user"
   )
-  .action(async (options: { scope: string }) => {
+  .option(
+    "--no-git-init",
+    t(
+      "跳过 knowledgeRoot 的本地 Git workspace 初始化",
+      "skip local Git workspace initialization at knowledgeRoot"
+    )
+  )
+  .addHelpText(
+    "after",
+    t(
+      `
+默认行为：
+  - 在向导选择的 knowledgeRoot 创建 V2 目录、安全 .gitignore/SECURITY.md 并执行本地 git init。
+  - Git 初始化成功后才保存配置；失败不会把配置指向半完成目录。
+  - 不添加 remote、不 commit、不 push、不安装 Integration，也不下载模型。
+  - 已有 Git knowledge workspace 可幂等复用；特殊布局可显式传 --no-git-init。
+
+workspace git-init/status 仍保留为单独的修复、迁移和诊断命令。`,
+      `
+Default behavior:
+  - Create V2 directories and safe .gitignore/SECURITY.md at the selected knowledgeRoot, then run local git init.
+  - Save configuration only after Git initialization succeeds; failures do not persist a half-configured root.
+  - Never add a remote, commit, push, install integrations, or download models.
+  - Existing Git knowledge workspaces are reused idempotently; pass --no-git-init for special layouts.
+
+workspace git-init/status remain available for explicit repair, migration, and diagnostics.`
+    )
+  )
+  .action(async (options: { scope: string; gitInit: boolean }) => {
     if (
       options.scope !== "user" &&
       options.scope !== "project" &&
@@ -469,18 +502,31 @@ program
           );
     const prompter = new TerminalConfigurationPrompter();
     try {
-      const configured = await runConfigurationWizard({
+      const result = await configureKnowledgeWorkspace({
         configPath,
         prompter,
         current: effective.config,
-        locale
+        locale,
+        initializeGit: options.gitInit
       });
+      const configured = result.configured;
       console.log(t(`已保存 Agent Knowledge 配置：${configPath}`, `Saved Agent Knowledge configuration to ${configPath}`));
       console.log(
         t(
           `知识库：${configured.knowledgeRoot}；身份：${configured.identity.actorType}；同步：${configured.sync.provider}`,
           `Knowledge root: ${configured.knowledgeRoot}; actor: ${configured.identity.actorType}; sync: ${configured.sync.provider}`
         )
+      );
+      console.log(
+        result.gitInitialized
+          ? t(
+              `知识 workspace：${result.knowledgeRoot}（Git 已初始化或复用）`,
+              `Knowledge workspace: ${result.knowledgeRoot} (Git initialized or reused)`
+            )
+          : t(
+              `知识 workspace：${result.knowledgeRoot}（已显式跳过 Git 初始化）`,
+              `Knowledge workspace: ${result.knowledgeRoot} (Git initialization explicitly skipped)`
+            )
       );
     } finally {
       prompter.close();
